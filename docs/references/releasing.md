@@ -138,7 +138,9 @@ macOS 使用 `shasum -a 256 -c` 校验筛选后的对应行。校验后仍应按
 
 ## 失败、重跑与修复版本
 
-- qualification 或 package 暴露源码/产物缺陷：修复源码并走新的 patch version PR；不要移动已经推送的 tag。
+- qualification 或 package 暴露源码/产物缺陷：若该 tag 尚未创建公开 GitHub Release，maintainer
+  明确授权后可以在保留失败 run 证据的前提下，用修复后的同版本 release commit 替换该 tag；
+  已公开的 Release 和 tag 仍不可移动，后续修复必须走新的 patch version PR。
 - runner、网络或 GitHub 服务的瞬时失败：输入未变化时可以对同一 tag rerun failed jobs；不得借重跑替换
   tag、源码或任何 package 输入。
 - Draft 已创建但上传/回读失败：Draft 保持非公开。确认失败证据后可删除该 Draft，再对同一、未移动的
