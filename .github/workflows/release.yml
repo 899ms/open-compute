@@ -87,6 +87,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
           rust-cache-key: default
@@ -106,6 +108,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
           rust-cache-key: default
@@ -134,6 +138,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
           rust-cache-key: llvm-cov
@@ -164,6 +170,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
           rust-cache-key: default
@@ -203,6 +211,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
           rust-cache-key: release-${{ matrix.target }}

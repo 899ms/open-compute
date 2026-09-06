@@ -8,6 +8,7 @@
 | 文档 | 用途 |
 | --- | --- |
 | [workerd 上游 issue / PR 核验](workerd-upstream.md) | 已合并能力、standalone 缺口、补丁范围与升级回归重点 |
+| [Vinext 输入校验](vinext-input-validation.md) | 当前离线输入冻结、历史 P4 资格证据与摘要更新要求 |
 | [测试节奏](testing.md) | 单轮调度、case discovery、并行隔离、覆盖率与最终验收 |
 | [Cloudflare 兼容矩阵](cloudflare-compatibility.md) | 当前实现 capability、方法、目标缺口、非目标产品、deviation 与 conformance verdict |
 | [能力偏差](p1-deviations.md) | 当前 capability deviation ID 与实际支持边界 |

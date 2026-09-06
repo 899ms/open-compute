@@ -101,11 +101,10 @@ The remaining 5% is single-node reality — global edge topology and hosted flee
 
 ## Quick start
 
-Bring up the platform locally (needs Rust 1.98, Bun 1.3, Node 24, and the pinned workerd archive — see [docs](docs/references/single-binary.md)):
+Bring up the platform locally (needs Rust 1.98, Bun 1.3.14, Node 26, and Git LFS — see [docs](docs/references/single-binary.md)):
 
 ```sh
-export OPEN_COMPUTE_BUILD_WORKERD_ARCHIVE=/abs/workerd-darwin-arm64.gz
-bun run build
+git lfs pull --include="share/workerd/**"
 ./scripts/dev.sh
 ```
 

@@ -23,6 +23,11 @@ GitHub Releases 是公开二进制的唯一权威来源。每个 release 固定�
 `open-compute.dev` 可以提供人类可读的下载入口，但必须链接到上述不可变 GitHub Release assets，
 不能维护第二套可独立替换的二进制镜像。
 
+构建 job 必须以 `lfs: true` 检出 `share/workerd/` 的固定依赖。setup action 从宿主二进制
+离线准备正式 archive；根 build 验证全部目标。无需预先发布 fork archive，也不下载 stock runtime。
+更新依赖须同步四平台 LFS 对象及 `packages/runtime/workerd.lock.json`；向远端推送前用
+`git lfs fsck` 检查本地对象，不能只上传 pointer。生产分发仍只包含每个平台的 `ocd`。
+
 ## 两条工作流
 
 `.github/workflows/ci.yml` 在 main push 和 pull request 上运行。它负责 MSRV、TypeScript/生成资产、
