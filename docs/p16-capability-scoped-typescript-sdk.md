@@ -1,7 +1,7 @@
 # P16：Capability-scoped Cloudflare-compatible TypeScript SDK
 
-状态：**已实现（2026-09-14）**；pending 仅剩需要明确 external-write 授权的首包 npm bootstrap 与
-下一次真实 tag 的首次联合 release（`NPM_ACCESS_TOKEN` 流程已在 release workflow 接线）。
+状态：**已实现（2026-09-16）**；GitHub issue #68 已用完整实现与验收证据关闭。首包由 0.1.9 的
+联合 release 使用已明确授权的 `NPM_ACCESS_TOKEN` 发布并回读验证；token 流程不声明 npm provenance。
 
 实现说明（2026-09-14）：
 
@@ -303,20 +303,13 @@ P16 改变当前“只发布 native executable、不发布 npm package”的 rel
 
 ### 8.3 npm publish
 
-常规发布使用 npm Trusted Publishing：
+当前发布合同使用 GitHub `release` environment 中的 `NPM_ACCESS_TOKEN`：
 
-- npm package 把 `elliothux/open-compute`、`release.yml`、`npm-release` Environment 配置为唯一 trusted publisher，并只允许
-  `npm publish`；
-- publish job 使用 GitHub-hosted runner，job-level permission 只有 `contents: read` 与 `id-token: write`；
-- `actions/setup-node` 固定 Node 24、registry 为 `https://registry.npmjs.org`，显式验证 npm CLI >= 11.5.1；
-- 依赖安装、build 和 pack 仍由 Bun/`bun.lock` 负责；registry write 使用 `npm publish <verified-tarball>`，以获得 OIDC trusted
-  publishing 与自动 provenance；
-- 不保存 `NPM_TOKEN`，不在 PR/main/self-hosted runner 中授予 OIDC publish permission。
-
-`@open-compute/sdk` 目前不存在，npm 要求 package 已存在才能配置 trusted publisher。因此第一次不发布 placeholder：在用户明确
-授权 external write 后，用受保护的一次性 bootstrap job 和短期 granular token 发布**第一个真实、已完整验收**的 package tarball，
-同时生成 provenance；随后立刻为该 package 配置 trusted publisher、撤销 token，并从永久 workflow/config 删除 token fallback。
-P16 在 trusted publisher 已生效且没有长期 publish token 前不能标记完成。
+- publish job 固定 Node 24 和 `https://registry.npmjs.org`，只消费 `sdk-package` job 已构建并验证的 tarball；
+- token 只写入 runner 私有的临时 `.npmrc`，不进入 checkout、artifact、日志或 package；
+- `npm whoami` 成功后发布 exact tarball，再从 registry 回读 shasum 与 integrity；未知结果先读 registry，绝不换 bytes 重发；
+- token 流程不申请 `id-token: write`，也不声明 Trusted Publishing 或 provenance。迁移到 Trusted Publishing 是独立后续工作，
+  不保留双发布路径。
 
 ### 8.4 Cross-registry ordering and recovery
 
@@ -326,7 +319,7 @@ npm 与 GitHub Releases 没有跨 registry transaction。固定顺序为：
 all qualification PASS
   -> create/upload/verify GitHub Draft
   -> publish npm exact tarball
-  -> read back npm version + shasum + integrity + provenance
+  -> read back npm version + shasum + integrity
   -> publish the already verified GitHub Draft
 ```
 
@@ -364,7 +357,7 @@ Release notes 新增必填 `## SDK`，记录 package/version、official SDK/Open
 7. 更新 website/package docs 与 combined OpenAPI；
 8. 接入每周 upstream review、单一 tracking issue 与 frozen-identity Draft PR flow；
 9. 更新 version/release manifest、CI 和 tag workflow；
-10. 经明确 external-write 授权完成首包 bootstrap、Trusted Publishing 切换和首次联合 release；
+10. 经明确 external-write 授权完成首包 token publish、registry identity 回读和首次联合 release；
 11. 完成静态检查、coverage 和一次最终 workspace Gate，记录精确 npm/GitHub read-back evidence。
 
 ## 11. Definition of Done
@@ -377,7 +370,7 @@ P16 只有同时满足以下条件才可归档：
 - mandatory baseURL 防止任何请求默认发往 Cloudflare，credentials/headers 不泄漏；
 - package tarball 的 ESM/CJS/types、dependency identity、内容 allowlist 与 isolated install smoke 通过；
 - 同版本 tag release 同时发布并回读验证 npm package 与五个 GitHub assets；
-- npm Trusted Publishing + provenance 生效，无长期 publish token；
+- npm package 由 release environment 的 token 发布，registry shasum/integrity 与冻结 tarball 精确一致；
 - 每周 upstream review 能区分 `ready`、`blocked` 与 `breaking`，用 frozen identities 生成单一 tracking cycle/Draft PR，且不能自动
   merge、tag 或 publish；
 - 文档、capability/deviation matrix、release notes 和 machine-readable identities 一致；
