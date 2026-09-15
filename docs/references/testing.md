@@ -181,9 +181,11 @@ production Rust 行覆盖率；不得把生产模块移入 `examples/` 规避门
 
 ### 按输入选择测试
 
-修改文档、release notes 或只读脚本时不需要 Rust Gate；修改 SDK 生成面时运行 SDK
-typecheck/test/pack；普通 Rust 代码按受影响 crate 与 Gate 做一次 focused check，源码冻结后再做一次
-完整 workspace。修改 `packages/runtime/workerd.lock.json`、`share/workerd/**`、runtime loader、
+修改文档、release notes 或只读脚本时不需要 Rust Gate；CI 对纯文档变更只运行 `docs-checks`。纯 SDK
+、dashboard、website 或 toolchain 变更只运行对应的 JavaScript typecheck/test/build/pack 检查；混合
+变更按更宽的 scope 处理。修改 SDK 生成面时运行 SDK typecheck/test/pack；普通 Rust 代码按受影响
+crate 与 Gate 做一次 focused check，源码冻结后再做一次完整 workspace。修改
+`packages/runtime/workerd.lock.json`、`share/workerd/**`、runtime loader、
 Cap'n Proto 或 Cloudflare compatibility baseline 时，真实 workerd 行为可能变化，必须重建 runtime
 并至少执行 `p3-contract`、受影响的 P0/P1/P2/Workflow/P3 targets、coverage 和三平台 package；
 正式 tag 仍由 release workflow 执行完整矩阵。只更新 fixture 或文档不能把旧 workerd 结果冒充新 pin
