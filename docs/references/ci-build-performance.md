@@ -54,6 +54,11 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 - 2026-09-16 inventory 有 22 个条目、约 9.57 GiB，已经贴近 GitHub 每仓库 10 GiB 上限；其中
   8 个旧 package compiler key 含 run/attempt，约 3.9 GiB，几乎没有跨发布复用价值。v2 key
   目标是三个平台各 512 MiB，稳定占用约 1.5 GiB；旧条目由 GitHub 的 LRU 淘汰，不手工删除失败证据。
+- 之后的 dry-run `35026079295` 首次 Linux x64 打包成功（35 分 56 秒，其中 package 34 分 42 秒），
+  但 sccache 是冷缓存（0 hits、2,641 misses）。保存 512 MiB cache 时 GitHub 返回 configured budget
+  read-only；Actions API 当时仍列出 23 个条目、11,866,896,013 bytes，且 storage-limit API 为 20 GB，
+  所以这次没有产生可复用的 v2 compiler key。保存步骤是非阻断的，不能把这次成功误报为 warm-cache
+  效果；待配额实际可写后再用下一次 package run 测量命中率。
 - 不启用逐 crate 的 GHA sccache backend：并行矩阵会增加缓存 API 请求，已存在上游限流与延迟报告。
   最终链接、bin/proc-macro 编译等仍有不可缓存部分；不承诺完全免编译。
 - 保存 Cargo `--timings` 报告、cache statistics、失败时的未验收原生 binary 和现有失败 Gate evidence。
