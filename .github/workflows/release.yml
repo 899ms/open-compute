@@ -430,7 +430,7 @@ jobs:
           compression-level: 0
 
   assemble:
-    needs: [validate, package]
+    needs: [validate, package, sdk-package]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

@@ -182,7 +182,7 @@ export async function assembleRelease(
   directory: string,
   tag: string,
   identity: ReleaseIdentity,
-  sdk: SdkPackageReport,
+  sdk: unknown,
 ): Promise<void> {
   if (!isAbsolute(directory) || resolve(directory) !== directory) {
     throw new Error(
@@ -329,8 +329,6 @@ if (
     input.directory,
     input.tag,
     await repositoryReleaseIdentity(),
-    sdkPackageReport(
-      JSON.parse(await readFile(input.sdkReport, "utf8")) as unknown,
-    ),
+    JSON.parse(await readFile(input.sdkReport, "utf8")) as unknown,
   );
 }
