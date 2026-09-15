@@ -1,0 +1,120 @@
+name: release-recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag to recover
+        required: true
+        type: string
+      source_run_id:
+        description: Release workflow run containing verified artifacts
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Require successful release evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          state="$(gh run view "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs --jq '
+            [.jobs[] | select(.name == "validate" or .name == "coverage" or .name == "sdk-package"
+              or (.name | startswith("integration (")) or (.name | startswith("package (")))]
+            | group_by(.name) | map(max_by(.databaseId))
+            | if length == 8 and all(.conclusion == "success") then "success" else "failed" end')"
+          test "$state" = success
+      - name: Check out the immutable release source
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          fixed_assembler="$RUNNER_TEMP/assemble-release.ts"
+          cp scripts/assemble-release.ts "$fixed_assembler"
+          git checkout --detach "refs/tags/$RELEASE_TAG"
+          cp "$fixed_assembler" scripts/assemble-release.ts
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: .temp/release-assets
+          merge-multiple: true
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdk-package
+          path: .temp/sdk-package
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - name: Assemble verified release assets
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          bun scripts/assemble-release.ts \
+            --tag "$RELEASE_TAG" \
+            --dir "$GITHUB_WORKSPACE/.temp/release-assets" \
+            --sdk-report "$GITHUB_WORKSPACE/.temp/sdk-package/sdk-package-report.json"
+      - name: Create draft and verify uploaded bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          assets="$GITHUB_WORKSPACE/.temp/release-assets"
+          mapfile -t files < <(find "$assets" -maxdepth 1 -type f \
+            \( -name "ocd-$RELEASE_TAG-*" -o -name SHA256SUMS -o -name release.json \) \
+            -print | sort)
+          test "${#files[@]}" -eq 5
+          gh release create "$RELEASE_TAG" "${files[@]}" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+            --notes-file "$GITHUB_WORKSPACE/docs/releases/${RELEASE_TAG#v}.md" \
+            --title "open-compute ${RELEASE_TAG#v}"
+          verify="$RUNNER_TEMP/release-download"
+          mkdir "$verify"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$verify"
+          for source in "${files[@]}"; do cmp "$source" "$verify/$(basename "$source")"; done
+          (cd "$verify" && sha256sum --check SHA256SUMS)
+      - name: Publish verified SDK tarball to npm
+        env:
+          NPM_ACCESS_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="${RELEASE_VERSION#v}"
+          report="$GITHUB_WORKSPACE/.temp/sdk-package/sdk-package-report.json"
+          tarball=".temp/sdk-package/$(node -p "require('$report').tarball")"
+          expected_shasum="$(node -p "require('$report').tarballShasum")"
+          expected_integrity="$(node -p "require('$report').tarballIntegrity")"
+          printf '//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}\n' > "$RUNNER_TEMP/.npmrc"
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc"
+          npm whoami --registry https://registry.npmjs.org
+          if ! npm publish "$tarball" --access public --registry https://registry.npmjs.org; then
+            npm view "@open-compute/sdk@$RELEASE_VERSION" name >/dev/null
+          fi
+          test "$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.shasum)" = "$expected_shasum"
+          test "$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.integrity)" = "$expected_integrity"
+      - name: Publish verified draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
