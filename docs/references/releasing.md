@@ -33,7 +33,7 @@ npm provenance（OIDC trusted publishing）在当前 token 流程下不可用，
 更新依赖须同步三个正式目标的 LFS 对象及 `packages/runtime/workerd.lock.json`；macOS Intel 的固定输入仅供手动编译，向远端推送前用
 `git lfs fsck` 检查本地对象，不能只上传 pointer。生产分发仍只包含每个平台的 `ocd`。
 
-## 两条工作流
+## 三条工作流
 
 `.github/workflows/ci.yml` 只在 `main` push 和以 `main` 为 base 的 pull request 上执行静态资格：
 显式 runtime/tooling build 与 typecheck、快速 JS/Python 测试、format、clippy、no-default-features、
@@ -76,6 +76,11 @@ lock SHA-256、文件大小与文件 SHA-256，然后生成 `release.json` 和 `
 校验的版本说明，不使用 GitHub 自动生成的 PR 标题列表。它先创建 Draft
 GitHub Release，上传五个公开 assets，再全部下载回来逐字节比较并执行 `sha256sum --check`；全部通过
 后才把 Draft 变成正式 latest release。任一目标或回读校验失败时，不会出现部分公开 release。
+
+`.github/workflows/release-dry-run.yml` 是只读发布预检入口。手动指定 `ref` 和 `target` 后，它构建并验证
+SDK、原生包及 `single-binary` Gate；`target=all` 另外验证三平台 artifact 组装。该 workflow 不创建
+GitHub Release、不发布 npm、不创建或移动 tag，也不替代正式 tag workflow 的 coverage、workspace Gate、
+受控 egress 和公开资产回读。
 
 CI 和 release 都使用 `bun run test:js:ci` 的平台工具/runtime 测试集合。第三方应用 qualification
 独立执行，不属于 workspace Gate 或此次原生二进制发行资格。当前 `test:js` 额外包含的 vinext

@@ -30,6 +30,9 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 - `main` 和普通 PR：同一 runner 完成 build/typecheck、快速工具测试、format、clippy、
   no-default-features、Rust 1.98 compile check、production hygiene、metadata 和边界检查。release tag
   校验精确 source commit 已通过该静态资格，不再重跑。
+- CI 先按变更路径分类：纯 `docs/**`、README 和 release notes 只执行文档检查；纯 SDK、dashboard、
+  website 或 toolchain 变更只执行对应 JavaScript 检查；Rust、runtime、workerd、测试、脚本、workflow
+  或混合变更仍执行完整静态资格。汇总 job `ci` 保留不变，避免分支保护因跳过具体 job 失效。
 - tag qualification：coverage、一个 macOS 完整最终 workspace Gate 和 Linux `p0-2` 受控 egress
   在身份校验后并行启动；Linux egress 不再重复 `--workspace`。
 - 三个正式平台 package：身份验证后即并行构建，和全部 qualification 重叠；publish 等待所有路径成功。macOS Intel 不再进入 package 矩阵。
@@ -99,6 +102,20 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
    不重跑 coverage/Gate/package。
 4. Draft asset 缺失、内容不一致或 source run 不完整：recovery fail closed；不得覆盖 asset，保留
    失败证据并生成新的候选或人工处理 Draft。
+
+## Dry-run release
+
+`release-dry-run.yml` 用指定 ref 构建并验证 SDK、单个平台原生包和 `single-binary` Gate，不创建
+GitHub Release、不发布 npm，也不修改 tag。默认只跑 Linux x64 以快速检查；需要验证三平台组装时显式
+选择 `target=all`：
+
+```sh
+gh workflow run release-dry-run.yml --ref main -f ref=main -f target=linux-x64
+gh workflow run release-dry-run.yml --ref main -f ref=main -f target=all
+```
+
+它是发布前的构建/组装烟测，不替代正式 tag 的 coverage、完整 workspace Gate、受控 egress 或公开发布
+回读；失败时保留 artifact 和编译缓存统计，便于定位而不触发真实发布副作用。
 
 主要资料：
 
