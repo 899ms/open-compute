@@ -15,6 +15,7 @@
       "get": {
         "operationId": "open-compute-get-open-compute-capabilities",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "capabilities.get",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -55,6 +56,7 @@
       "get": {
         "operationId": "open-compute-get-open-compute-system-status",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "system.status",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -95,6 +97,7 @@
       "get": {
         "operationId": "open-compute-get-open-compute-scheduler",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "scheduler.get",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -135,6 +138,7 @@
       "post": {
         "operationId": "open-compute-post-open-compute-scheduler-pause",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "scheduler.pause",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -175,6 +179,7 @@
       "post": {
         "operationId": "open-compute-post-open-compute-scheduler-resume",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "scheduler.resume",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -215,6 +220,7 @@
       "post": {
         "operationId": "open-compute-post-open-compute-scheduler-repair",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "scheduler.repair",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -255,6 +261,7 @@
       "get": {
         "operationId": "open-compute-get-open-compute-cache",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "cache.get",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -295,6 +302,7 @@
       "post": {
         "operationId": "open-compute-post-open-compute-cache-garbage-collection",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "cache.collectGarbage",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -335,6 +343,7 @@
       "get": {
         "operationId": "open-compute-get-open-compute-images-capacity",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "images.capacity",
         "parameters": [],
         "x-open-compute-request-body": "none",
         "responses": {
@@ -371,10 +380,52 @@
         }
       }
     },
+    "/open-compute/upgrade/check": {
+      "get": {
+        "operationId": "open-compute-get-open-compute-upgrade-check",
+        "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "upgrade.check",
+        "parameters": [],
+        "x-open-compute-request-body": "none",
+        "responses": {
+          "200": {
+            "description": "Successful vendor extension response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradeCheckResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/accounts/{account_id}/open-compute/workers/{script_name}/endpoints": {
       "get": {
         "operationId": "open-compute-get-accounts-account-id-open-compute-workers-script-name-endpoints",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "workers.endpoints",
         "parameters": [
           {
             "name": "account_id",
@@ -432,6 +483,7 @@
       "get": {
         "operationId": "open-compute-get-accounts-account-id-open-compute-durable-objects",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "durableObjects.list",
         "parameters": [
           {
             "name": "account_id",
@@ -481,6 +533,7 @@
       "get": {
         "operationId": "open-compute-get-accounts-account-id-open-compute-durable-objects-namespace-id-objects",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "durableObjects.objects",
         "parameters": [
           {
             "name": "account_id",
@@ -538,6 +591,7 @@
       "post": {
         "operationId": "open-compute-post-accounts-account-id-open-compute-kv-namespaces-namespace-id-backups",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "backups.kv.create",
         "parameters": [
           {
             "name": "account_id",
@@ -603,6 +657,7 @@
       "get": {
         "operationId": "open-compute-get-accounts-account-id-open-compute-kv-namespaces-namespace-id-backups",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "backups.kv.list",
         "parameters": [
           {
             "name": "account_id",
@@ -660,6 +715,7 @@
       "post": {
         "operationId": "open-compute-post-accounts-account-id-open-compute-kv-backups-backup-id-restore",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "backups.kv.restore",
         "parameters": [
           {
             "name": "account_id",
@@ -737,6 +793,7 @@
       "post": {
         "operationId": "open-compute-post-accounts-account-id-open-compute-d1-databases-database-id-backups",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "backups.d1.create",
         "parameters": [
           {
             "name": "account_id",
@@ -802,6 +859,7 @@
       "get": {
         "operationId": "open-compute-get-accounts-account-id-open-compute-d1-databases-database-id-backups",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "backups.d1.list",
         "parameters": [
           {
             "name": "account_id",
@@ -859,6 +917,7 @@
       "post": {
         "operationId": "open-compute-post-accounts-account-id-open-compute-d1-backups-backup-id-restore",
         "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "backups.d1.restore",
         "parameters": [
           {
             "name": "account_id",
@@ -943,10 +1002,7 @@
       "Error": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "code",
-          "message"
-        ],
+        "required": ["code", "message"],
         "properties": {
           "code": {
             "type": "integer",
@@ -971,10 +1027,7 @@
       "Message": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "code",
-          "message"
-        ],
+        "required": ["code", "message"],
         "properties": {
           "code": {
             "type": "integer"
@@ -1007,10 +1060,7 @@
           "compatibility_date": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "minimum",
-              "maximum"
-            ],
+            "required": ["minimum", "maximum"],
             "properties": {
               "minimum": {
                 "type": "string",
@@ -1033,11 +1083,7 @@
             "type": "object",
             "additionalProperties": {
               "type": "string",
-              "enum": [
-                "supported",
-                "supported_with_deviation",
-                "unsupported"
-              ]
+              "enum": ["supported", "supported_with_deviation", "unsupported"]
             }
           },
           "deviations": {
@@ -1052,11 +1098,7 @@
       "SystemStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "state",
-          "version",
-          "components"
-        ],
+        "required": ["state", "version", "components"],
         "properties": {
           "state": {
             "type": "string"
@@ -1069,10 +1111,7 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "name",
-                "state"
-              ],
+              "required": ["name", "state"],
               "properties": {
                 "name": {
                   "type": "string"
@@ -1101,10 +1140,7 @@
             "properties": {
               "state": {
                 "type": "string",
-                "enum": [
-                  "healthy",
-                  "degraded"
-                ]
+                "enum": ["healthy", "degraded"]
               },
               "retention_ms": {
                 "type": "integer",
@@ -1141,11 +1177,7 @@
       "SchedulerStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "state",
-          "pending",
-          "running"
-        ],
+        "required": ["state", "pending", "running"],
         "properties": {
           "state": {
             "type": "string"
@@ -1163,10 +1195,7 @@
       "CacheStatus": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "entries",
-          "bytes"
-        ],
+        "required": ["entries", "bytes"],
         "properties": {
           "entries": {
             "type": "integer",
@@ -1181,11 +1210,7 @@
       "ImageCapacity": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "queued",
-          "running",
-          "capacity"
-        ],
+        "required": ["queued", "running", "capacity"],
         "properties": {
           "queued": {
             "type": "integer",
@@ -1204,11 +1229,7 @@
       "WorkerEndpoint": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "path",
-          "created_on"
-        ],
+        "required": ["id", "path", "created_on"],
         "properties": {
           "id": {
             "type": "string"
@@ -1225,11 +1246,7 @@
       "DurableObjectNamespace": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "script_name",
-          "class_name"
-        ],
+        "required": ["id", "script_name", "class_name"],
         "properties": {
           "id": {
             "type": "string"
@@ -1245,11 +1262,7 @@
       "DurableObjectRecord": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "namespace_id",
-          "created_on"
-        ],
+        "required": ["id", "namespace_id", "created_on"],
         "properties": {
           "id": {
             "type": "string"
@@ -1266,11 +1279,7 @@
       "Backup": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "created_on",
-          "state"
-        ],
+        "required": ["id", "created_on", "state"],
         "properties": {
           "id": {
             "type": "string"
@@ -1291,9 +1300,7 @@
       "RestoreRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "properties": {
           "name": {
             "type": "string",
@@ -1306,12 +1313,7 @@
       "RestoredResource": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "name",
-          "kind",
-          "created_on"
-        ],
+        "required": ["id", "name", "kind", "created_on"],
         "properties": {
           "id": {
             "type": "string"
@@ -1323,10 +1325,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "kv_namespace",
-              "d1_database"
-            ]
+            "enum": ["kv_namespace", "d1_database"]
           },
           "created_on": {
             "type": "string",
@@ -1334,15 +1333,43 @@
           }
         }
       },
-      "ErrorEnvelope": {
+      "UpgradeCheck": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
+          "schema_version",
+          "current_version",
+          "update_available",
+          "upgrade_allowed"
         ],
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "current_version": {
+            "type": "string"
+          },
+          "available_version": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "update_available": {
+            "type": "boolean"
+          },
+          "upgrade_allowed": {
+            "type": "boolean"
+          },
+          "blocked_reason": {
+            "type": ["string", "null"],
+            "minLength": 1
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1369,12 +1396,7 @@
       "CapabilitiesResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1401,12 +1423,7 @@
       "SystemStatusResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1433,12 +1450,7 @@
       "SchedulerStatusResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1465,12 +1477,7 @@
       "CacheStatusResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1497,12 +1504,7 @@
       "ImageCapacityResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1529,12 +1531,7 @@
       "WorkerEndpointsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1564,12 +1561,7 @@
       "DurableObjectNamespacesResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1599,12 +1591,7 @@
       "DurableObjectRecordsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1634,12 +1621,7 @@
       "BackupResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1666,12 +1648,7 @@
       "BackupsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1701,12 +1678,7 @@
       "RestoredResourceResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "success",
-          "result",
-          "errors",
-          "messages"
-        ],
+        "required": ["success", "result", "errors", "messages"],
         "properties": {
           "success": {
             "type": "boolean",
@@ -1714,6 +1686,33 @@
           },
           "result": {
             "$ref": "#/components/schemas/RestoredResource"
+          },
+          "errors": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "$ref": "#/components/schemas/Error"
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          }
+        }
+      },
+      "UpgradeCheckResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "result", "errors", "messages"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "result": {
+            "$ref": "#/components/schemas/UpgradeCheck"
           },
           "errors": {
             "type": "array",

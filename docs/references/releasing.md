@@ -20,7 +20,11 @@ GitHub Releases 是公开二进制的唯一权威来源。每个 release 固定�
 Windows 和 macOS Intel 不提供官方二进制、CI package 或 GitHub Release asset。需要在目标机器上使用自己的
 Rust/Bun/Bazel 工具链，从源码手动编译，并显式提供与正式 lock 匹配的 workerd 输入；该路径不属于正式发布资格。
 
-不发布 Rust crate、npm package、sidecar 布局、外部 workerd、安装器或自动更新通道。
+不发布 Rust crate、sidecar 布局、外部 workerd、安装器或自动更新通道。npm 发布仅限
+`@open-compute/sdk` 一个 public scoped package，且只使用 `NPM_ACCESS_TOKEN` secret
+作为 registry 凭据；该 token 存放于 GitHub Actions secrets，不进入仓库、镜像或本机文件。
+npm provenance（OIDC trusted publishing）在当前 token 流程下不可用，这是接受的限制；
+切换到 trusted publishing 是后续工作。
 `open-compute.dev` 可以提供人类可读的下载入口，但必须链接到上述不可变 GitHub Release assets，
 不能维护第二套可独立替换的二进制镜像。
 
@@ -51,7 +55,9 @@ concurrency group，取消过期运行；汇总 job `ci` 是 `release` 分支的
 7. release merge commit 对应的 main source commit 已通过 `main` push 的 `ci.yml` pre-check。
 8. `docs/releases/X.Y.Z.md` 存在且是已提交的普通文件，至少包含 1000 bytes，并完整包含
    What's new、Workerd、Fixed、Before you upgrade、Install or upgrade、Downloads、Security、Known limitations、
-   Verification 和 Thanks 十个章节；不得保留 TODO、TBD 或 PLACEHOLDER。Workerd 与 Thanks 的内容要求见下文。
+   Verification 和 Thanks 章节（从 P16 起 `## SDK` 也是必填章节：记录 `@open-compute/sdk`
+   package/version、official SDK/OpenAPI pins、surface 变化、安装命令与 npm version link）；
+   不得保留 TODO、TBD 或 PLACEHOLDER。Workerd 与 Thanks 的内容要求见下文。
 
 校验通过后，release workflow 并行执行 90% Rust 行覆盖率、macOS 上完整单轮最终 workspace Gate、
 Linux 上仅 `p0-2` 受控 egress fixture，以及三个正式平台打包。Linux egress 不再夹带第二轮
@@ -113,6 +119,7 @@ vinext/Next.js 端到端或 hosted Cloudflare differential。其冻结摘要和�
    不是仓库 owner、也不是 bot 的 issue，都要在本章点名提出者的 GitHub login、链接该 issue，并明确致谢。
    维护者自己提出的 issue 写进 Fixed 或 What's new 即可，不要感谢自己。若这段时间没有外部提出者的已完成 issue，
    本章必须写精确句子 `No external issue reports were closed in this release.`，不能省略章节或留空。
+
 6. 提交版本变更与 release notes 到 `main`，等待 main 的静态 `ci` 通过。main CI 完成 build、快速
    JS/Python、fmt、clippy、no-default-features、Rust 1.98 workspace check、production hygiene、metadata
    和边界检查；coverage、完整 workspace Gate、Linux egress、三个正式平台打包和发布验证由 tag

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -17,6 +18,23 @@ function json(path) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+// Committed JSON authority is the repository-prettier form; both the writer
+// and the byte-reproducibility checks canonicalize through it so generator,
+// check, and pre-commit hooks agree on the exact bytes.
+export function prettierJson(text) {
+  const formatted = spawnSync(
+    join(ROOT, "node_modules/.bin/prettier"),
+    ["--stdin-filepath", "authority.json"],
+    { input: text, cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  );
+  if (formatted.error) throw formatted.error;
+  if (formatted.status !== 0)
+    throw new Error(
+      `prettier failed for the authority JSON: ${formatted.stderr}`,
+    );
+  return formatted.stdout;
 }
 
 function operationKey(value) {
@@ -387,101 +405,128 @@ export function buildCapability(
   };
 }
 
+// Each entry carries the vendor `operationId`, the success envelope schema,
+// the success status codes, and the generated SDK method tree under
+// `client.openCompute` (surfaced as `x-open-compute-sdk-method`).
 const EXTENSION_OPERATIONS = {
   "GET /open-compute/capabilities": [
     "open-compute-get-open-compute-capabilities",
     "CapabilitiesResponse",
     ["200"],
+    "capabilities.get",
   ],
   "GET /open-compute/system/status": [
     "open-compute-get-open-compute-system-status",
     "SystemStatusResponse",
     ["200"],
+    "system.status",
   ],
   "GET /open-compute/scheduler": [
     "open-compute-get-open-compute-scheduler",
     "SchedulerStatusResponse",
     ["200"],
+    "scheduler.get",
   ],
   "POST /open-compute/scheduler/pause": [
     "open-compute-post-open-compute-scheduler-pause",
     "SchedulerStatusResponse",
     ["200"],
+    "scheduler.pause",
   ],
   "POST /open-compute/scheduler/resume": [
     "open-compute-post-open-compute-scheduler-resume",
     "SchedulerStatusResponse",
     ["200"],
+    "scheduler.resume",
   ],
   "POST /open-compute/scheduler/repair": [
     "open-compute-post-open-compute-scheduler-repair",
     "SchedulerStatusResponse",
     ["200"],
+    "scheduler.repair",
   ],
   "GET /open-compute/cache": [
     "open-compute-get-open-compute-cache",
     "CacheStatusResponse",
     ["200"],
+    "cache.get",
   ],
   "POST /open-compute/cache/garbage-collection": [
     "open-compute-post-open-compute-cache-garbage-collection",
     "CacheStatusResponse",
     ["200"],
+    "cache.collectGarbage",
   ],
   "GET /open-compute/images/capacity": [
     "open-compute-get-open-compute-images-capacity",
     "ImageCapacityResponse",
     ["200"],
+    "images.capacity",
+  ],
+  "GET /open-compute/upgrade/check": [
+    "open-compute-get-open-compute-upgrade-check",
+    "UpgradeCheckResponse",
+    ["200"],
+    "upgrade.check",
   ],
   "GET /accounts/{account_id}/open-compute/workers/{script_name}/endpoints": [
     "open-compute-get-accounts-account-id-open-compute-workers-script-name-endpoints",
     "WorkerEndpointsResponse",
     ["200"],
+    "workers.endpoints",
   ],
   "GET /accounts/{account_id}/open-compute/durable-objects": [
     "open-compute-get-accounts-account-id-open-compute-durable-objects",
     "DurableObjectNamespacesResponse",
     ["200"],
+    "durableObjects.list",
   ],
   "GET /accounts/{account_id}/open-compute/durable-objects/{namespace_id}/objects":
     [
       "open-compute-get-accounts-account-id-open-compute-durable-objects-namespace-id-objects",
       "DurableObjectRecordsResponse",
       ["200"],
+      "durableObjects.objects",
     ],
   "POST /accounts/{account_id}/open-compute/kv/namespaces/{namespace_id}/backups":
     [
       "open-compute-post-accounts-account-id-open-compute-kv-namespaces-namespace-id-backups",
       "BackupResponse",
       ["200", "201"],
+      "backups.kv.create",
     ],
   "GET /accounts/{account_id}/open-compute/kv/namespaces/{namespace_id}/backups":
     [
       "open-compute-get-accounts-account-id-open-compute-kv-namespaces-namespace-id-backups",
       "BackupsResponse",
       ["200"],
+      "backups.kv.list",
     ],
   "POST /accounts/{account_id}/open-compute/kv/backups/{backup_id}/restore": [
     "open-compute-post-accounts-account-id-open-compute-kv-backups-backup-id-restore",
     "RestoredResourceResponse",
     ["200", "201"],
+    "backups.kv.restore",
   ],
   "POST /accounts/{account_id}/open-compute/d1/databases/{database_id}/backups":
     [
       "open-compute-post-accounts-account-id-open-compute-d1-databases-database-id-backups",
       "BackupResponse",
       ["200", "201"],
+      "backups.d1.create",
     ],
   "GET /accounts/{account_id}/open-compute/d1/databases/{database_id}/backups":
     [
       "open-compute-get-accounts-account-id-open-compute-d1-databases-database-id-backups",
       "BackupsResponse",
       ["200"],
+      "backups.d1.list",
     ],
   "POST /accounts/{account_id}/open-compute/d1/backups/{backup_id}/restore": [
     "open-compute-post-accounts-account-id-open-compute-d1-backups-backup-id-restore",
     "RestoredResourceResponse",
     ["200", "201"],
+    "backups.d1.restore",
   ],
 };
 
@@ -642,6 +687,22 @@ function extensionSchemas() {
       kind: { type: "string", enum: ["kv_namespace", "d1_database"] },
       created_on: { type: "string", format: "date-time" },
     }),
+    UpgradeCheck: objectSchema(
+      [
+        "schema_version",
+        "current_version",
+        "update_available",
+        "upgrade_allowed",
+      ],
+      {
+        schema_version: nonNegativeInteger,
+        current_version: string,
+        available_version: { type: ["string", "null"], minLength: 1 },
+        update_available: { type: "boolean" },
+        upgrade_allowed: { type: "boolean" },
+        blocked_reason: { type: ["string", "null"], minLength: 1 },
+      },
+    ),
   };
   schemas.ErrorEnvelope = objectSchema(
     ["success", "result", "errors", "messages"],
@@ -683,6 +744,7 @@ function extensionSchemas() {
       items: { $ref: "#/components/schemas/Backup" },
     },
     RestoredResourceResponse: { $ref: "#/components/schemas/RestoredResource" },
+    UpgradeCheckResponse: { $ref: "#/components/schemas/UpgradeCheck" },
   }))
     schemas[name] = successEnvelope(result);
   return schemas;
@@ -699,10 +761,18 @@ export function buildExtension(source) {
     );
   }
   const paths = {};
+  const sdkMethods = new Set();
   for (const id of source.managementApi.vendorRoutes) {
     const [method, path] = operationKey(id);
-    const [operationId, responseSchema, successStatuses] =
+    const [operationId, responseSchema, successStatuses, sdkMethod] =
       EXTENSION_OPERATIONS[id];
+    if (sdkMethods.has(sdkMethod)) {
+      throw new Error(`duplicate vendor SDK method tree: ${sdkMethod}`);
+    }
+    sdkMethods.add(sdkMethod);
+    if (!/^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)*$/.test(sdkMethod)) {
+      throw new Error(`invalid vendor SDK method tree: ${sdkMethod}`);
+    }
     const parameters = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => ({
       name: match[1],
       in: "path",
@@ -714,6 +784,7 @@ export function buildExtension(source) {
     paths[path][method] = {
       operationId,
       "x-open-compute-capability-status": "supported",
+      "x-open-compute-sdk-method": sdkMethod,
       parameters,
       "x-open-compute-request-body": restore ? "json" : "none",
       ...(restore
@@ -833,7 +904,9 @@ export function validateCommitted({ openapiPath, wranglerRoot, sdkRoot } = {}) {
   const capability = json(CAPABILITY_PATH);
   const extension = json(EXTENSION_PATH);
   const capabilitySource = json(CAPABILITY_SOURCE_PATH);
-  const expectedExtension = `${JSON.stringify(buildExtension(capabilitySource), null, 2)}\n`;
+  const expectedExtension = prettierJson(
+    `${JSON.stringify(buildExtension(capabilitySource), null, 2)}\n`,
+  );
   if (expectedExtension !== readFileSync(EXTENSION_PATH, "utf8")) {
     throw new Error("vendor extension schema is not reproducible");
   }
@@ -966,7 +1039,9 @@ export function validateCommitted({ openapiPath, wranglerRoot, sdkRoot } = {}) {
     const bytes = readFileSync(openapiPath);
     if (sha256(bytes) !== lock.sha256)
       throw new Error("official OpenAPI snapshot digest mismatch");
-    const rebuilt = `${JSON.stringify(buildSubset(JSON.parse(bytes), manifest, lock.revision, lock.sha256), null, 2)}\n`;
+    const rebuilt = prettierJson(
+      `${JSON.stringify(buildSubset(JSON.parse(bytes), manifest, lock.revision, lock.sha256), null, 2)}\n`,
+    );
     if (!Buffer.from(rebuilt).equals(subsetBytes))
       throw new Error("committed OpenAPI subset is not reproducible");
   }
@@ -990,17 +1065,19 @@ export function validateCommitted({ openapiPath, wranglerRoot, sdkRoot } = {}) {
     ])
       if (!source.includes(required))
         throw new Error(`Wrangler trace authority is missing ${required}`);
-    const expected = `${JSON.stringify(
-      buildCapability(
-        subset,
-        manifest,
-        json(CAPABILITY_SOURCE_PATH),
-        lock.wrangler.configSchemaSha256,
-        json(join(wranglerRoot, "config-schema.json")),
-      ),
-      null,
-      2,
-    )}\n`;
+    const expected = prettierJson(
+      `${JSON.stringify(
+        buildCapability(
+          subset,
+          manifest,
+          json(CAPABILITY_SOURCE_PATH),
+          lock.wrangler.configSchemaSha256,
+          json(join(wranglerRoot, "config-schema.json")),
+        ),
+        null,
+        2,
+      )}\n`,
+    );
     if (expected !== readFileSync(CAPABILITY_PATH, "utf8"))
       throw new Error("P6 capability projection is not reproducible");
   }
@@ -1054,7 +1131,9 @@ function main() {
     const bytes = readFileSync(openapiPath);
     if (sha256(bytes) !== lock.sha256)
       throw new Error("official OpenAPI snapshot digest mismatch");
-    const output = `${JSON.stringify(buildSubset(JSON.parse(bytes), json(MANIFEST_PATH), lock.revision, lock.sha256), null, 2)}\n`;
+    const output = prettierJson(
+      `${JSON.stringify(buildSubset(JSON.parse(bytes), json(MANIFEST_PATH), lock.revision, lock.sha256), null, 2)}\n`,
+    );
     writeFileSync(SUBSET_PATH, output);
     const wranglerRoot = value("--wrangler-root");
     if (wranglerRoot === undefined)
@@ -1068,12 +1147,17 @@ function main() {
       lock.wrangler.configSchemaSha256,
       json(join(wranglerRoot, "config-schema.json")),
     );
-    writeFileSync(CAPABILITY_PATH, `${JSON.stringify(capability, null, 2)}\n`);
+    writeFileSync(
+      CAPABILITY_PATH,
+      prettierJson(`${JSON.stringify(capability, null, 2)}\n`),
+    );
     writeFileSync(
       EXTENSION_PATH,
-      `${JSON.stringify(buildExtension(json(CAPABILITY_SOURCE_PATH)), null, 2)}\n`,
+      prettierJson(
+        `${JSON.stringify(buildExtension(json(CAPABILITY_SOURCE_PATH)), null, 2)}\n`,
+      ),
     );
-    process.stdout.write(`${sha256(output)}\n`);
+    process.stdout.write(`${sha256(readFileSync(SUBSET_PATH))}\n`);
     return;
   }
   if (command !== "check")

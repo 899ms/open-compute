@@ -197,6 +197,7 @@ const topics: TopicDefinition[] = [
         link("Limits", "限制", "/platform/limits"),
         link("Not available", "未提供", "/platform/unsupported"),
         link("Worker API index", "Worker API 索引", "/platform/reference/api"),
+        link("Management SDK", "管理 SDK", "/platform/reference/sdk"),
       ]),
       group("Project", "项目", groupIcons.project, [
         link("Architecture and contributing", "架构与贡献", "/project"),

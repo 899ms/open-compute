@@ -1,0 +1,165 @@
+name: Cloudflare upstream refresh
+
+on:
+  schedule:
+    # Mondays 06:23 UTC: weekly discovery at a non-round time.
+    - cron: "23 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-upstream-review
+  cancel-in-progress: false
+
+env:
+  OPEN_COMPUTE_UPSTREAM_ISSUE_TITLE: "Cloudflare upstream refresh"
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      classification: ${{ steps.scan.outputs.classification }}
+      summary: ${{ steps.scan.outputs.summary }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Install locked dependencies without lifecycle scripts
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Scan upstream identities and classify the candidate set
+        id: scan
+        run: |
+          set -euo pipefail
+          bun test/upstream-review/scanner.ts | tee "$RUNNER_TEMP/summary.txt"
+          classification="$(sed -n 's/^classification: //p' "$RUNNER_TEMP/summary.txt")"
+          {
+            echo "classification=$classification"
+            {
+              echo "summary<<SUMMARY"
+              cat "$RUNNER_TEMP/summary.txt"
+              echo "SUMMARY"
+            } >> "$GITHUB_OUTPUT"
+          } >> /dev/null
+          test -n "$classification"
+      - name: Upload raw scan evidence
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: upstream-review
+          path: |
+            .temp/upstream-review/upstream-review.json
+            .temp/upstream-review/summary.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create or update the single tracking issue
+        if: ${{ steps.scan.outputs.classification != 'unchanged' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLASSIFICATION: ${{ steps.scan.outputs.classification }}
+        run: |
+          set -euo pipefail
+          title="$OPEN_COMPUTE_UPSTREAM_ISSUE_TITLE"
+          body="$RUNNER_TEMP/issue-body.md"
+          {
+            echo "## Upstream refresh cycle"
+            echo
+            echo "Classification: **$CLASSIFICATION**"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/summary.txt"
+            echo '```'
+            echo
+            echo "Raw scan evidence: workflow artifact \`upstream-review\` of run $GITHUB_RUN_ID."
+          } > "$body"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$title" --json number,title --jq \
+            ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" \
+              --add-label "upstream-refresh" >/dev/null 2>&1 || true
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body-file "$body" >/dev/null
+          fi
+
+  draft-pr:
+    needs: discover
+    if: needs.discover.outputs.classification == 'ready'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Download the frozen candidate identities and inputs
+        uses: actions/download-artifact@v8
+        with:
+          name: upstream-review
+          path: .temp/upstream-review
+      - name: Apply the frozen candidate identities to the current model
+        run: bun test/upstream-review/apply-candidate.ts
+      - name: Commit the candidate onto the refresh branch
+        id: commit
+        run: |
+          set -euo pipefail
+          revision="$(node -p "require('$GITHUB_WORKSPACE/.temp/upstream-review/upstream-review.json').candidate.openapiRevision")"
+          branch="cloudflare-upstream-refresh/$revision"
+          git config user.name "open-compute upstream bot"
+          git config user.email "bot@open-compute.dev"
+          git checkout -B "$branch"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "chore(openapi): refresh Cloudflare upstream pins to ${revision:0:12}"
+            git push --force origin "$branch"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create or refresh the draft PR
+        if: steps.commit.outputs.created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUMMARY: ${{ needs.discover.outputs.summary }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "Mechanical candidate from the \`Cloudflare upstream refresh\` scan."
+            echo "Identities are frozen to the report in this branch; re-resolving"
+            echo "npm \`latest\` or schema HEAD is forbidden in CI."
+            echo
+            echo '```'
+            echo "$SUMMARY"
+            echo '```'
+            echo
+            echo "Qualification order: pin identity → subset/capability drift →"
+            echo "three-way closure → Wrangler evidence → real-process Gates."
+            echo "This PR must not be auto-merged, tagged, or published."
+          } > "$body"
+          existing="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --head "$BRANCH" --json number --jq '.[0].number')"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body-file "$body" >/dev/null
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" \
+              --head "$BRANCH" --base main \
+              --draft \
+              --title "Cloudflare upstream refresh candidate" \
+              --body-file "$body" >/dev/null
+          fi

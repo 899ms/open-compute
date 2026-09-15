@@ -11,7 +11,7 @@ function KvPage() {
       kind="KV namespaces"
       description="Namespaces returned by the official Workers KV API."
       load={async (client, accountID, signal) => {
-        const page = await client.cloudflare.kv.namespaces.list(
+        const page = await client.kv.namespaces.list(
           { account_id: accountID },
           { signal },
         );
@@ -22,19 +22,19 @@ function KvPage() {
         }));
       }}
       create={(client, accountID, name) =>
-        client.cloudflare.kv.namespaces.create({
+        client.kv.namespaces.create({
           account_id: accountID,
           title: name,
         })
       }
       rename={(client, accountID, row, name) =>
-        client.cloudflare.kv.namespaces.update(row.id, {
+        client.kv.namespaces.update(row.id, {
           account_id: accountID,
           title: name,
         })
       }
       remove={(client, accountID, row) =>
-        client.cloudflare.kv.namespaces.delete(row.id, {
+        client.kv.namespaces.delete(row.id, {
           account_id: accountID,
         })
       }

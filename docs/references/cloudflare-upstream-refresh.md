@@ -1,7 +1,11 @@
 # Cloudflare 上游刷新
 
-状态：**P16 待实现**。本页定义 OpenAPI schema、官方 TypeScript SDK 与 Wrangler 的长期更新合同；在 P16 完成 scheduled workflow
-和资格检查前，不得声称该流程已经自动运行。当前已接受的版本与支持面仍由
+状态：**已实现（P16，2026-09-14）**。本页定义 OpenAPI schema、官方 TypeScript SDK 与 Wrangler 的长期更新合同。发现
+（scanner：`test/upstream-review/scanner.ts`，分类 fixture：`test/upstream-review/scanner.test.mjs`）与 scheduled
+workflow（`.github/workflows/cloudflare-upstream-review.yml`，周一 06:23 UTC + `workflow_dispatch`）已接入；ready 候选的
+frozen-identity Draft PR 由 `draft-pr` job 通过 `test/upstream-review/apply-candidate.ts` 机械再生。首次实际扫描
+（2026-09-14）判定为 `blocked`：schema HEAD 前进但官方 SDK 7.1.0 未发布对应字段（AI Search `use_ocr`、
+Queue create `jurisdiction`），且 wrangler 4.131.2 需要协调评审；pin 未移动，证据在 workflow artifact。当前已接受的版本与支持面仍由
 [`cloudflare-openapi.lock.json`](../../openapi/upstream/cloudflare-openapi.lock.json)、
 [`cloudflare-subset-manifest.json`](../../openapi/cloudflare-subset-manifest.json) 和
 [Cloudflare 兼容矩阵](cloudflare-compatibility.md)共同定义。
@@ -42,11 +46,11 @@ scanner 输出 machine-readable `upstream-review.json` 与人类可读摘要，�
 
 ## 候选分类
 
-| 判定 | 条件 | 自动动作 |
-| --- | --- | --- |
-| `ready` | 候选组合通过静态 three-way closure，且 selected contract 没有未解释缺口 | 更新 tracking issue，并创建或刷新一个 Draft PR |
-| `blocked` | schema、SDK、Wrangler 或当前 `ocd` 对 selected contract 不一致 | 只更新 tracking issue，列出阻塞 operation/field 与等待对象 |
-| `breaking` | selected path/method 删除、请求/响应不兼容、安全公告要求处理，或 scanner 无法证明映射 | workflow 失败并更新高优先级 tracking issue，不改 pin |
+| 判定       | 条件                                                                                  | 自动动作                                                   |
+| ---------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `ready`    | 候选组合通过静态 three-way closure，且 selected contract 没有未解释缺口               | 更新 tracking issue，并创建或刷新一个 Draft PR             |
+| `blocked`  | schema、SDK、Wrangler 或当前 `ocd` 对 selected contract 不一致                        | 只更新 tracking issue，列出阻塞 operation/field 与等待对象 |
+| `breaking` | selected path/method 删除、请求/响应不兼容、安全公告要求处理，或 scanner 无法证明映射 | workflow 失败并更新高优先级 tracking issue，不改 pin       |
 
 schema 先于已发布 official SDK 出现新字段时必须保持 `blocked`，等待 SDK stable 发布后重新扫描；不得依赖未发布 package、Git branch
 构建或本地伪造的官方类型。Wrangler 可以在 schema/SDK identity 不变时单独前进，但候选仍是一个完整三方组合，并必须重新生成全部

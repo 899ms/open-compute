@@ -33,11 +33,13 @@
       ],
       "ignoreDependencies": ["@iconify-json/tabler", "cookie", "satteri"]
     },
-    "packages/cloudflare-extension": {
+    "packages/sdk": {
       "entry": [
         "src/index.ts",
         "src/generated.ts",
-        "scripts/generate-types.ts"
+        "scripts/build.ts",
+        "scripts/generate.ts",
+        "scripts/inspect-package.ts"
       ],
       "project": ["src/**/*.ts", "scripts/**/*.ts"]
     },

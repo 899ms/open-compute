@@ -11,7 +11,7 @@ function R2Page() {
       kind="R2 buckets"
       description="Buckets returned by the official R2 API."
       load={async (client, accountID, signal) => {
-        const result = await client.cloudflare.r2.buckets.list(
+        const result = await client.r2.buckets.list(
           { account_id: accountID },
           { signal },
         );
@@ -25,10 +25,10 @@ function R2Page() {
         }));
       }}
       create={(client, accountID, name) =>
-        client.cloudflare.r2.buckets.create({ account_id: accountID, name })
+        client.r2.buckets.create({ account_id: accountID, name })
       }
       remove={(client, accountID, row) =>
-        client.cloudflare.r2.buckets.delete(row.id, { account_id: accountID })
+        client.r2.buckets.delete(row.id, { account_id: accountID })
       }
     />
   );

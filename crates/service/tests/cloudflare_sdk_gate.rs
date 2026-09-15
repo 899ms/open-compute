@@ -39,7 +39,7 @@ async fn official_cloudflare_sdk_matches_live_ocd_contract() {
     let sdk = fixed_cloudflare_sdk();
     let output = Command::new("bun")
         .arg("tests/live-router.mjs")
-        .current_dir(repo_root().join("packages/cloudflare-extension"))
+        .current_dir(repo_root().join("packages/sdk"))
         .env(
             "OPEN_COMPUTE_V4_BASE_URL",
             format!("http://{}/client/v4", fixture.admin_addr),

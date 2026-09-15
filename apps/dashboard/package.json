@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@cloudflare/kumo": "catalog:",
-    "@open-compute/cloudflare-extension": "workspace:*",
+    "@open-compute/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",

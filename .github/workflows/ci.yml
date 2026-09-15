@@ -35,6 +35,8 @@ jobs:
         run: |
           bun run test:js:ci
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s test -p 'test_gate.py'
+      - name: SDK package pack inspection and isolated consumer smoke
+        run: bun packages/sdk/scripts/inspect-package.ts
       - name: fmt
         run: cargo fmt --all --check
       - name: clippy

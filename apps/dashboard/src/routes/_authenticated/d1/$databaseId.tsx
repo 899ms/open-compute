@@ -31,7 +31,7 @@ function D1DetailPage() {
   const database = useQuery({
     queryKey: ["cloudflare-v4", "d1", databaseId],
     queryFn: ({ signal }) =>
-      client!.cloudflare.d1.database.get(
+      client!.d1.database.get(
         databaseId,
         { account_id: accountId! },
         { signal },
@@ -46,7 +46,7 @@ function D1DetailPage() {
   });
   const query = useMutation({
     mutationFn: () =>
-      client!.cloudflare.d1.database.query(databaseId, {
+      client!.d1.database.query(databaseId, {
         account_id: accountId!,
         sql,
       }),

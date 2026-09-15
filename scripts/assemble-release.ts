@@ -4,6 +4,8 @@ import { basename, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { command, repository, sha256 } from "./workerd-archive.ts";
 
+const CLOUDFLARE_SDK_LOCK_PATH = `${repository}openapi/upstream/cloudflare-openapi.lock.json`;
+
 export const releaseTargets = [
   "darwin-arm64",
   "linux-arm64",
@@ -27,6 +29,23 @@ interface PackageReport extends ReleaseIdentity {
   target: string;
   bytes: number;
   sha256: string;
+}
+
+export interface SdkPackageReport {
+  /** Published npm package name; must be the one scoped SDK package. */
+  package: string;
+  /** SDK package version; must equal the workspace release version. */
+  packageVersion: string;
+  /** npm shasum (SHA-1, hex) of the packed tarball. */
+  tarballShasum: string;
+  /** npm SRI integrity of the packed tarball. */
+  tarballIntegrity: string;
+  /** SHA-256 of the generated SDK surface report. */
+  surfaceDigest: string;
+  /** Pinned official Cloudflare OpenAPI revision. */
+  openapiRevision: string;
+  /** Pinned official `cloudflare` npm version. */
+  cloudflareSdkVersion: string;
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -113,6 +132,42 @@ function packageReport(value: unknown): PackageReport {
   };
 }
 
+function sdkPackageReport(value: unknown): SdkPackageReport {
+  const raw = record(value, "SDK package report");
+  if (raw.schemaVersion !== 1)
+    throw new Error("invalid SDK package report schema");
+  const shasum = string(raw.tarballShasum, "SDK tarball shasum");
+  if (!/^[a-f0-9]{40}$/.test(shasum))
+    throw new Error("invalid SDK tarball shasum");
+  const integrity = string(raw.tarballIntegrity, "SDK tarball integrity");
+  if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(integrity))
+    throw new Error("invalid SDK tarball integrity");
+  const surfaceDigest = string(raw.surfaceDigest, "SDK surface digest");
+  if (!/^[a-f0-9]{64}$/.test(surfaceDigest))
+    throw new Error("invalid SDK surface digest");
+  const openapiRevision = string(raw.openapiRevision, "SDK OpenAPI revision");
+  if (!/^[0-9a-f]{40}$/.test(openapiRevision))
+    throw new Error("invalid SDK OpenAPI revision");
+  return {
+    package: string(raw.package, "SDK package name"),
+    packageVersion: string(raw.packageVersion, "SDK package version"),
+    tarballShasum: shasum,
+    tarballIntegrity: integrity,
+    surfaceDigest,
+    openapiRevision,
+    cloudflareSdkVersion: string(
+      raw.cloudflareSdkVersion,
+      "SDK official Cloudflare version",
+    ),
+  };
+}
+
+function lockedCloudflareSdkVersion(value: unknown): string {
+  const lock = record(value, "Cloudflare upstream lock");
+  const sdk = record(lock.cloudflareSdk, "Cloudflare upstream lock SDK pin");
+  return string(sdk.version, "Cloudflare upstream lock SDK version");
+}
+
 async function writeNew(path: string, contents: string): Promise<void> {
   const file = await open(path, "wx", 0o444);
   try {
@@ -127,6 +182,7 @@ export async function assembleRelease(
   directory: string,
   tag: string,
   identity: ReleaseIdentity,
+  sdk: SdkPackageReport,
 ): Promise<void> {
   if (!isAbsolute(directory) || resolve(directory) !== directory) {
     throw new Error(
@@ -139,6 +195,17 @@ export async function assembleRelease(
   const version = stableVersionFromTag(tag);
   if (version !== identity.version)
     throw new Error("release tag does not match the workspace version");
+  const checkedSdk = sdkPackageReport(sdk);
+  if (checkedSdk.package !== "@open-compute/sdk")
+    throw new Error("release manifest requires the @open-compute/sdk package");
+  if (checkedSdk.packageVersion !== identity.version)
+    throw new Error("SDK package version does not match the release version");
+  const lockBytes = await readFile(CLOUDFLARE_SDK_LOCK_PATH, "utf8");
+  if (
+    checkedSdk.cloudflareSdkVersion !==
+    lockedCloudflareSdkVersion(JSON.parse(lockBytes))
+  )
+    throw new Error("SDK official Cloudflare version does not match the lock");
 
   const expected = new Set(
     releaseTargets.flatMap((target) => [
@@ -205,6 +272,15 @@ export async function assembleRelease(
       gitRevision: identity.revision,
       workerdRelease: identity.workerd,
       workerdLockSha256: identity.workerdLockSha256,
+      sdk: {
+        package: checkedSdk.package,
+        packageVersion: checkedSdk.packageVersion,
+        tarballShasum: checkedSdk.tarballShasum,
+        tarballIntegrity: checkedSdk.tarballIntegrity,
+        surfaceDigest: checkedSdk.surfaceDigest,
+        openapiRevision: checkedSdk.openapiRevision,
+        cloudflareSdkVersion: checkedSdk.cloudflareSdkVersion,
+      },
       artifacts,
     },
     null,
@@ -222,18 +298,26 @@ export async function assembleRelease(
   await writeNew(`${directory}/SHA256SUMS`, checksums);
 }
 
-function argumentsFrom(args: string[]): { tag: string; directory: string } {
+function argumentsFrom(args: string[]): {
+  tag: string;
+  directory: string;
+  sdkReport: string;
+} {
   let tag: string | undefined;
   let directory: string | undefined;
+  let sdkReport: string | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--tag" && tag === undefined) tag = args[++index];
     else if (argument === "--dir" && directory === undefined)
       directory = args[++index];
-    else throw new Error("usage: --tag vX.Y.Z --dir ABS");
+    else if (argument === "--sdk-report" && sdkReport === undefined)
+      sdkReport = args[++index];
+    else throw new Error("usage: --tag vX.Y.Z --dir ABS --sdk-report ABS.json");
   }
-  if (!tag || !directory) throw new Error("usage: --tag vX.Y.Z --dir ABS");
-  return { tag, directory };
+  if (!tag || !directory || !sdkReport)
+    throw new Error("usage: --tag vX.Y.Z --dir ABS --sdk-report ABS.json");
+  return { tag, directory, sdkReport };
 }
 
 if (
@@ -245,5 +329,8 @@ if (
     input.directory,
     input.tag,
     await repositoryReleaseIdentity(),
+    sdkPackageReport(
+      JSON.parse(await readFile(input.sdkReport, "utf8")) as unknown,
+    ),
   );
 }

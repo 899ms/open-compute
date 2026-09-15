@@ -1,5 +1,4 @@
-import Cloudflare from "cloudflare";
-import { createOpenComputeExtension } from "@open-compute/cloudflare-extension";
+import { createOpenComputeClient } from "@open-compute/sdk";
 import { expect, test } from "./fixtures";
 import { adminToken, signIn } from "./helpers";
 
@@ -7,12 +6,11 @@ function liveClient() {
   const dashboardRoot =
     process.env.OPEN_COMPUTE_DASHBOARD_E2E_BASE_URL ??
     "http://127.0.0.1:8787/operator/";
-  const cloudflare = new Cloudflare({
+  return createOpenComputeClient({
     apiToken: adminToken,
     baseURL: new URL("/client/v4", dashboardRoot).href,
     maxRetries: 0,
   });
-  return { cloudflare, openCompute: createOpenComputeExtension(cloudflare) };
 }
 test.describe("Cloudflare v4 dashboard consumers", () => {
   test.beforeEach(async ({ page }) => {
@@ -48,21 +46,21 @@ test.describe("Cloudflare v4 dashboard consumers", () => {
     ).toBe(true);
   });
 
-  test("official SDK and extension share authentication and transport", async () => {
-    const { cloudflare, openCompute } = liveClient();
-    const accounts = await cloudflare.accounts.list();
+  test("capability-scoped SDK shares authentication and transport", async () => {
+    const client = liveClient();
+    const accounts = await client.accounts.list();
     const accountID = accounts.result[0]?.id;
     expect(accountID).toBeTruthy();
-    const capabilities = await openCompute.capabilities.get();
+    const capabilities = await client.openCompute.capabilities.get();
     expect(capabilities.wrangler_version).toBe("4.127.1");
 
     const title = `pw-kv-${crypto.randomUUID().replaceAll("-", "")}`;
-    const namespace = await cloudflare.kv.namespaces.create({
+    const namespace = await client.kv.namespaces.create({
       account_id: accountID!,
       title,
     });
     try {
-      const page = await cloudflare.kv.namespaces.list({
+      const page = await client.kv.namespaces.list({
         account_id: accountID!,
       });
       expect(
@@ -71,7 +69,7 @@ test.describe("Cloudflare v4 dashboard consumers", () => {
         ),
       ).toBe(true);
     } finally {
-      await cloudflare.kv.namespaces.delete(namespace.id, {
+      await client.kv.namespaces.delete(namespace.id, {
         account_id: accountID!,
       });
     }

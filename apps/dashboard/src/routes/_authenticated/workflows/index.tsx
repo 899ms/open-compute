@@ -24,7 +24,7 @@ function WorkflowsPage() {
       className: string;
     }) => {
       if (!input.name) throw new Error("Workflow name is required.");
-      return client!.cloudflare.workflows.update(input.name, {
+      return client!.workflows.update(input.name, {
         account_id: accountId!,
         script_name: input.scriptName,
         class_name: input.className,
@@ -52,7 +52,7 @@ function WorkflowsPage() {
       kind="Workflows"
       description="Create definitions and manage Workflows through the official Workflows API."
       load={async (management, accountID, signal) => {
-        const page = await management.cloudflare.workflows.list(
+        const page = await management.workflows.list(
           { account_id: accountID },
           { signal },
         );
@@ -64,7 +64,7 @@ function WorkflowsPage() {
         }));
       }}
       remove={(management, accountID, row) =>
-        management.cloudflare.workflows.delete(row.id, {
+        management.workflows.delete(row.id, {
           account_id: accountID,
         })
       }

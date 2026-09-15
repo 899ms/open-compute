@@ -11,7 +11,7 @@ function D1Page() {
       kind="D1 databases"
       description="Databases returned by the official D1 API."
       load={async (client, accountID, signal) => {
-        const page = await client.cloudflare.d1.database.list(
+        const page = await client.d1.database.list(
           { account_id: accountID },
           { signal },
         );
@@ -25,10 +25,10 @@ function D1Page() {
         }));
       }}
       create={(client, accountID, name) =>
-        client.cloudflare.d1.database.create({ account_id: accountID, name })
+        client.d1.database.create({ account_id: accountID, name })
       }
       remove={(client, accountID, row) =>
-        client.cloudflare.d1.database.delete(row.id, { account_id: accountID })
+        client.d1.database.delete(row.id, { account_id: accountID })
       }
     />
   );
