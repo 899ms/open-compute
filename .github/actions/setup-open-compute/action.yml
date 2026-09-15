@@ -90,10 +90,12 @@ runs:
       uses: Swatinem/rust-cache@v2
       with:
         cache-targets: ${{ inputs.rust-cache-targets }}
-        cache-on-failure: true
+        # Failed target directories are often incomplete and poison the next
+        # restore. Package jobs retain their bounded sccache separately.
+        cache-on-failure: false
         save-if: ${{ github.event_name != 'pull_request' && inputs.rust-cache-save == 'true' }}
         add-job-id-key: false
-        shared-key: ${{ inputs.rust-cache-key }}
+        shared-key: v2-${{ inputs.rust-cache-key }}
         workspaces: ${{ inputs.rust-workspaces }}
         cache-all-crates: true
 

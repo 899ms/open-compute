@@ -66,7 +66,8 @@ Linux 上仅 `p0-2` 受控 egress fixture，以及三个正式平台打包。Lin
 首启、重启和损坏拒绝测试。
 
 `publish` 明确依赖 main 静态资格、coverage、macOS 最终 Gate、Linux egress 和三个正式平台 assemble；
-任何一项未通过均不得公开发布。失败构建保存缓存、编译耗时和标明未验收的二进制，不作为公开发行物。
+任何一项未通过均不得公开发布。构建保存编译耗时和标明未验收的二进制；普通 Rust target cache
+不保存失败半成品，package 的 bounded sccache 只作为编译加速，不作为测试通过证据或可信发行物。
 缓存和任务依赖设计见 [CI 构建性能](ci-build-performance.md)。
 
 只读 `assemble` job 只接受三个精确命名的二进制和对应 package report；它重新核对版本、revision、workerd pin、
@@ -191,8 +192,10 @@ macOS 使用 `shasum -a 256 -c` 校验筛选后的对应行。校验后仍应按
   已公开的 Release 和 tag 仍不可移动，后续修复必须走新的 patch version PR。
 - runner、网络或 GitHub 服务的瞬时失败：输入未变化时可以对同一 tag rerun failed jobs；不得借重跑替换
   tag、源码或任何 package 输入。
-- Draft 已创建但上传/回读失败：Draft 保持非公开。确认失败证据后可删除该 Draft，再对同一、未移动的
-  tag rerun failed jobs；不能覆盖已存在的 asset。
+- Draft 已创建但上传/回读失败：Draft 保持非公开。publish 与
+  [`release-recovery`](../../.github/workflows/release-recovery.yml) 都先确认已有 Draft 是否仍为同一
+  tag，再下载并逐字节校验，不覆盖已有 asset；qualification 成功而 assemble/publish 失败时，使用
+  recovery 的 `tag + source_run_id` 复用成功 artifact，不重跑测试。
 - release 已公开：视为不可变。发现缺陷时发布新的 patch 版本，例如 `v0.1.1`；不要替换二进制、移动
   tag 或删除旧版本来伪装相同版本。
 - 本地与远端存在同名 tag 但指向不同对象时，先保留远端正式 tag，不要 force push 或替换远端 tag；
