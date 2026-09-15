@@ -450,6 +450,7 @@ impl Actor {
         }
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
         let (exit_code, signal) = report.map_or((None, None), |r| (r.exit_code(), r.signal()));
+        self.snap.last_exit_startup_id = self.snap.startup_id;
         self.snap.last_exit = Some(SanitizedExit {
             code: exit_code,
             signal,

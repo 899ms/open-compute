@@ -39,20 +39,28 @@ pub(super) async fn api_matrix(
     };
     let workflow_api = WorkflowApiState::new(
         storage.clone(),
-        scheduler,
+        scheduler.clone(),
         transport.clone(),
         open_compute_core::WorkflowsConfig::default(),
     );
+    let promoter = open_compute_service::product_promotion_for_test(
+        storage.clone(),
+        scheduler,
+        Arc::new(transport.clone()),
+    );
     let state = HttpState::new(health, metrics, false, false, &server)
         .unwrap()
-        .with_worker_api(WorkerApiState::new(
-            storage.clone(),
-            artifacts,
-            transport.with_test_request_body_limit(32 * 1024),
-            VersionPins::new(),
-            BundleLimits::default(),
-            Duration::from_secs(5),
-        ))
+        .with_worker_api(
+            WorkerApiState::new(
+                storage.clone(),
+                artifacts,
+                transport.with_test_request_body_limit(32 * 1024),
+                VersionPins::new(),
+                BundleLimits::default(),
+                Duration::from_secs(5),
+            )
+            .with_product_promoter(promoter),
+        )
         .with_workflow_api(Some(workflow_api));
     let (state, public_account) =
         open_compute_service::cloudflare_v4_for_test(state, storage.clone());

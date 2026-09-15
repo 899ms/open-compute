@@ -104,7 +104,14 @@ impl AiSearchStore {
         {
             return Err(invariant_error());
         }
-        enforce_enqueue_quotas(&transaction, item)?;
+        enforce_enqueue_quotas(
+            &transaction,
+            item.source,
+            None,
+            None,
+            item.key,
+            item.object_size,
+        )?;
         prune_terminal_jobs(&transaction)?;
         let config_generation: i64 = transaction
             .query_row(
@@ -133,7 +140,7 @@ impl AiSearchStore {
                  (id, source, key, status, desired_generation, metadata_json,
                   created_at_ms, updated_at_ms)
                  VALUES (?1, ?2, ?3, 'queued', ?4, ?5, ?6, ?6)
-                 ON CONFLICT(source, key) DO UPDATE SET
+                 ON CONFLICT(source, key) WHERE source!='open-compute:manual' DO UPDATE SET
                    status='queued', desired_generation=excluded.desired_generation,
                    metadata_json=excluded.metadata_json, updated_at_ms=excluded.updated_at_ms",
                 params![

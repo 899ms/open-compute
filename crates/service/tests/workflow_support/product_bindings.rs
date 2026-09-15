@@ -147,6 +147,7 @@ async fn workflow_step_uses_kv_d1_r2_do_queue_and_replay_preserves_external_effe
     .with_product_promoter(open_compute_service::product_promotion_for_test(
         storage.clone(),
         scheduler.clone(),
+        Arc::new(stack.transport.clone()),
     ))
     .with_durable_object_migration(do_plan);
     let workflow_version = deploy(
@@ -213,6 +214,7 @@ async fn workflow_step_uses_kv_d1_r2_do_queue_and_replay_preserves_external_effe
     .with_product_promoter(open_compute_service::product_promotion_for_test(
         storage.clone(),
         scheduler.clone(),
+        Arc::new(stack.transport.clone()),
     ));
     let scheduled_version = deploy(
         &scheduled_controller,

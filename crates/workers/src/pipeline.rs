@@ -32,7 +32,7 @@ use open_compute_artifacts::ArtifactStore;
 use open_compute_core::{
     AccountId, BindingId, BindingKind, CanonicalBindingConfig, CanonicalPermissions,
     CronActivationId, CronSchedule, ErrorCode, PlatformError, QueueConsumerId, QueueId, RequestId,
-    ResourceId, ResourceState, SecretBytes, SecretString, VersionId, WorkerId,
+    ResourceId, ResourceState, SecretBytes, SecretString, StartupId, VersionId, WorkerId,
 };
 use open_compute_storage::{
     BindingRepository, BuiltinBindingKind, CRON_PARSER_VERSION, DeploymentRecord, DeploymentSource,
@@ -277,6 +277,15 @@ pub trait RuntimeValidator: Send + Sync + 'static {
         candidate: ValidationCandidate,
     ) -> Pin<Box<dyn Future<Output = Result<(), PlatformError>> + Send + '_>>;
 
+    /// Revalidate a deployment candidate and return the exact running generation proof.
+    fn validate_deployment(
+        &self,
+        candidate: ValidationCandidate,
+    ) -> Pin<Box<dyn Future<Output = Result<StartupId, PlatformError>> + Send + '_>>;
+
+    /// Current running generation, when the production validator is generation-aware.
+    fn current_generation(&self) -> Option<StartupId>;
+
     /// Probe a named export without invoking the tenant handler.
     fn validate_entrypoint(
         &self,
@@ -334,18 +343,9 @@ pub struct ProductPromotionRequest {
     pub now_ms: i64,
 }
 
-impl<F, Fut> RuntimeValidator for F
-where
-    F: Fn(ValidationCandidate) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Result<(), PlatformError>> + Send + 'static,
-{
-    fn validate(
-        &self,
-        candidate: ValidationCandidate,
-    ) -> Pin<Box<dyn Future<Output = Result<(), PlatformError>> + Send + '_>> {
-        Box::pin((self)(candidate))
-    }
-}
+#[cfg(any(test, feature = "test-support"))]
+#[path = "pipeline/test_validator.rs"]
+mod test_validator;
 
 /// Secret-safe version request. Debug redacts secret values.
 #[derive(Clone, Debug)]

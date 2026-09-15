@@ -29,6 +29,25 @@ pub(super) struct ItemSyncPayload {
     pub(super) wait_for_completion: Option<bool>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ManualUpsertPayload {
+    pub(super) key: String,
+    pub(super) revision: String,
+    pub(super) content_type: String,
+    #[serde(default)]
+    pub(super) metadata: Map<String, Value>,
+    #[serde(default)]
+    pub(super) wait_for_completion: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ManualCreatePayload {
+    pub(super) provider_id: String,
+    pub(super) config: Value,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CursorPage {
@@ -92,12 +111,17 @@ pub(super) fn item_info_value_with_source(
     r2_source_name: Option<&str>,
 ) -> Result<Value, PlatformError> {
     let metadata: Value = serde_json::from_slice(&item.metadata_json).map_err(|_| corrupt())?;
-    let source_id = if item.source_kind == "builtin" {
-        "builtin".to_owned()
-    } else {
-        external_source_id("r2", r2_source_name.ok_or_else(corrupt)?)
+    let source_id = match &item.source {
+        AiSearchSourceReference::Builtin(_) => "builtin".to_owned(),
+        AiSearchSourceReference::R2(_) => {
+            external_source_id("r2", r2_source_name.ok_or_else(corrupt)?)
+        }
+        AiSearchSourceReference::Manual(source) => format!(
+            "open-compute:manual:{}:{}",
+            source.provider_id, source.source
+        ),
     };
-    Ok(json!({
+    let mut value = json!({
         "id": item.id,
         "key": item.key,
         "status": item.status,
@@ -113,7 +137,19 @@ pub(super) fn item_info_value_with_source(
         "created_at": timestamp(item.created_at_ms)?,
         "last_seen_at": timestamp(item.updated_at_ms)?,
         "metadata": metadata,
-    }))
+    });
+    if let AiSearchSourceReference::Manual(source) = &item.source {
+        value.as_object_mut().ok_or_else(corrupt)?.insert(
+            "open_compute_source".to_owned(),
+            json!({
+                "provider_id": source.provider_id,
+                "source": source.source,
+                "key": item.key,
+                "revision": source.revision,
+            }),
+        );
+    }
+    Ok(value)
 }
 
 pub(super) fn external_source_id(source_type: &str, source: &str) -> String {

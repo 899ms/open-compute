@@ -28,6 +28,7 @@ fn unfence_empty_entry_and_released_drop_are_idempotent() {
             version,
             Entry {
                 count: 0,
+                deployments: HashMap::new(),
                 fenced: true,
                 retained_until_restart: false,
             },
@@ -37,10 +38,25 @@ fn unfence_empty_entry_and_released_drop_are_idempotent() {
     assert_eq!(pins.count(version), 0);
     drop(VersionPin {
         version_id: version,
+        deployment_id: None,
         inner: pins.inner.clone(),
         released: true,
     });
     assert_eq!(pins.count(version), 0);
+}
+
+#[test]
+fn deployment_pins_expose_only_live_attribution() {
+    let pins = VersionPins::new();
+    let version = VersionId::generate();
+    let deployment = DeploymentId::generate();
+    let first = pins.pin_deployment(version, deployment).unwrap();
+    let second = pins.pin_deployment(version, deployment).unwrap();
+    assert_eq!(pins.active_deployments(), vec![deployment]);
+    drop(first);
+    assert_eq!(pins.active_deployments(), vec![deployment]);
+    drop(second);
+    assert!(pins.active_deployments().is_empty());
 }
 
 #[tokio::test]

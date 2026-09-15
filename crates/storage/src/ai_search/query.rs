@@ -208,7 +208,9 @@ impl AiSearchStore {
                         (SELECT COUNT(*) FROM chunks c
                           WHERE c.item_id=i.id AND c.item_generation=i.active_generation
                             AND c.index_generation=(SELECT active_index_generation
-                              FROM instance_meta WHERE singleton=1))
+                              FROM instance_meta WHERE singleton=1)),
+                        i.source_provider, i.source_namespace,
+                        g.manual_revision, g.manual_sha256
                    FROM items i JOIN item_generations g ON g.item_id=i.id
                     AND g.generation=COALESCE(i.active_generation, i.desired_generation)
                   WHERE i.id=?1",
@@ -233,7 +235,9 @@ impl AiSearchStore {
                         (SELECT COUNT(*) FROM chunks c
                           WHERE c.item_id=i.id AND c.item_generation=i.active_generation
                             AND c.index_generation=(SELECT active_index_generation
-                              FROM instance_meta WHERE singleton=1))
+                              FROM instance_meta WHERE singleton=1)),
+                        i.source_provider, i.source_namespace,
+                        g.manual_revision, g.manual_sha256
                    FROM items i JOIN item_generations g ON g.item_id=i.id
                     AND g.generation=COALESCE(i.active_generation, i.desired_generation)
                   WHERE i.source='builtin' AND i.key=?1",
@@ -259,7 +263,9 @@ impl AiSearchStore {
                         (SELECT COUNT(*) FROM chunks c
                           WHERE c.item_id=i.id AND c.item_generation=i.active_generation
                             AND c.index_generation=(SELECT active_index_generation
-                              FROM instance_meta WHERE singleton=1))
+                              FROM instance_meta WHERE singleton=1)),
+                        i.source_provider, i.source_namespace,
+                        g.manual_revision, g.manual_sha256
                    FROM items i JOIN item_generations g ON g.item_id=i.id
                     AND g.generation=i.desired_generation WHERE i.id=?1",
                 [item_id],
@@ -291,7 +297,9 @@ impl AiSearchStore {
                         (SELECT COUNT(*) FROM chunks c
                           WHERE c.item_id=i.id AND c.item_generation=i.active_generation
                             AND c.index_generation=(SELECT active_index_generation
-                              FROM instance_meta WHERE singleton=1))
+                              FROM instance_meta WHERE singleton=1)),
+                        i.source_provider, i.source_namespace,
+                        g.manual_revision, g.manual_sha256
                    FROM items i JOIN item_generations g ON g.item_id=i.id
                     AND g.generation=COALESCE(i.active_generation, i.desired_generation)
                   ORDER BY i.updated_at_ms DESC, i.id LIMIT ?1 OFFSET ?2",

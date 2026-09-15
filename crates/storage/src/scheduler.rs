@@ -39,7 +39,7 @@ pub use workflow::{
 
 pub use cron::{
     ClaimedCronRun, CronCompletion, CronCompletionResult, CronRuntimeInspection,
-    CronScheduleProjection, CronSlotSummary,
+    CronScheduleProjection, CronSlotSummary, CronUnknownReason,
 };
 pub(crate) use inspection::inspect_scheduler_schema_version;
 pub use inspection::{

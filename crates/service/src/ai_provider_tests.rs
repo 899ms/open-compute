@@ -1,5 +1,6 @@
 use super::*;
 use bytes::Bytes;
+use http_body_util::BodyExt as _;
 use http_body_util::Full;
 use hyper::body::Incoming as HyperIncoming;
 use hyper::header::{CONTENT_TYPE, RETRY_AFTER};
@@ -10,7 +11,8 @@ use hyper_util::rt::TokioIo;
 use open_compute_core::{
     AiAuthConfig, AiBackendConfig, AiBackendProtocol, AiConfig, AiEmbeddingModelConfig,
     AiEmbeddingProfileConfig, AiGenerationCapability, AiGenerationModelConfig, AiTokenizer,
-    AiTokenizerArtifactConfig, AiTokenizerConfig, AiVlmModelConfig, SecretReference,
+    AiTokenizerArtifactConfig, AiTokenizerConfig, AiVlmModelConfig, OperatorProxyPolicy,
+    SecretReference,
 };
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -18,10 +20,61 @@ use std::convert::Infallible;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
 type ScriptedResponse = (StatusCode, &'static str, Vec<u8>);
+
+#[tokio::test]
+async fn embedding_request_uses_the_selected_operator_proxy() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = vec![0; 4096];
+        let count = stream.read(&mut request).await.unwrap();
+        let request = std::str::from_utf8(&request[..count]).unwrap();
+        assert!(request.starts_with("POST http://provider.invalid/v1 HTTP/1.1\r\n"));
+        let body =
+            r#"{"object":"list","data":[{"object":"embedding","index":0,"embedding":[1.0]}]}"#;
+        stream
+            .write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    });
+    let policy =
+        OperatorProxyPolicy::from_lookup(|name| (name == "HTTPS_PROXY").then(|| proxy.clone()))
+            .unwrap();
+    let client = OpenAiProviderClient {
+        transport: crate::operator_http::OperatorHttpClient::new(policy).unwrap(),
+        endpoint: "http://provider.invalid/v1".parse().unwrap(),
+        remote_model: "fixture".to_owned(),
+        contract_sha256: hex::encode([1; 32]),
+        dimensions: 1,
+        request_dimensions: None,
+        headers: HeaderMap::new(),
+        max_inputs: 1,
+        max_request_bytes: 4096,
+        max_response_bytes: 4096,
+        timeout: Duration::from_secs(1),
+    };
+    assert_eq!(
+        client
+            .embeddings(&["hello".to_owned()])
+            .await
+            .unwrap()
+            .embeddings,
+        vec![vec![1.0]]
+    );
+    server.await.unwrap();
+}
 
 #[derive(Clone)]
 struct ScriptedServer {

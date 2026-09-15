@@ -393,6 +393,9 @@ impl SchedulerService {
                 ready_runs: runtime.ready_runs,
                 claimed_runs: runtime.claimed_runs,
                 last_outcome: runtime.last_outcome,
+                last_error_code: runtime.last_error_code,
+                last_unknown_reason: runtime.last_unknown_reason,
+                oldest_dispatch_deadline_at: runtime.oldest_dispatch_deadline_at_ms,
                 lag_ms: runtime.lag_ms,
             });
         }

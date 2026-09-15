@@ -7,6 +7,7 @@ mod contract;
 mod ingest_gc;
 mod inspection;
 mod jobs;
+mod manual;
 mod model;
 mod parse_cache;
 mod paths;
@@ -14,15 +15,18 @@ mod query;
 mod source;
 
 pub use catalog::{
-    AiSearchCatalog, AiSearchInstanceRecord, AiSearchNamespaceRecord, AiSearchR2SourceRecord,
+    AiSearchCatalog, AiSearchInstanceRecord, AiSearchManualSourceRecord, AiSearchNamespaceRecord,
+    AiSearchR2SourceRecord,
 };
 pub use inspection::{inspect_ai_search_instance, inspect_ai_search_object_references};
+pub use manual::{AiSearchManualUpsert, NewAiSearchManualGeneration};
 pub use model::{
     AiSearchChunkRecord, AiSearchInstanceAuthority, AiSearchInstanceInspection,
     AiSearchInstanceStorageContract, AiSearchItemRecord, AiSearchJobClaim, AiSearchJobRecord,
-    AiSearchLogRecord, AiSearchObjectGcClaim, AiSearchObjectReference, AiSearchR2Candidate,
-    AiSearchR2ObjectReference, AiSearchR2ReconcileClaim, AiSearchSourceReference,
-    ClaimedAiSearchItem, NewAiSearchItemGeneration, StagedAiSearchChunk,
+    AiSearchLogRecord, AiSearchManualObjectReference, AiSearchObjectGcClaim,
+    AiSearchObjectReference, AiSearchR2Candidate, AiSearchR2ObjectReference,
+    AiSearchR2ReconcileClaim, AiSearchSourceReference, ClaimedAiSearchItem,
+    NewAiSearchItemGeneration, StagedAiSearchChunk,
 };
 pub use parse_cache::{
     AiSearchParseCache, AiSearchParseCacheKey, AiSearchParseCacheLookup, AiSearchParseCacheStore,
@@ -230,7 +234,14 @@ impl AiSearchStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(sql_error)?;
-        enforce_enqueue_quotas(&transaction, item)?;
+        enforce_enqueue_quotas(
+            &transaction,
+            item.source,
+            None,
+            None,
+            item.key,
+            item.object_size,
+        )?;
         prune_terminal_jobs(&transaction)?;
         let config_generation: i64 = transaction
             .query_row(
@@ -259,7 +270,7 @@ impl AiSearchStore {
                  (id, source, key, status, desired_generation, metadata_json,
                   created_at_ms, updated_at_ms)
                  VALUES (?1, ?2, ?3, 'queued', ?4, ?5, ?6, ?6)
-                 ON CONFLICT(source, key) DO UPDATE SET
+                 ON CONFLICT(source, key) WHERE source!='open-compute:manual' DO UPDATE SET
                    status='queued', desired_generation=excluded.desired_generation,
                    metadata_json=excluded.metadata_json, updated_at_ms=excluded.updated_at_ms",
                 params![
@@ -361,6 +372,23 @@ fn decode_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<AiSearchItemRecord> 
             etag: r2_etag.ok_or(rusqlite::Error::InvalidQuery)?,
             object_size,
             uploaded_at_ms: r2_uploaded_at_ms.ok_or(rusqlite::Error::InvalidQuery)?,
+        }),
+        "open-compute:manual" => AiSearchSourceReference::Manual(AiSearchManualObjectReference {
+            provider_id: row
+                .get::<_, Option<String>>(17)?
+                .ok_or(rusqlite::Error::InvalidQuery)?,
+            source: row
+                .get::<_, Option<String>>(18)?
+                .ok_or(rusqlite::Error::InvalidQuery)?,
+            revision: row
+                .get::<_, Option<String>>(19)?
+                .ok_or(rusqlite::Error::InvalidQuery)?,
+            sha256: row
+                .get::<_, Option<Vec<u8>>>(20)?
+                .ok_or(rusqlite::Error::InvalidQuery)?
+                .try_into()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+            object_size,
         }),
         _ => return Err(rusqlite::Error::InvalidQuery),
     };
@@ -531,12 +559,17 @@ fn validate_chunk_batch(
 
 fn enforce_enqueue_quotas(
     transaction: &rusqlite::Transaction<'_>,
-    item: &NewAiSearchItemGeneration<'_>,
+    source: &str,
+    source_provider: Option<&str>,
+    source_namespace: Option<&str>,
+    key: &str,
+    object_size: u64,
 ) -> Result<(), PlatformError> {
     let existing: bool = transaction
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM items WHERE source=?1 AND key=?2)",
-            params![item.source, item.key],
+            "SELECT EXISTS(SELECT 1 FROM items WHERE source=?1
+               AND source_provider IS ?2 AND source_namespace IS ?3 AND key=?4)",
+            params![source, source_provider, source_namespace, key],
             |row| row.get(0),
         )
         .map_err(sql_error)?;
@@ -553,12 +586,13 @@ fn enforce_enqueue_quotas(
             "SELECT COALESCE(SUM(g.object_size), 0)
                FROM items i JOIN item_generations g
                  ON g.item_id=i.id AND g.generation=i.desired_generation
-              WHERE NOT (i.source=?1 AND i.key=?2)",
-            params![item.source, item.key],
+              WHERE NOT (i.source=?1 AND i.source_provider IS ?2
+                         AND i.source_namespace IS ?3 AND i.key=?4)",
+            params![source, source_provider, source_namespace, key],
             |row| row.get(0),
         )
         .map_err(sql_error)?;
-    let object_size = to_i64(item.object_size)?;
+    let object_size = to_i64(object_size)?;
     if retained_source_bytes
         .checked_add(object_size)
         .is_none_or(|bytes| bytes > MAX_SOURCE_BYTES_PER_INSTANCE)

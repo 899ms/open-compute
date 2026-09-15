@@ -72,7 +72,14 @@ pub async fn create_support_bundle(
         json_entry("files.json", &file_summary(loaded))?,
         json_entry("operator-events.json", &operator_event_summary(loaded))?,
         json_entry("search.json", &search_summary(loaded)?)?,
+        json_entry(
+            "deployment-runtime.json",
+            &deployment_runtime_summary(loaded)?,
+        )?,
     ];
+    if let Some(bytes) = workerd_last_exit(loaded)? {
+        entries.push(("workerd-last-exit.json".to_owned(), bytes));
+    }
     entries.extend(receipt_entries(loaded)?);
     entries.sort_by(|left, right| left.0.cmp(&right.0));
     let max_bytes = usize::try_from(loaded.config.hardening.max_support_bundle_bytes)
@@ -114,6 +121,31 @@ pub async fn create_support_bundle(
         sha256: hex::encode(digest),
         entries: u32::try_from(entries.len()).map_err(|_| bundle_invalid())?,
     })
+}
+
+fn workerd_last_exit(loaded: &LoadedConfig) -> Result<Option<Vec<u8>>, PlatformError> {
+    let path = crate::runtime_diagnostics::path(&loaded.config.data.path);
+    if !path.exists() {
+        return Ok(None);
+    }
+    open_compute_storage::validate_owned_file(&path, true).map_err(|_| bundle_invalid())?;
+    let bytes = std::fs::read(path).map_err(|_| bundle_invalid())?;
+    if bytes.len() > 40 * 1024 || serde_json::from_slice::<serde_json::Value>(&bytes).is_err() {
+        return Err(bundle_invalid());
+    }
+    Ok(Some(bytes))
+}
+
+fn deployment_runtime_summary(loaded: &LoadedConfig) -> Result<serde_json::Value, PlatformError> {
+    let database = open_compute_storage::ControlDb::open(
+        &loaded.config.data.path.join("control.sqlite"),
+        loaded.config.data.sqlite_busy_timeout_ms,
+    )
+    .map_err(|_| bundle_invalid())?;
+    let summary = open_compute_storage::WorkerRepository::new(&database)
+        .deployment_runtime_assessments()
+        .map_err(|_| bundle_invalid())?;
+    serde_json::to_value(summary).map_err(|_| bundle_invalid())
 }
 
 fn redacted_policy(loaded: &LoadedConfig) -> serde_json::Value {
@@ -454,6 +486,14 @@ fn secret_needles(loaded: &LoadedConfig) -> Result<Vec<Vec<u8>>, PlatformError> 
             }
             AiAuthConfig::None => {}
         }
+    }
+    for provider in loaded.config.ai.source_providers.values() {
+        values.push(
+            resolve_admin_auth(&provider.credential)?
+                .expose()
+                .as_bytes()
+                .to_vec(),
+        );
     }
     values.retain(|value| value.len() >= 4);
     Ok(values)

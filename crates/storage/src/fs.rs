@@ -123,7 +123,8 @@ pub(crate) fn validate_owned_dir(path: &Path) -> Result<(), PlatformError> {
     Ok(())
 }
 
-pub(crate) fn validate_owned_file(path: &Path, authority: bool) -> Result<(), PlatformError> {
+/// Validate an absolute, non-symlink, owner-only regular file.
+pub fn validate_owned_file(path: &Path, authority: bool) -> Result<(), PlatformError> {
     let meta = inspect(path)?;
     if meta.file_type().is_symlink() {
         return Err(PlatformError::new(

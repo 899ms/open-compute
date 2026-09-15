@@ -1,6 +1,7 @@
 //! Operator-owned AI backends, model mappings, and immutable embedding profiles.
 
 mod backend;
+mod source_provider;
 mod vlm;
 
 use crate::{ErrorCode, PlatformError};
@@ -8,6 +9,7 @@ pub use backend::{AiAuthConfig, AiBackendConfig, AiBackendProtocol};
 use backend::{canonical_endpoint, headers_digest};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
+pub use source_provider::AiSourceProviderConfig;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 pub use vlm::{AiVlmModelConfig, ResolvedVlmModelContract};
@@ -58,6 +60,8 @@ pub struct AiConfig {
     pub generation_models: BTreeMap<String, AiGenerationModelConfig>,
     /// Operator mappings for image-description models.
     pub vlm_models: BTreeMap<String, AiVlmModelConfig>,
+    /// Namespaced manual AI Search source providers.
+    pub source_providers: BTreeMap<String, AiSourceProviderConfig>,
 }
 
 impl Default for AiConfig {
@@ -81,6 +85,7 @@ impl Default for AiConfig {
             embedding_models: BTreeMap::new(),
             generation_models: BTreeMap::new(),
             vlm_models: BTreeMap::new(),
+            source_providers: BTreeMap::new(),
         }
     }
 }
@@ -98,6 +103,9 @@ impl AiConfig {
         for profile in self.embedding_profiles.values_mut() {
             profile.tokenizer.artifact.path =
                 super::resolve_host_path(base, &profile.tokenizer.artifact.path)?;
+        }
+        for provider in self.source_providers.values_mut() {
+            super::resolve_secret_path(base, &mut provider.credential)?;
         }
         Ok(())
     }
@@ -153,6 +161,14 @@ impl AiConfig {
         for (alias, model) in &self.vlm_models {
             validate_model_alias(alias)?;
             model.validate(&self.backends)?;
+        }
+        for (name, provider) in &self.source_providers {
+            validate_name(
+                name,
+                MAX_BACKEND_NAME_BYTES,
+                "AI source provider name is invalid",
+            )?;
+            provider.validate()?;
         }
         if let Some(default) = &self.default_embedding_model
             && !self.embedding_models.contains_key(default)

@@ -128,7 +128,8 @@ impl AiSearchStore {
                 .prepare(
                     "SELECT i.id, i.desired_generation, i.source,
                             g.object_key, g.object_sha256, g.r2_object_version, g.r2_etag,
-                            g.r2_uploaded_at_ms, g.object_size, g.content_type
+                            g.r2_uploaded_at_ms, g.object_size, g.content_type,
+                            g.manual_revision, g.manual_sha256
                        FROM items i JOIN item_generations g
                          ON g.item_id=i.id AND g.generation=i.desired_generation
                       ORDER BY i.id",
@@ -147,6 +148,8 @@ impl AiSearchStore {
                         row.get::<_, Option<i64>>(7)?,
                         row.get::<_, i64>(8)?,
                         row.get::<_, String>(9)?,
+                        row.get::<_, Option<String>>(10)?,
+                        row.get::<_, Option<Vec<u8>>>(11)?,
                     ))
                 })
                 .map_err(sql_error)?;
@@ -178,8 +181,8 @@ impl AiSearchStore {
                     "INSERT INTO item_generations
                      (item_id, generation, index_generation, state, object_key,
                       object_sha256, r2_object_version, r2_etag, r2_uploaded_at_ms,
-                      object_size, content_type, created_at_ms)
-                     VALUES (?1, ?2, ?3, 'queued', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                      manual_revision, manual_sha256, object_size, content_type, created_at_ms)
+                     VALUES (?1, ?2, ?3, 'queued', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                     params![
                         item.0,
                         generation,
@@ -189,6 +192,8 @@ impl AiSearchStore {
                         item.5,
                         item.6,
                         item.7,
+                        item.10,
+                        item.11,
                         item.8,
                         item.9,
                         now_ms

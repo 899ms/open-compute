@@ -26,6 +26,8 @@ mod failure;
 use failure::*;
 mod r2_source_reader;
 pub use r2_source_reader::PlatformAiSearchSourceReader;
+mod manual_source_reader;
+pub use manual_source_reader::{ManualAiSearchResolvedSource, ManualAiSearchSourceReader};
 
 type TaskFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 

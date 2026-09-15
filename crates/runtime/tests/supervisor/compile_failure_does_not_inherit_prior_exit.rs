@@ -57,10 +57,13 @@ pub(super) async fn run() {
     sup.start();
     wait_state(&sup, SupervisorState::Running).await;
     let backoff = wait_state(&sup, SupervisorState::BackingOff).await;
+    let gen1_startup_id = backoff.startup_id.expect("generation 1 startup id");
+    assert_eq!(backoff.last_exit_startup_id, Some(gen1_startup_id));
     let gen1 = backoff.last_exit.clone().expect("generation 1 exit");
     assert_eq!(gen1.code, Some(9));
     clock.advance(Duration::from_millis(50));
     let snap = wait_state(&sup, SupervisorState::Failed).await;
+    assert_eq!(snap.last_exit_startup_id, snap.startup_id);
     let exit = snap.last_exit.expect("generation 2 exit");
     assert_eq!(exit.code_name, "CONFIG_COMPILE_FAILED");
     assert_eq!(

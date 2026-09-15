@@ -49,11 +49,12 @@ pub use ai_search::{
     AI_SEARCH_NAMESPACE_SCHEMA_VERSION, AI_SEARCH_SCHEMA_VERSION, AiSearchCatalog,
     AiSearchChunkRecord, AiSearchInstanceAuthority, AiSearchInstanceInspection,
     AiSearchInstanceRecord, AiSearchInstanceStorageContract, AiSearchItemRecord, AiSearchJobClaim,
-    AiSearchJobRecord, AiSearchLogRecord, AiSearchNamespaceRecord, AiSearchObjectGcClaim,
-    AiSearchObjectReference, AiSearchParseCache, AiSearchParseCacheKey, AiSearchParseCacheLookup,
-    AiSearchParseCacheStore, AiSearchPaths, AiSearchR2Candidate, AiSearchR2ObjectReference,
-    AiSearchR2ReconcileClaim, AiSearchR2SourceRecord, AiSearchSourceReference, AiSearchStore,
-    ClaimedAiSearchItem, NewAiSearchItemGeneration, StagedAiSearchChunk,
+    AiSearchJobRecord, AiSearchLogRecord, AiSearchManualObjectReference, AiSearchManualUpsert,
+    AiSearchNamespaceRecord, AiSearchObjectGcClaim, AiSearchObjectReference, AiSearchParseCache,
+    AiSearchParseCacheKey, AiSearchParseCacheLookup, AiSearchParseCacheStore, AiSearchPaths,
+    AiSearchR2Candidate, AiSearchR2ObjectReference, AiSearchR2ReconcileClaim,
+    AiSearchR2SourceRecord, AiSearchSourceReference, AiSearchStore, ClaimedAiSearchItem,
+    NewAiSearchItemGeneration, NewAiSearchManualGeneration, StagedAiSearchChunk,
     inspect_ai_search_instance, inspect_ai_search_object_references,
 };
 pub use assets::{
@@ -113,7 +114,7 @@ pub use durable_objects::{
     DurableObjectRecord, DurableObjectRepository, decode_object_list_cursor,
     encode_object_list_cursor,
 };
-pub use fs::{atomic_write, ensure_dir_secure};
+pub use fs::{atomic_write, ensure_dir_secure, validate_owned_file};
 pub use identity::{ARTIFACT_SCHEMA_VERSION, StableIdentity};
 pub use inspect::{
     ControlInventory, DataRootInspect, ResourceInspect, inspect_control_db,
@@ -181,13 +182,13 @@ pub use runtime_features::{
 pub use scheduler::{
     AlarmProjection, ClaimResult, ClaimedCronRun, ClaimedJob, ClaimedQueueBatch,
     ClaimedQueueMessage, CronCompletion, CronCompletionResult, CronInspectionSummary,
-    CronRuntimeInspection, CronScheduleProjection, CronSlotSummary, P23CrossDatabaseInspection,
-    QueueCompletionAction, QueueCompletionDecision, QueueCompletionSummary,
-    QueueConsumerInspectionSummary, QueueConsumerProjection, QueueConsumerRuntimeInspection,
-    QueueContentType, QueueCounterMismatch, QueueDeleteBatch, QueueDlqForwardSummary,
-    QueueEnqueueRequest, QueueEnqueueResult, QueueInspectionSummary, QueueMessageInput,
-    QueueMetrics, QueueProjection, SchedulerInspection, SchedulerStore, SchedulerSummary,
-    SchedulerWakeFuture, SchedulerWakeSignal, current_scheduler_schema_version,
+    CronRuntimeInspection, CronScheduleProjection, CronSlotSummary, CronUnknownReason,
+    P23CrossDatabaseInspection, QueueCompletionAction, QueueCompletionDecision,
+    QueueCompletionSummary, QueueConsumerInspectionSummary, QueueConsumerProjection,
+    QueueConsumerRuntimeInspection, QueueContentType, QueueCounterMismatch, QueueDeleteBatch,
+    QueueDlqForwardSummary, QueueEnqueueRequest, QueueEnqueueResult, QueueInspectionSummary,
+    QueueMessageInput, QueueMetrics, QueueProjection, SchedulerInspection, SchedulerStore,
+    SchedulerSummary, SchedulerWakeFuture, SchedulerWakeSignal, current_scheduler_schema_version,
     inspect_p23_cross_database, inspect_scheduler_db,
 };
 pub use schema_inspection::{SchemaInspection, inspect_current_schema};
@@ -202,12 +203,13 @@ pub use vectorize::{
     VectorizeIndexRepository, VectorizePaths, VectorizeReadSnapshot,
 };
 pub use workers::{
-    DeploymentRecord, DeploymentSource, EffectiveResourceLimits, IdempotencyReservation,
-    LOADER_SCHEMA_VERSION, NewVersion, NewVersionProducts, ObservabilityAudit, RetentionCandidate,
-    RouteKind, RouteRecord, RouteSnapshot, SYSTEM_DASHBOARD_WORKER_NAME, StoredVersionSecret,
-    SystemOwnedVersionKind, SystemOwnedVersionRecord, UpdateWorkerObservabilitySettings,
-    VersionContentKind, VersionRecord, VersionReferrer, VersionSnapshot, VersionState,
-    WorkerObservabilitySettings, WorkerOwnership, WorkerRecord, WorkerRepository,
+    DeploymentRecord, DeploymentRuntimeAssessmentSummary, DeploymentSource,
+    EffectiveResourceLimits, IdempotencyReservation, LOADER_SCHEMA_VERSION, NewVersion,
+    NewVersionProducts, ObservabilityAudit, RetentionCandidate, RouteKind, RouteRecord,
+    RouteSnapshot, SYSTEM_DASHBOARD_WORKER_NAME, StoredVersionSecret, SystemOwnedVersionKind,
+    SystemOwnedVersionRecord, UpdateWorkerObservabilitySettings, VersionContentKind, VersionRecord,
+    VersionReferrer, VersionSnapshot, VersionState, WorkerObservabilitySettings, WorkerOwnership,
+    WorkerRecord, WorkerRepository,
 };
 pub use workflows::{
     WorkflowAppliedOperation, WorkflowBindingDescriptor, WorkflowBindingRecord, WorkflowDefinition,

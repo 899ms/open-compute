@@ -7,7 +7,7 @@ use crate::ai_search_config::{
 };
 use crate::ai_search_coordinator::{
     AiSearchChunking, AiSearchCoordinator, AiSearchParseCacheLocks, IsolatedAiSearchDocumentParser,
-    ObjectAiSearchSourceReader, PlatformAiSearchSourceReader,
+    ManualAiSearchSourceReader, ObjectAiSearchSourceReader, PlatformAiSearchSourceReader,
 };
 use crate::ai_tokenizer::AiTokenizerRegistry;
 use crate::document_parser_backend::DocumentParserBindingService;
@@ -35,12 +35,13 @@ use open_compute_storage::{
     AiSearchCatalog, AiSearchChunkRecord, AiSearchInstanceInspection, AiSearchInstanceRecord,
     AiSearchInstanceStorageContract, AiSearchItemRecord, AiSearchJobRecord, AiSearchParseCache,
     AiSearchPaths, AiSearchSourceReference, AiSearchStore, BindingRepository,
-    NewAiSearchItemGeneration, PlatformStorage, R2BucketRepository, R2ObjectRepository,
-    ResourceRecord, ResourceRepository,
+    NewAiSearchItemGeneration, NewAiSearchManualGeneration, PlatformStorage, R2BucketRepository,
+    R2ObjectRepository, ResourceRecord, ResourceRepository,
 };
 use open_compute_workers::{
-    AiSearchInstanceResourceDriver, AiSearchInstanceSpec, AiSearchR2SourceSpec,
-    CreateResourceRequest, ResourceController, ResourceDriver, ResourcePin, ResourcePins,
+    AiSearchInstanceResourceDriver, AiSearchInstanceSpec, AiSearchManualSourceSpec,
+    AiSearchR2SourceSpec, CreateResourceRequest, ResourceController, ResourceDriver, ResourcePin,
+    ResourcePins,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -58,6 +59,7 @@ use uuid::Uuid;
 
 mod catalog;
 mod chat;
+mod dispatch;
 mod embedding_cache;
 mod ingest;
 mod namespace;
@@ -310,6 +312,7 @@ impl AiSearchBindingService {
             resource,
             read: true,
             write: true,
+            allow_extensions: false,
             request_id,
             _bound_pin: pin,
         })
@@ -557,6 +560,7 @@ impl AiSearchBindingService {
             resource: binding.resource,
             read: binding.binding.permissions.read,
             write: binding.binding.permissions.write,
+            allow_extensions: true,
             request_id,
             _bound_pin: pin,
         })
@@ -580,6 +584,7 @@ impl AiSearchBindingService {
         };
         if record.resource.state != ResourceState::Ready
             || record.resource.availability != ResourceAvailability::Healthy
+            || !authority.allow_extensions && record.manual_source.is_some()
         {
             return Err(unavailable());
         }
@@ -663,6 +668,28 @@ impl AiSearchBindingService {
             .await
             .map_err(|_| unavailable())
     }
+
+    fn manual_source_reader(
+        &self,
+        record: &AiSearchInstanceRecord,
+    ) -> Result<ManualAiSearchSourceReader, PlatformError> {
+        let source = record.manual_source.as_ref().ok_or_else(corrupt)?;
+        let config = self
+            .ai
+            .source_providers
+            .get(&source.provider_id)
+            .filter(|config| {
+                config.source == source.source_namespace
+                    && config.account_ids.contains(&record.resource.account_id)
+            })
+            .cloned()
+            .ok_or_else(not_found)?;
+        ManualAiSearchSourceReader::new(
+            source.provider_id.clone(),
+            config,
+            Duration::from_millis(self.ai.provider_timeout_ms),
+        )
+    }
 }
 
 struct Authority {
@@ -671,6 +698,7 @@ struct Authority {
     resource: ResourceRecord,
     read: bool,
     write: bool,
+    allow_extensions: bool,
     request_id: RequestId,
     _bound_pin: ResourcePin,
 }
@@ -727,62 +755,4 @@ pub(crate) struct OfficialUpload {
     pub(crate) metadata: Map<String, Value>,
     pub(crate) bytes: Bytes,
     pub(crate) wait_for_completion: bool,
-}
-
-impl AiSearchBindingService {
-    async fn execute_call(
-        &self,
-        authority: Authority,
-        call: JsonCall,
-    ) -> Result<Response, PlatformError> {
-        let result = self.execute_value(&authority, call).await?;
-        json_response(&json!({"schemaVersion": 1, "result": result}))
-    }
-
-    async fn execute_value(
-        &self,
-        authority: &Authority,
-        call: JsonCall,
-    ) -> Result<Value, PlatformError> {
-        let write = matches!(
-            call.operation.as_str(),
-            "namespace.create"
-                | "namespace.delete"
-                | "instance.update"
-                | "items.delete"
-                | "item.sync"
-                | "jobs.create"
-                | "job.cancel"
-        );
-        require_permission(authority, write)?;
-        let metric_operation = metric_operation(&call.operation);
-        let result = match call.operation.as_str() {
-            "namespace.list" => self.namespace_list(authority, call)?,
-            "namespace.create" => self.namespace_create(authority, call)?,
-            "namespace.delete" => self.namespace_delete(authority, call).await?,
-            "namespace.search" => self.namespace_search(authority, call).await?,
-            "namespace.chatCompletions" => self.namespace_chat(authority, call).await?,
-            "instance.search" => self.instance_search(authority, call).await?,
-            "instance.chatCompletions" => self.instance_chat(authority, call).await?,
-            "instance.update" => self.instance_update(authority, call).await?,
-            "instance.info" => self.instance_info_call(authority, &call)?,
-            "instance.stats" => self.instance_stats(authority, &call)?,
-            "items.list" => self.items_list(authority, call)?,
-            "items.delete" => self.items_delete(authority, call).await?,
-            "item.info" => self.item_info_call(authority, call)?,
-            "item.sync" => self.item_sync(authority, call).await?,
-            "item.logs" => self.item_logs(authority, call)?,
-            "item.chunks" => self.item_chunks(authority, call)?,
-            "jobs.list" => self.jobs_list(authority, call)?,
-            "jobs.create" => self.jobs_create(authority, call).await?,
-            "job.info" => self.job_info_call(authority, call)?,
-            "job.logs" => self.job_logs(authority, call)?,
-            "job.cancel" => self.job_cancel(authority, call)?,
-            _ => return Err(protocol()),
-        };
-        if let Some(metrics) = &self.metrics {
-            metrics.observe_ai_search_request(metric_operation, true);
-        }
-        Ok(result)
-    }
 }

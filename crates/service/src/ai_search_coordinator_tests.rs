@@ -5,7 +5,10 @@ use open_compute_core::{
     AiEmbeddingMetric, AiTokenizer, ResolvedEmbeddingModelContract, ResolvedTokenizerContract,
 };
 use open_compute_document_parser::{DocumentFormat, DocumentMetadata, ParsedContentKind};
-use open_compute_storage::{AiSearchInstanceStorageContract, NewAiSearchItemGeneration};
+use open_compute_storage::{
+    AiSearchInstanceStorageContract, AiSearchSourceReference, NewAiSearchItemGeneration,
+    NewAiSearchManualGeneration,
+};
 use serde::Serialize;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use uuid::Uuid;
@@ -412,6 +415,42 @@ async fn keyword_only_coordinator_activates_without_embeddings() {
     let (chunks, _) = store.active_chunks(Some("item-1"), 0, 100).unwrap();
     assert!(chunks.len() > 1);
     assert!(chunks.iter().all(|chunk| chunk.embedding.is_none()));
+}
+
+#[tokio::test]
+async fn manual_exact_revision_reuses_the_existing_index_pipeline_without_source_storage() {
+    let (_directory, store) = open_store(false);
+    let now = current_time_ms();
+    let upsert = store
+        .upsert_manual_generation(&NewAiSearchManualGeneration {
+            provider_id: "files",
+            source: "primary",
+            key: "files/guide.txt",
+            revision: "rev-1",
+            sha256: Sha256::digest(b"fixture source").into(),
+            object_size: 14,
+            content_type: "text/plain",
+            metadata_json: br#"{"team":"one"}"#,
+            now_ms: now,
+        })
+        .expect("manual upsert");
+    assert!(upsert.job_id.is_some());
+    let pass = coordinator(Arc::new(FixtureSource), Arc::new(FixtureParser), None)
+        .run_until_idle(&store, now, 4)
+        .await
+        .expect("index manual revision");
+    assert_eq!(pass.completed, 1);
+    assert!(store.object_references().expect("object refs").is_empty());
+    let item = store
+        .get_item(&upsert.item_id)
+        .expect("read item")
+        .expect("manual item");
+    assert_eq!(item.status, "completed");
+    assert!(matches!(
+        item.source,
+        AiSearchSourceReference::Manual(source) if source.revision == "rev-1"
+    ));
+    assert!(!store.keyword_chunks("alpha", false, 10).unwrap().is_empty());
 }
 
 #[tokio::test]

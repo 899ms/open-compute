@@ -2,6 +2,16 @@
 
 use super::*;
 
+type CronRuntimeRow = (
+    i64,
+    i64,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<i64>,
+);
+
 /// Secret-free per-activation runtime facts for authenticated operator inspection.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct CronRuntimeInspection {
@@ -17,6 +27,12 @@ pub struct CronRuntimeInspection {
     pub claimed_runs: u64,
     /// Most recently completed terminal state, if retained.
     pub last_outcome: Option<String>,
+    /// Stable terminal error classification for the last retained run.
+    pub last_error_code: Option<String>,
+    /// Stable transport classification for the last retained unknown result.
+    pub last_unknown_reason: Option<String>,
+    /// Fixed completion deadline for the oldest live delivery.
+    pub oldest_dispatch_deadline_at_ms: Option<i64>,
     /// Oldest due logical-run lag in milliseconds.
     pub lag_ms: u64,
 }
@@ -61,7 +77,7 @@ impl SchedulerStore {
             )
             .optional()
             .map_err(map_sql_error)?;
-        let (ready, claimed, oldest_due, last_outcome): (i64, i64, Option<i64>, Option<String>) =
+        let (ready, claimed, oldest_due, last_outcome, last_error_code, last_unknown_reason, oldest_deadline): CronRuntimeRow =
             connection
                 .query_row(
                     "SELECT
@@ -71,10 +87,23 @@ impl SchedulerStore {
                    (SELECT state FROM cron_runs WHERE activation_id = ?1
                       AND activation_generation = ?2
                       AND state IN ('complete', 'failed', 'skipped')
-                    ORDER BY completed_at_ms DESC, id DESC LIMIT 1)
+                    ORDER BY completed_at_ms DESC, id DESC LIMIT 1),
+                   (SELECT error_code FROM cron_runs WHERE activation_id = ?1
+                      AND activation_generation = ?2
+                      AND state IN ('complete', 'failed', 'skipped')
+                    ORDER BY completed_at_ms DESC, id DESC LIMIT 1),
+                   (SELECT last_unknown_reason FROM cron_runs WHERE activation_id = ?1
+                      AND activation_generation = ?2 AND last_unknown_reason IS NOT NULL
+                    ORDER BY COALESCE(completed_at_ms, claimed_at_ms, created_at_ms) DESC, id DESC LIMIT 1),
+                   MIN(dispatch_deadline_at_ms) FILTER (WHERE state IN ('ready', 'claimed'))
                  FROM cron_runs WHERE activation_id = ?1 AND activation_generation = ?2",
                     params![activation_id.to_string(), as_i64(activation_generation)?],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                    |row| {
+                        Ok((
+                            row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?,
+                            row.get(4)?, row.get(5)?, row.get(6)?,
+                        ))
+                    },
                 )
                 .map_err(map_sql_error)?;
         Ok(CronRuntimeInspection {
@@ -84,6 +113,9 @@ impl SchedulerStore {
             ready_runs: u64::try_from(ready).map_err(|_| cron_invariant())?,
             claimed_runs: u64::try_from(claimed).map_err(|_| cron_invariant())?,
             last_outcome,
+            last_error_code,
+            last_unknown_reason,
+            oldest_dispatch_deadline_at_ms: oldest_deadline,
             lag_ms: oldest_due.map_or(0, |due| now_ms.saturating_sub(due).max(0) as u64),
         })
     }

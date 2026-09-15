@@ -70,6 +70,7 @@ export function instanceInfo(value: unknown): AiSearchInstanceInfo {
     "custom_metadata",
     "sync_interval",
     "metadata",
+    "open_compute_source",
   ]);
   instanceName(info.id);
   for (const key of [
@@ -120,6 +121,14 @@ export function instanceInfo(value: unknown): AiSearchInstanceInfo {
   ])
     if (info[key] !== undefined && !json(info[key]))
       fail("AI_SEARCH_PROTOCOL_ERROR");
+  if (info.open_compute_source !== undefined) {
+    const source = protocolExact(info.open_compute_source, [
+      "provider_id",
+      "source",
+    ]);
+    text(source.provider_id, 64);
+    text(source.source, 128);
+  }
   return info as AiSearchInstanceInfo;
 }
 export function itemInfo(value: unknown): AiSearchItemInfo {
@@ -137,6 +146,7 @@ export function itemInfo(value: unknown): AiSearchItemInfo {
     "last_seen_at",
     "created_at",
     "metadata",
+    "open_compute_source",
   ]);
   opaqueId(info.id);
   text(info.key, 1024);
@@ -180,6 +190,16 @@ export function itemInfo(value: unknown): AiSearchItemInfo {
       fail("AI_SEARCH_PROTOCOL_ERROR");
   if (info.metadata !== undefined && !json(info.metadata))
     fail("AI_SEARCH_PROTOCOL_ERROR");
+  if (info.open_compute_source !== undefined) {
+    const source = protocolExact(info.open_compute_source, [
+      "provider_id",
+      "source",
+      "key",
+      "revision",
+    ]);
+    for (const key of ["provider_id", "source", "key", "revision"])
+      text(source[key], key === "key" ? 1024 : 256);
+  }
   return info as AiSearchItemInfo;
 }
 function chunk(
@@ -203,7 +223,12 @@ function chunk(
     encoder.encode(raw.text).byteLength > 1024 * 1024
   )
     fail("AI_SEARCH_PROTOCOL_ERROR");
-  const item = protocolExact(raw.item, ["timestamp", "key", "metadata"]);
+  const item = protocolExact(raw.item, [
+    "timestamp",
+    "key",
+    "metadata",
+    "open_compute_source",
+  ]);
   text(item.key, 1024);
   if (
     item.timestamp !== undefined &&
@@ -212,6 +237,16 @@ function chunk(
     fail("AI_SEARCH_PROTOCOL_ERROR");
   if (item.metadata !== undefined && !json(item.metadata))
     fail("AI_SEARCH_PROTOCOL_ERROR");
+  if (item.open_compute_source !== undefined) {
+    const source = protocolExact(item.open_compute_source, [
+      "provider_id",
+      "source",
+      "key",
+      "revision",
+    ]);
+    for (const key of ["provider_id", "source", "key", "revision"])
+      text(source[key], key === "key" ? 1024 : 256);
+  }
   if (raw.scoring_details !== undefined && !json(raw.scoring_details))
     fail("AI_SEARCH_PROTOCOL_ERROR");
   if (multi && typeof raw.instance_id !== "string")

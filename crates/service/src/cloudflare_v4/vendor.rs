@@ -156,6 +156,10 @@ async fn system_status(State(state): State<HttpState>, request: Request) -> Resp
         Err(response) => return response.into_response(),
     };
     let snapshot = state.health().snapshot();
+    let runtime_healthy = snapshot.components.iter().any(|component| {
+        component.name == open_compute_core::ComponentName::Runtime
+            && component.state == open_compute_core::ComponentState::Healthy
+    });
     let components = snapshot
         .components
         .into_iter()
@@ -189,13 +193,22 @@ async fn system_status(State(state): State<HttpState>, request: Request) -> Resp
                 overload_drops: dropped[1],
             }
         });
+    let deployment_runtime = state
+        .worker_api()
+        .and_then(|api| api.deployment_runtime_assessments().ok())
+        .map(|mut summary| {
+            summary.active_runtime_dispatchable &= runtime_healthy;
+            summary
+        });
     success_response(
         context,
         SystemStatus {
             state: snapshot.readiness.as_str(),
             version: env!("CARGO_PKG_VERSION"),
             components,
+            operator_proxy: operator_proxy_status(),
             observability,
+            deployment_runtime,
         },
     )
 }
@@ -614,8 +627,42 @@ struct SystemStatus {
     state: &'static str,
     version: &'static str,
     components: Vec<StatusComponent>,
+    operator_proxy: OperatorProxyStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     observability: Option<ObservabilityStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deployment_runtime: Option<open_compute_storage::DeploymentRuntimeAssessmentSummary>,
+}
+
+#[derive(Serialize)]
+struct OperatorProxyStatus {
+    mode: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_variable: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    origin: Option<String>,
+}
+
+fn operator_proxy_status() -> OperatorProxyStatus {
+    match open_compute_core::OperatorProxyPolicy::from_process_env() {
+        Ok(policy) => match policy.proxy() {
+            Some(proxy) => OperatorProxyStatus {
+                mode: "proxy",
+                source_variable: Some(proxy.source_variable()),
+                origin: Some(proxy.origin().to_owned()),
+            },
+            None => OperatorProxyStatus {
+                mode: "direct",
+                source_variable: None,
+                origin: None,
+            },
+        },
+        Err(_) => OperatorProxyStatus {
+            mode: "invalid",
+            source_variable: None,
+            origin: None,
+        },
+    }
 }
 
 #[derive(Serialize)]

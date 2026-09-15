@@ -1,5 +1,91 @@
 use super::*;
 
+struct GenerationChangesAfterAdmission {
+    admitted: StartupId,
+    current: StartupId,
+}
+
+impl RuntimeValidator for GenerationChangesAfterAdmission {
+    fn validate(
+        &self,
+        _candidate: ValidationCandidate,
+    ) -> std::pin::Pin<
+        Box<dyn Future<Output = Result<(), open_compute_core::PlatformError>> + Send + '_>,
+    > {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn validate_deployment(
+        &self,
+        _candidate: ValidationCandidate,
+    ) -> std::pin::Pin<
+        Box<dyn Future<Output = Result<StartupId, open_compute_core::PlatformError>> + Send + '_>,
+    > {
+        Box::pin(async { Ok(self.admitted) })
+    }
+
+    fn current_generation(&self) -> Option<StartupId> {
+        Some(self.current)
+    }
+}
+
+#[tokio::test]
+async fn deployment_is_quarantined_when_runtime_generation_changes_during_commit() {
+    let tmp = tempfile::tempdir().unwrap();
+    let storage = Arc::new(
+        PlatformStorage::bootstrap(&storage_config(&tmp.path().join("data")), &SystemClock)
+            .unwrap(),
+    );
+    let account = storage.identity().default_account_id;
+    let repo = WorkerRepository::new(storage.db());
+    let (worker, _) = repo
+        .create_worker(
+            account,
+            "generation-race",
+            RequestId::generate(),
+            1,
+            1_000_000,
+        )
+        .unwrap();
+    let mock = MockS3::spawn("open-compute").await;
+    let controller = VersionController::new(
+        &storage,
+        artifact_store(&mock),
+        Arc::new(GenerationChangesAfterAdmission {
+            admitted: StartupId::generate(),
+            current: StartupId::generate(),
+        }),
+        BundleLimits::default(),
+    );
+
+    assert_eq!(
+        controller
+            .create_version(version_request(
+                account,
+                worker.id,
+                "generation-race",
+                "secret"
+            ))
+            .await
+            .unwrap_err()
+            .code(),
+        ErrorCode::RuntimeUnavailable
+    );
+    assert_eq!(
+        repo.get_worker(account, worker.id)
+            .unwrap()
+            .active_deployment_id,
+        None
+    );
+    let summary = repo.deployment_runtime_assessments().unwrap();
+    assert_eq!(summary.dispatchable, 0);
+    assert_eq!(summary.quarantined, 1);
+    assert_eq!(
+        summary.last_quarantine_reason.as_deref(),
+        Some("RUNTIME_GENERATION_CHANGED")
+    );
+}
+
 #[tokio::test]
 async fn version_pipeline_uploads_validates_promotes_and_replays() {
     let tmp = tempfile::tempdir().unwrap();

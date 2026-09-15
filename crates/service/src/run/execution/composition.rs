@@ -55,6 +55,7 @@ pub(super) struct ComposedPlatform {
 }
 
 pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatform, PlatformError> {
+    open_compute_core::OperatorProxyPolicy::from_process_env()?;
     let PreparedPlatform {
         base,
         cache,
@@ -221,11 +222,14 @@ pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatfo
     )
     .with_response_cache(response_cache_manager.clone())
     .with_queue_consumer_limit(loaded.config.queues.max_consumer_concurrency)
-    .with_product_promoter(Arc::new(P23PromotionCoordinator::new(
-        storage.clone(),
-        scheduler_store.clone(),
-        Duration::from_millis(loaded.config.scheduler.shutdown_drain_ms),
-    )))
+    .with_product_promoter(Arc::new(
+        P23PromotionCoordinator::new(
+            storage.clone(),
+            scheduler_store.clone(),
+            Duration::from_millis(loaded.config.scheduler.shutdown_drain_ms),
+        )
+        .with_runtime_validator(Arc::new(transport.clone())),
+    ))
     .with_observability(observability.clone());
     let dashboard_dispatch = Arc::new(RwLock::new(None));
     let generation_startup_id = StartupId::generate();

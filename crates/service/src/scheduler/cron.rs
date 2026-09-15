@@ -5,7 +5,8 @@ use crate::metrics::{CronRunOutcome, MetricsRegistry, SchedulerClaimOutcome};
 use crate::runtime_bridge::{DispatchTarget, ScheduledDispatchRequest};
 use open_compute_core::{PlatformError, RequestId, SchedulerKind, SchedulerPoolState};
 use open_compute_storage::{
-    ClaimedCronRun, CronCompletion, CronCompletionResult, CronRepository, WorkerRepository,
+    ClaimedCronRun, CronCompletion, CronCompletionResult, CronRepository, CronUnknownReason,
+    WorkerRepository,
 };
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -23,11 +24,13 @@ impl SchedulerService {
         let grace = self.config.cron_misfire_grace_ms;
         let history_limit = self.config.cron_history_limit;
         let history_retention = self.config.cron_history_retention_ms;
+        let max_retries = self.config.cron_max_retries;
         let started = Instant::now();
         let result = tokio::task::spawn_blocking(move || {
             let slots = store.project_due_cron_slots(now_ms, grace, batch)?;
             store.gc_cron_history(now_ms, history_retention, history_limit)?;
-            let (runs, recovered) = store.claim_cron_runs(now_ms, lease_ms, 250, batch)?;
+            let (runs, recovered) =
+                store.claim_cron_runs(now_ms, lease_ms, 250, max_retries, batch)?;
             Ok::<_, PlatformError>((slots, runs, recovered))
         })
         .await
@@ -87,6 +90,8 @@ impl SchedulerService {
             if let Some(metrics) = &self.metrics {
                 metrics.inc_cron_run(CronRunOutcome::Unknown);
             }
+            self.record_cron_unknown(&run, CronUnknownReason::ConnectionLoss)
+                .await;
             tracing::warn!("Cron authority lookup failed; claim lease retained");
             return;
         };
@@ -96,6 +101,8 @@ impl SchedulerService {
                 if let Some(metrics) = &self.metrics {
                     metrics.inc_cron_run(CronRunOutcome::Unknown);
                 }
+                self.record_cron_unknown(&run, CronUnknownReason::MalformedResponse)
+                    .await;
                 return;
             }
         };
@@ -122,12 +129,28 @@ impl SchedulerService {
                 Duration::from_millis(self.config.dispatch_timeout_ms),
             )
             .await;
-        let Ok(response) = response else {
-            if let Some(metrics) = &self.metrics {
-                metrics.inc_cron_run(CronRunOutcome::Unknown);
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                let reason = match error.code() {
+                    open_compute_core::ErrorCode::SchedulerUnavailable => {
+                        CronUnknownReason::TransportTimeout
+                    }
+                    open_compute_core::ErrorCode::RuntimeUnavailable => {
+                        CronUnknownReason::RuntimeGenerationLost
+                    }
+                    _ => CronUnknownReason::ConnectionLoss,
+                };
+                if let Some(metrics) = &self.metrics {
+                    metrics.inc_cron_run(CronRunOutcome::Unknown);
+                }
+                self.record_cron_unknown(&run, reason).await;
+                tracing::warn!(
+                    code = error.code().as_str(),
+                    "Cron result is unknown; claim lease retained"
+                );
+                return;
             }
-            tracing::warn!("Cron result is unknown; claim lease retained");
-            return;
         };
         let completion = match response.outcome.as_str() {
             "ok" => CronCompletion::Success,
@@ -139,6 +162,8 @@ impl SchedulerService {
                 if let Some(metrics) = &self.metrics {
                     metrics.inc_cron_run(CronRunOutcome::Unknown);
                 }
+                self.record_cron_unknown(&run, CronUnknownReason::MalformedResponse)
+                    .await;
                 tracing::warn!(outcome, "Cron outcome is unknown; claim lease retained");
                 return;
             }
@@ -173,6 +198,19 @@ impl SchedulerService {
                 "Cron completion transaction failed"
             ),
             Err(_) => tracing::warn!("Cron completion task failed"),
+        }
+    }
+
+    async fn record_cron_unknown(&self, run: &ClaimedCronRun, reason: CronUnknownReason) {
+        let store = self.store.clone();
+        let run = run.clone();
+        if let Ok(Err(error)) =
+            tokio::task::spawn_blocking(move || store.mark_cron_unknown(&run, reason)).await
+        {
+            tracing::warn!(
+                code = error.code().as_str(),
+                "Cron unknown outcome was not recorded"
+            );
         }
     }
 

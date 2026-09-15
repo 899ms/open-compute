@@ -211,6 +211,22 @@ pub struct AiSearchR2ObjectReference {
     pub uploaded_at_ms: i64,
 }
 
+/// Exact operator-provider revision retained by one manual item generation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSearchManualObjectReference {
+    /// Operator-configured provider identity.
+    pub provider_id: String,
+    /// Fixed provider source namespace.
+    pub source: String,
+    /// Exact immutable provider revision.
+    pub revision: String,
+    /// SHA-256 resolved before admission and verified after read.
+    pub sha256: [u8; 32],
+    /// Exact observed source byte length.
+    pub object_size: u64,
+}
+
 /// Typed source locator that prevents R2 objects entering built-in object GC.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "reference")]
@@ -219,6 +235,8 @@ pub enum AiSearchSourceReference {
     Builtin(AiSearchObjectReference),
     /// Frozen revision of the instance's immutable R2 source bucket.
     R2(AiSearchR2ObjectReference),
+    /// Frozen provider-owned manual source revision.
+    Manual(AiSearchManualObjectReference),
 }
 
 impl AiSearchSourceReference {
@@ -228,6 +246,7 @@ impl AiSearchSourceReference {
         match self {
             Self::Builtin(reference) => reference.object_size,
             Self::R2(reference) => reference.object_size,
+            Self::Manual(reference) => reference.object_size,
         }
     }
 
@@ -237,6 +256,7 @@ impl AiSearchSourceReference {
         match self {
             Self::Builtin(reference) => hex::encode(reference.object_sha256),
             Self::R2(reference) => reference.etag.clone(),
+            Self::Manual(reference) => hex::encode(reference.sha256),
         }
     }
 
@@ -252,6 +272,7 @@ impl AiSearchSourceReference {
                 digest.update(reference.object_version.as_bytes());
                 digest.finalize().into()
             }
+            Self::Manual(reference) => reference.sha256,
         }
     }
 }

@@ -206,6 +206,7 @@ fn admission_delivers_canonical_arbitrary_json_props() {
             None,
         ))
         .unwrap();
+    assert_eq!(pins.active_deployments().len(), 1);
     assert_eq!(admission.target.props, Some(fixture.caller_props));
     registry
         .complete(&ServiceReleaseRequest {
@@ -219,6 +220,7 @@ fn admission_delivers_canonical_arbitrary_json_props() {
         .unwrap();
     assert_eq!(pins.count(fixture.caller_version), 0);
     assert_eq!(pins.count(fixture.target_version), 0);
+    assert!(pins.active_deployments().is_empty());
 }
 
 #[test]

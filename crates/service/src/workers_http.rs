@@ -44,6 +44,13 @@ impl std::fmt::Debug for WorkerApiState {
 }
 
 impl WorkerApiState {
+    /// Read secret-free deployment admission counts for the namespaced status API.
+    pub(crate) fn deployment_runtime_assessments(
+        &self,
+    ) -> Result<open_compute_storage::DeploymentRuntimeAssessmentSummary, PlatformError> {
+        WorkerRepository::new(self.storage.db()).deployment_runtime_assessments()
+    }
+
     /// Bind HTTP handlers to typed storage, artifact, and runtime capabilities.
     #[must_use]
     pub fn new(
@@ -195,7 +202,13 @@ pub async fn public_ingress(State(state): State<HttpState>, mut request: Request
         }
         Err(error) => return crate::http::platform_error_response(&error, request_id),
     };
-    let pin = match api.pins.pin(snapshot.version.id) {
+    let Some(deployment_id) = snapshot.worker.active_deployment_id else {
+        return crate::http::platform_error_response(
+            &PlatformError::new(ErrorCode::RouteNotFound, "route has no active deployment"),
+            request_id,
+        );
+    };
+    let pin = match api.pins.pin_deployment(snapshot.version.id, deployment_id) {
         Ok(pin) => pin,
         Err(error) => return crate::http::platform_error_response(&error, request_id),
     };

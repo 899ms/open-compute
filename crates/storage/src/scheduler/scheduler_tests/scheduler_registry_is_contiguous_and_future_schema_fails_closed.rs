@@ -9,14 +9,17 @@ fn refinery_history_is_current_and_future_schema_fails_closed() {
     let connection = Connection::open(&path).unwrap();
     let history: (i64, String) = connection
         .query_row(
-            "SELECT version,name FROM refinery_schema_history",
+            "SELECT version,name FROM refinery_schema_history ORDER BY version DESC LIMIT 1",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
     assert_eq!(
         history,
-        (current_scheduler_schema_version(), "init".to_owned())
+        (
+            current_scheduler_schema_version(),
+            "bound_cron_unknown_outcomes".to_owned()
+        )
     );
     connection
         .execute(

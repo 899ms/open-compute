@@ -138,6 +138,7 @@ pub(super) fn create_ai_search_instance(
                 vector_enabled: prepared.vector_enabled,
                 keyword_enabled: prepared.keyword_enabled,
                 r2_source: None,
+                manual_source: None,
             },
             5_000,
         ),

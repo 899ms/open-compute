@@ -86,7 +86,8 @@ async fn assets_only_pipeline_commits_real_refs_without_fabricating_worker_code(
     assert_eq!(stored.logical_total_bytes, 12);
     assert_eq!(workers.referenced_artifacts().unwrap().len(), 2);
     assert_eq!(mock.object_count(), 2);
-    let static_snapshot = RuntimeSource::new(storage.clone(), store, BundleLimits::default())
+    let source = RuntimeSource::new(storage.clone(), store, BundleLimits::default());
+    let static_snapshot = source
         .resolve(
             &loader_key(account, worker.id, result.version.id),
             &hex::encode(result.version.worker_code_sha256),
@@ -97,6 +98,18 @@ async fn assets_only_pipeline_commits_real_refs_without_fabricating_worker_code(
     assert_eq!(static_snapshot.main_module, None);
     assert!(static_snapshot.modules.is_empty());
     assert!(static_snapshot.assets.is_some());
+    assert!(
+        source
+            .resolve(
+                &loader_key(account, worker.id, result.version.id),
+                &hex::encode(result.version.worker_code_sha256),
+                RuntimeScope::Probe,
+            )
+            .await
+            .unwrap()
+            .assets
+            .is_some()
+    );
 
     let mut invalid = request;
     invalid.idempotency_key = "assets-only-env".to_owned();

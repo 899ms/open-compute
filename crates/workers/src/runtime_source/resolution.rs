@@ -142,7 +142,7 @@ pub(super) async fn resolve_bundle(
             }
             Ok(Some(bundle))
         }
-        VersionContentKind::AssetsOnly if scope == RuntimeScope::Runtime => {
+        VersionContentKind::AssetsOnly if scope != RuntimeScope::Validation => {
             if assets.is_none() {
                 return Err(invariant());
             }

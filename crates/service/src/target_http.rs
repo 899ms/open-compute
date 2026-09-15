@@ -1,15 +1,8 @@
 //! Bounded authenticated probes for remote Wrangler targets.
 
 use crate::target_registry::TargetRecord;
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper::body::Incoming;
+use hyper::StatusCode;
 use hyper::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
-use hyper::{Method, Request, StatusCode, Uri};
-use hyper_rustls::HttpsConnectorBuilder;
-use hyper_util::client::legacy::Client;
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::rt::TokioExecutor;
 use open_compute_core::{CloudflareAccountId, ErrorCode, PlatformError, SecretString};
 use serde::Deserialize;
 use std::future::Future;
@@ -30,21 +23,15 @@ pub trait TargetHttp: Send + Sync {
 /// Production target client using system-independent web PKI roots.
 #[derive(Clone, Debug)]
 pub struct LiveTargetHttp {
-    client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
+    client: crate::operator_http::OperatorHttpClient,
     timeout: Duration,
 }
 
 impl LiveTargetHttp {
     /// Build the strict production target client.
     pub fn new() -> Result<Self, PlatformError> {
-        crate::tls::install_default_provider();
-        let connector = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
         Ok(Self {
-            client: Client::builder(TokioExecutor::new()).build(connector),
+            client: crate::operator_http::OperatorHttpClient::from_process_env()?,
             timeout: TARGET_HTTP_TIMEOUT,
         })
     }
@@ -53,22 +40,20 @@ impl LiveTargetHttp {
 impl TargetHttp for LiveTargetHttp {
     fn get<'a>(&'a self, url: &'a str, token: &'a SecretString) -> GetFuture<'a> {
         Box::pin(async move {
-            let uri: Uri = url
-                .parse()
+            let url = url::Url::parse(url)
                 .map_err(|_| target_unavailable("target request URL is invalid"))?;
-            let request = Request::builder()
-                .method(Method::GET)
-                .uri(uri)
+            let request = self
+                .client
+                .request(reqwest::Method::GET, url)
+                .map_err(|_| target_unavailable("target request URL is invalid"))?
                 .header(
                     USER_AGENT,
                     format!("open-compute-ocd/{}", env!("CARGO_PKG_VERSION")),
                 )
                 .header(ACCEPT, "application/json")
-                .header(AUTHORIZATION, format!("Bearer {}", token.expose()))
-                .body(Full::new(Bytes::new()))
-                .map_err(|_| target_unavailable("target request could not be constructed"))?;
+                .header(AUTHORIZATION, format!("Bearer {}", token.expose()));
             tokio::time::timeout(self.timeout, async {
-                let response = self.client.request(request).await.map_err(|_| {
+                let response = request.send().await.map_err(|_| {
                     target_unavailable("target request failed before a response was received")
                 })?;
                 if is_redirect(response.status()) {
@@ -81,7 +66,7 @@ impl TargetHttp for LiveTargetHttp {
                         "target rejected authentication, account, or capability discovery",
                     ));
                 }
-                collect_body(response.into_body()).await
+                collect_body(response).await
             })
             .await
             .map_err(|_| target_unavailable("target request timed out"))?
@@ -173,18 +158,17 @@ fn valid_version(value: &str) -> bool {
         && parts.next().is_none()
 }
 
-async fn collect_body(body: Incoming) -> Result<Vec<u8>, PlatformError> {
+async fn collect_body(mut response: reqwest::Response) -> Result<Vec<u8>, PlatformError> {
     let mut output = Vec::new();
-    let mut body = body;
-    while let Some(frame) = body.frame().await {
-        let frame =
-            frame.map_err(|_| target_unavailable("target response body could not be read"))?;
-        if let Some(data) = frame.data_ref() {
-            if output.len().saturating_add(data.len()) > MAX_TARGET_RESPONSE_BYTES {
-                return Err(target_unavailable("target response exceeds its size limit"));
-            }
-            output.extend_from_slice(data);
+    while let Some(data) = response
+        .chunk()
+        .await
+        .map_err(|_| target_unavailable("target response body could not be read"))?
+    {
+        if output.len().saturating_add(data.len()) > MAX_TARGET_RESPONSE_BYTES {
+            return Err(target_unavailable("target response exceeds its size limit"));
         }
+        output.extend_from_slice(&data);
     }
     Ok(output)
 }

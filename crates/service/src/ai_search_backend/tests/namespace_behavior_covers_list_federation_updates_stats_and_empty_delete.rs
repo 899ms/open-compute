@@ -1,6 +1,163 @@
 use super::*;
 
 #[tokio::test]
+async fn manual_source_is_visible_only_through_the_namespaced_extension() {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/source", listener.local_addr().unwrap());
+    let digest = hex::encode(Sha256::digest(b"alpha"));
+    let provider = tokio::spawn(async move {
+        for operation in ["resolve", "read", "read"] {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let count = stream.read(&mut request).await.unwrap();
+            let request = std::str::from_utf8(&request[..count]).unwrap();
+            assert!(request.starts_with(&format!("POST /source/{operation} HTTP/1.1")));
+            assert!(request.contains("authorization: Bearer fixture-manual-token"));
+            assert!(request.contains(r#""key":"files/guide.txt""#));
+            assert!(request.contains(r#""revision":"rev-1""#));
+            let response = if operation == "resolve" {
+                let body = format!(
+                    r#"{{"revision":"rev-1","contentType":"text/plain","size":5,"sha256":"{digest}"}}"#
+                );
+                format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+            } else {
+                format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\nx-open-compute-revision: rev-1\r\nx-open-compute-size: 5\r\nx-open-compute-sha256: {digest}\r\ncontent-length: 5\r\nconnection: close\r\n\r\nalpha"
+                )
+            };
+            stream.write_all(response.as_bytes()).await.unwrap();
+        }
+    });
+    let fixture = SearchBehaviorFixture::create_with_manual_provider(endpoint).await;
+    let namespace = fixture.namespace_authority();
+    let config = json!({
+        "id": "manual",
+        "embedding_model": "@cf/qwen/qwen3-embedding-0.6b",
+        "index_method": {"vector": false, "keyword": true},
+        "indexing_options": {"keyword_tokenizer": "porter"},
+        "retrieval_options": {"keyword_match_mode": "and"}
+    });
+    let created = fixture
+        .service
+        .namespace_open_compute_create_manual(
+            &namespace,
+            JsonCall {
+                operation: "namespace.openComputeCreateManual".to_owned(),
+                instance: None,
+                payload: json!({"providerId": "fixture-manual", "config": config}),
+            },
+        )
+        .unwrap();
+    assert_eq!(created["type"], "open-compute:manual");
+    assert_eq!(
+        created["open_compute_source"]["provider_id"],
+        "fixture-manual"
+    );
+    assert_eq!(created["open_compute_source"]["source"], "fixture-files");
+
+    let upserted = fixture
+        .service
+        .manual_upsert(
+            &namespace,
+            JsonCall {
+                operation: "items.openComputeUpsert".to_owned(),
+                instance: Some("manual".to_owned()),
+                payload: json!({
+                    "key": "files/guide.txt",
+                    "revision": "rev-1",
+                    "contentType": "text/plain",
+                    "metadata": {},
+                    "waitForCompletion": true
+                }),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(upserted["status"], "completed");
+    let item_id = upserted["id"].as_str().unwrap().to_owned();
+    let result = fixture
+        .service
+        .instance_search(
+            &namespace,
+            search_call(
+                Some("manual"),
+                json!({
+                    "query": "alpha",
+                    "ai_search_options": {"retrieval": {"retrieval_type": "keyword"}}
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    let source = &result["chunks"][0]["item"]["open_compute_source"];
+    assert_eq!(source["provider_id"], "fixture-manual");
+    assert_eq!(source["source"], "fixture-files");
+    assert_eq!(source["key"], "files/guide.txt");
+    assert_eq!(source["revision"], "rev-1");
+
+    let downloaded = fixture
+        .service
+        .download(
+            fixture.namespace_authority(),
+            ItemInput {
+                instance: Some("manual".to_owned()),
+                item_id,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(downloaded.headers()[header::CONTENT_TYPE], "text/plain");
+    assert_eq!(
+        downloaded.headers()["x-open-compute-source-provider"],
+        "fixture-manual"
+    );
+    assert_eq!(
+        to_bytes(downloaded.into_body(), 16).await.unwrap(),
+        Bytes::from_static(b"alpha")
+    );
+    provider.await.unwrap();
+
+    let mut official = fixture.namespace_authority();
+    official.allow_extensions = false;
+    let listed = fixture
+        .service
+        .namespace_list(
+            &official,
+            JsonCall {
+                operation: "namespace.list".to_owned(),
+                instance: None,
+                payload: json!({}),
+            },
+        )
+        .unwrap();
+    assert_eq!(listed["result"], json!([]));
+    assert!(
+        fixture
+            .service
+            .resolve_instance(&official, Some("manual"))
+            .is_err()
+    );
+    assert!(
+        fixture
+            .service
+            .namespace_open_compute_create_manual(
+                &official,
+                JsonCall {
+                    operation: "namespace.openComputeCreateManual".to_owned(),
+                    instance: None,
+                    payload: json!({"providerId": "fixture-manual", "config": {}}),
+                },
+            )
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn namespace_behavior_covers_list_federation_updates_stats_and_empty_delete() {
     let fixture = SearchBehaviorFixture::create().await;
     let docs = fixture.create_instance("docs");

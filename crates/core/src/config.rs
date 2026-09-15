@@ -14,8 +14,8 @@ mod scheduler;
 pub use ai::{
     AiAuthConfig, AiBackendConfig, AiBackendProtocol, AiConfig, AiEmbeddingMetric,
     AiEmbeddingModelConfig, AiEmbeddingProfileConfig, AiGenerationCapability,
-    AiGenerationModelConfig, AiTokenizer, AiTokenizerArtifactConfig, AiTokenizerConfig,
-    AiVlmModelConfig, ResolvedEmbeddingModelContract, ResolvedTokenizerContract,
+    AiGenerationModelConfig, AiSourceProviderConfig, AiTokenizer, AiTokenizerArtifactConfig,
+    AiTokenizerConfig, AiVlmModelConfig, ResolvedEmbeddingModelContract, ResolvedTokenizerContract,
     ResolvedVlmModelContract,
 };
 pub use scheduler::{SchedulerConfig, SchedulerPoolConfig, SchedulerPoolsConfig};

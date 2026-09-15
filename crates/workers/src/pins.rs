@@ -1,6 +1,6 @@
 //! In-process version dispatch pins and deletion fence.
 
-use open_compute_core::{ErrorCode, PlatformError, VersionId};
+use open_compute_core::{DeploymentId, ErrorCode, PlatformError, VersionId};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -9,6 +9,7 @@ use tokio::sync::Notify;
 #[derive(Debug, Default)]
 struct Entry {
     count: usize,
+    deployments: HashMap<DeploymentId, usize>,
     fenced: bool,
     retained_until_restart: bool,
 }
@@ -34,6 +35,23 @@ impl VersionPins {
 
     /// Acquire a pin unless deletion already fenced the version.
     pub fn pin(&self, version_id: VersionId) -> Result<VersionPin, PlatformError> {
+        self.pin_inner(version_id, None)
+    }
+
+    /// Acquire an active deployment pin for runtime-incident attribution.
+    pub fn pin_deployment(
+        &self,
+        version_id: VersionId,
+        deployment_id: DeploymentId,
+    ) -> Result<VersionPin, PlatformError> {
+        self.pin_inner(version_id, Some(deployment_id))
+    }
+
+    fn pin_inner(
+        &self,
+        version_id: VersionId,
+        deployment_id: Option<DeploymentId>,
+    ) -> Result<VersionPin, PlatformError> {
         let mut entries = self
             .inner
             .entries
@@ -50,11 +68,30 @@ impl VersionPins {
             .count
             .checked_add(1)
             .ok_or_else(|| PlatformError::new(ErrorCode::Internal, "version pin count overflow"))?;
+        if let Some(deployment_id) = deployment_id {
+            let count = entry.deployments.entry(deployment_id).or_default();
+            *count = count.checked_add(1).ok_or_else(|| {
+                PlatformError::new(ErrorCode::Internal, "deployment pin count overflow")
+            })?;
+        }
         Ok(VersionPin {
             version_id,
+            deployment_id,
             inner: self.inner.clone(),
             released: false,
         })
+    }
+
+    /// Return active deployment identities for the current runtime generation.
+    #[must_use]
+    pub fn active_deployments(&self) -> Vec<DeploymentId> {
+        self.inner
+            .entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .values()
+            .flat_map(|entry| entry.deployments.keys().copied())
+            .collect()
     }
 
     /// Conservatively retain one version until this platform process and workerd generation end.
@@ -199,6 +236,7 @@ impl VersionPins {
 /// RAII version execution pin.
 pub struct VersionPin {
     version_id: VersionId,
+    deployment_id: Option<DeploymentId>,
     inner: Arc<Inner>,
     released: bool,
 }
@@ -224,6 +262,14 @@ impl Drop for VersionPin {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(entry) = entries.get_mut(&self.version_id) {
             entry.count = entry.count.saturating_sub(1);
+            if let Some(deployment_id) = self.deployment_id
+                && let Some(count) = entry.deployments.get_mut(&deployment_id)
+            {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    entry.deployments.remove(&deployment_id);
+                }
+            }
             if entry.count == 0 && !entry.fenced && !entry.retained_until_restart {
                 entries.remove(&self.version_id);
             }

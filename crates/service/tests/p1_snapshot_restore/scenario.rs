@@ -142,7 +142,7 @@ pub(super) async fn snapshot_restore_gate() {
         1
     );
     let claimed_cron = scheduler
-        .claim_cron_runs(60_000, 1_000, 250, 1)
+        .claim_cron_runs(60_000, 1_000, 250, 3, 1)
         .map(|(items, _)| items)
         .expect("claim snapshot Cron run")
         .pop()
@@ -596,7 +596,7 @@ pub(super) async fn snapshot_restore_gate() {
         assert!(stale_queue.stale);
         assert_eq!(
             restored_scheduler
-                .recover_expired_cron_runs(61_000, 250, 10)
+                .recover_expired_cron_runs(61_000, 250, 3, 10)
                 .expect("recover restored Cron lease"),
             1
         );

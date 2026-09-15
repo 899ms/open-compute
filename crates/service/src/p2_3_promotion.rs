@@ -1,12 +1,16 @@
 //! Single-process Queue/Cron cross-database promotion handoff.
 
-use open_compute_core::{CronSchedule, ErrorCode, PlatformError, QueueConsumerId, QueueId};
+use open_compute_core::{
+    CronSchedule, ErrorCode, PlatformError, QueueConsumerId, QueueId, StartupId,
+};
 use open_compute_storage::{
     CronActivationRecord, CronActivationState, CronRepository, CronScheduleProjection,
     PlatformStorage, QueueConsumerDeclaration, QueueConsumerProjection, QueueConsumerRecord,
-    QueueConsumerRepository, QueueConsumerState, SchedulerStore, WorkerRepository,
+    QueueConsumerRepository, QueueConsumerState, SchedulerStore, WorkerRecord, WorkerRepository,
 };
-use open_compute_workers::{ProductPromotionCoordinator, ProductPromotionRequest};
+use open_compute_workers::{
+    ProductPromotionCoordinator, ProductPromotionRequest, RuntimeValidator, ValidationCandidate,
+};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -14,11 +18,21 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Owner of the ordered control/scheduler Queue and Cron handoff.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct P23PromotionCoordinator {
     storage: Arc<PlatformStorage>,
     scheduler: Arc<SchedulerStore>,
     drain_timeout: Duration,
+    validator: Option<Arc<dyn RuntimeValidator>>,
+}
+
+impl std::fmt::Debug for P23PromotionCoordinator {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("P23PromotionCoordinator")
+            .field("drain_timeout", &self.drain_timeout)
+            .finish_non_exhaustive()
+    }
 }
 
 impl P23PromotionCoordinator {
@@ -33,10 +47,22 @@ impl P23PromotionCoordinator {
             storage,
             scheduler,
             drain_timeout,
+            validator: None,
         }
     }
 
-    fn coordinate(&self, request: &ProductPromotionRequest) -> Result<(), PlatformError> {
+    /// Require a same-generation runtime admission before changing active traffic.
+    #[must_use]
+    pub(crate) fn with_runtime_validator(mut self, validator: Arc<dyn RuntimeValidator>) -> Self {
+        self.validator = Some(validator);
+        self
+    }
+
+    fn coordinate(
+        &self,
+        request: &ProductPromotionRequest,
+        admitted_generation: StartupId,
+    ) -> Result<(), PlatformError> {
         let workers = WorkerRepository::new(self.storage.db());
         let worker = workers.get_worker(request.account_id, request.worker_id)?;
         let already_promoted = worker.active_version_id == Some(request.version_id);
@@ -249,17 +275,7 @@ impl P23PromotionCoordinator {
         }
 
         if !already_promoted {
-            workers.create_deployment_checked(
-                request.account_id,
-                request.worker_id,
-                request.version_id,
-                worker.active_version_id,
-                Some(worker.route_generation),
-                request.source,
-                &request.annotations,
-                request.request_id,
-                request.now_ms,
-            )?;
+            self.activate_deployment(workers, &worker, request, admitted_generation)?;
         }
 
         for action in queue_finish {
@@ -320,6 +336,52 @@ impl P23PromotionCoordinator {
             {
                 return Err(projection_pending());
             }
+        }
+        Ok(())
+    }
+
+    fn activate_deployment(
+        &self,
+        workers: WorkerRepository<'_>,
+        worker: &WorkerRecord,
+        request: &ProductPromotionRequest,
+        admitted_generation: StartupId,
+    ) -> Result<(), PlatformError> {
+        if self
+            .validator
+            .as_ref()
+            .is_some_and(|validator| validator.current_generation() != Some(admitted_generation))
+        {
+            return Err(generation_changed(
+                "workerd generation changed during deployment admission",
+            ));
+        }
+        let (_, deployment) = workers.create_deployment_checked(
+            request.account_id,
+            request.worker_id,
+            request.version_id,
+            worker.active_version_id,
+            Some(worker.route_generation),
+            request.source,
+            &request.annotations,
+            request.request_id,
+            request.now_ms,
+            admitted_generation,
+        )?;
+        if self
+            .validator
+            .as_ref()
+            .is_some_and(|validator| validator.current_generation() != Some(admitted_generation))
+        {
+            workers.quarantine_active_deployment(
+                deployment.id,
+                "RUNTIME_GENERATION_CHANGED",
+                request.request_id,
+                request.now_ms,
+            )?;
+            return Err(generation_changed(
+                "workerd generation changed while deployment admission committed",
+            ));
         }
         Ok(())
     }
@@ -437,9 +499,37 @@ impl ProductPromotionCoordinator for P23PromotionCoordinator {
     ) -> Pin<Box<dyn Future<Output = Result<(), PlatformError>> + Send + '_>> {
         let coordinator = self.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || coordinator.coordinate(&request))
-                .await
-                .map_err(|_| projection_pending())?
+            let admitted_generation = if let Some(validator) = &coordinator.validator {
+                let version = WorkerRepository::new(coordinator.storage.db()).get_version(
+                    request.account_id,
+                    request.worker_id,
+                    request.version_id,
+                )?;
+                validator
+                    .validate_deployment(ValidationCandidate {
+                        account_id: request.account_id,
+                        worker_id: request.worker_id,
+                        version_id: request.version_id,
+                        worker_code_sha256: version.worker_code_sha256,
+                    })
+                    .await?
+            } else {
+                #[cfg(any(test, feature = "test-support"))]
+                {
+                    StartupId::generate()
+                }
+                #[cfg(not(any(test, feature = "test-support")))]
+                {
+                    return Err(generation_changed(
+                        "runtime validator is unavailable for deployment admission",
+                    ));
+                }
+            };
+            tokio::task::spawn_blocking(move || {
+                coordinator.coordinate(&request, admitted_generation)
+            })
+            .await
+            .map_err(|_| projection_pending())?
         })
     }
 }
@@ -504,4 +594,8 @@ fn projection_pending() -> PlatformError {
         ErrorCode::QueueConsumerProjectionPending,
         "Queue/Cron cross-database promotion handoff is pending",
     )
+}
+
+fn generation_changed(message: &'static str) -> PlatformError {
+    PlatformError::new(ErrorCode::RuntimeUnavailable, message)
 }

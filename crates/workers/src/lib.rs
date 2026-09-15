@@ -26,8 +26,8 @@ pub use workflows::{
 };
 
 pub use ai_search::{
-    AiSearchInstanceResourceDriver, AiSearchInstanceSpec, AiSearchNamespaceResourceDriver,
-    AiSearchR2SourceSpec,
+    AiSearchInstanceResourceDriver, AiSearchInstanceSpec, AiSearchManualSourceSpec,
+    AiSearchNamespaceResourceDriver, AiSearchR2SourceSpec,
 };
 pub use assets::{
     AssetEntryV1, AssetHeaderOperation, AssetHeaderRule, AssetManifestV1, AssetRedirectRule,

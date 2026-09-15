@@ -16,6 +16,7 @@ pub mod error;
 pub mod health;
 pub mod ids;
 pub mod instance_id;
+pub mod operator_proxy;
 pub mod redact;
 pub mod release_identity;
 pub mod resource;
@@ -40,14 +41,14 @@ pub use clock::{Clock, SystemClock};
 pub use config::{
     AiAuthConfig, AiBackendConfig, AiBackendProtocol, AiConfig, AiEmbeddingMetric,
     AiEmbeddingModelConfig, AiEmbeddingProfileConfig, AiGenerationCapability,
-    AiGenerationModelConfig, AiTokenizer, AiTokenizerArtifactConfig, AiTokenizerConfig,
-    AiVlmModelConfig, ArtifactsConfig, CacheConfig, D1Config, DataConfig, DocumentParserConfig,
-    DurableObjectsConfig, HardeningConfig, ImagesConfig, KvConfig, LocalObjectStorageConfig,
-    MetricsConfig, ObjectStorageConfig, ObjectStorageKind, PlatformConfig, QueuesConfig, R2Config,
-    ResolvedEmbeddingModelContract, ResolvedTokenizerContract, ResolvedVlmModelContract,
-    ResponseCacheConfig, RuntimeConfig, S3Config, SchedulerConfig, SchedulerPoolConfig,
-    SchedulerPoolsConfig, SecretReference, ServerConfig, WorkersConfig,
-    validate_bootstrap_config_path,
+    AiGenerationModelConfig, AiSourceProviderConfig, AiTokenizer, AiTokenizerArtifactConfig,
+    AiTokenizerConfig, AiVlmModelConfig, ArtifactsConfig, CacheConfig, D1Config, DataConfig,
+    DocumentParserConfig, DurableObjectsConfig, HardeningConfig, ImagesConfig, KvConfig,
+    LocalObjectStorageConfig, MetricsConfig, ObjectStorageConfig, ObjectStorageKind,
+    PlatformConfig, QueuesConfig, R2Config, ResolvedEmbeddingModelContract,
+    ResolvedTokenizerContract, ResolvedVlmModelContract, ResponseCacheConfig, RuntimeConfig,
+    S3Config, SchedulerConfig, SchedulerPoolConfig, SchedulerPoolsConfig, SecretReference,
+    ServerConfig, WorkersConfig, validate_bootstrap_config_path,
 };
 pub use cron::CronSchedule;
 pub use durable_objects::{
@@ -66,6 +67,7 @@ pub use instance_id::{
     INSTANCE_ID_MAX_LEN, INSTANCE_ID_MIN_LEN, InstanceId, InstanceSelector,
     digest_canonical_config_path, parse_short_id,
 };
+pub use operator_proxy::{OperatorProxy, OperatorProxyDecision, OperatorProxyPolicy};
 pub use redact::Redactor;
 pub use release_identity::{PlatformReleaseIdentityV1, PlatformReleaseMetadataV1};
 pub use resource::{

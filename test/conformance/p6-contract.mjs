@@ -605,39 +605,56 @@ function extensionSchemas() {
         deviations: { type: "array", uniqueItems: true, items: string },
       },
     ),
-    SystemStatus: objectSchema(["state", "version", "components"], {
-      state: string,
-      version: string,
-      components: {
-        type: "array",
-        items: objectSchema(["name", "state"], {
-          name: string,
-          state: string,
-          message: string,
-        }),
-      },
-      observability: objectSchema(
-        [
-          "state",
-          "retention_ms",
-          "max_database_bytes",
-          "query_max_timeframe_ms",
-          "tail_sessions",
-          "closed_client_drops",
-          "overload_drops",
-        ],
-        {
-          state: { type: "string", enum: ["healthy", "degraded"] },
-          retention_ms: nonNegativeInteger,
-          max_database_bytes: nonNegativeInteger,
-          query_max_timeframe_ms: nonNegativeInteger,
-          oldest_event_ms: nonNegativeInteger,
-          tail_sessions: nonNegativeInteger,
-          closed_client_drops: nonNegativeInteger,
-          overload_drops: nonNegativeInteger,
+    SystemStatus: objectSchema(
+      ["state", "version", "components", "operator_proxy"],
+      {
+        state: string,
+        version: string,
+        components: {
+          type: "array",
+          items: objectSchema(["name", "state"], {
+            name: string,
+            state: string,
+            message: string,
+          }),
         },
-      ),
-    }),
+        operator_proxy: objectSchema(["mode"], {
+          mode: { type: "string", enum: ["direct", "proxy", "invalid"] },
+          source_variable: string,
+          origin: string,
+        }),
+        observability: objectSchema(
+          [
+            "state",
+            "retention_ms",
+            "max_database_bytes",
+            "query_max_timeframe_ms",
+            "tail_sessions",
+            "closed_client_drops",
+            "overload_drops",
+          ],
+          {
+            state: { type: "string", enum: ["healthy", "degraded"] },
+            retention_ms: nonNegativeInteger,
+            max_database_bytes: nonNegativeInteger,
+            query_max_timeframe_ms: nonNegativeInteger,
+            oldest_event_ms: nonNegativeInteger,
+            tail_sessions: nonNegativeInteger,
+            closed_client_drops: nonNegativeInteger,
+            overload_drops: nonNegativeInteger,
+          },
+        ),
+        deployment_runtime: objectSchema(
+          ["dispatchable", "quarantined", "active_runtime_dispatchable"],
+          {
+            dispatchable: nonNegativeInteger,
+            quarantined: nonNegativeInteger,
+            active_runtime_dispatchable: { type: "boolean" },
+            last_quarantine_reason: string,
+          },
+        ),
+      },
+    ),
     SchedulerStatus: objectSchema(["state", "pending", "running"], {
       state: string,
       pending: nonNegativeInteger,

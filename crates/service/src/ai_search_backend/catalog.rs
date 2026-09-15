@@ -39,6 +39,12 @@ impl AiSearchBindingService {
             .r2_source
             .as_ref()
             .map(|source| external_source_id("r2", &source.bucket_name));
+        let manual_source_id = instance.record.manual_source.as_ref().map(|source| {
+            format!(
+                "open-compute:manual:{}:{}",
+                source.provider_id, source.source_namespace
+            )
+        });
         let mut all = Vec::new();
         let mut offset = 0_u64;
         loop {
@@ -71,6 +77,10 @@ impl AiSearchBindingService {
                     (item.source_kind == "builtin" && source == "builtin")
                         || (item.source_kind == "r2"
                             && r2_source_id.as_ref().is_some_and(|r2| r2 == source))
+                        || (item.source_kind == "open-compute:manual"
+                            && manual_source_id
+                                .as_ref()
+                                .is_some_and(|manual| manual == source))
                 });
             if !matches_base_filters {
                 continue;
@@ -416,5 +426,6 @@ fn item_modified_at_ms(item: &AiSearchItemRecord) -> i64 {
     match &item.source {
         AiSearchSourceReference::R2(source) => source.uploaded_at_ms,
         AiSearchSourceReference::Builtin(_) => item.created_at_ms,
+        AiSearchSourceReference::Manual(_) => item.updated_at_ms,
     }
 }

@@ -10,7 +10,9 @@ ocd wrangler --project examples/hello-worker deploy --env dev
 # Deployment: <deployment-id>
 ```
 
-校验失败不改变当前 active。deploy / rollback 只切换 active pointer，不修改已 ready Version 的 bytes。
+校验失败不会创建 deployment，也不会改变当前 active。激活前，exact Version 必须在当前 running workerd generation 中成功加载；validation 与 commit 之间 generation 改变会拒绝 deployment。deploy / rollback 只切换 active pointer，不修改已 ready Version 的 bytes。
+
+每个 committed deployment 都有一份与不可变 bytes 分离的 mutable runtime assessment。能够精确归因的 unexpected workerd exit 会 quarantine 该 deployment，并原子回退到最近的旧 dispatchable deployment；并发歧义时不猜测 culprit。`GET /client/v4/open-compute/system/status` 提供 dispatchable/quarantined 数量与 `active_runtime_dispatchable`；runtime health component 不可用时后者为 false。support bundle 包含 `deployment-runtime.json`，发生 incident 后还包含 bounded、redacted 的 `workerd-last-exit.json`。
 
 ## 兼容性
 

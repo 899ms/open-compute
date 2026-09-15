@@ -18,8 +18,10 @@
 | AI Search `data.sqlite` | `crates/storage/refinery-migrations/ai_search/`     | 每个 instance file 自己的 history             |
 
 七个 lineage 的 Day 1 baseline 都压平为 `V1__init.sql`。后续 schema 变更只在 owning directory
-追加 contiguous `V2`、`V3`……；例如 control 当前已经追加 Worker resource limits 的 V2。已经进入发布版本的
-migration filename、order 和 bytes 永久不可修改。
+追加 contiguous `V2`、`V3`……。当前 control head 为 V4（Worker limits、deployment runtime assessment、manual AI
+Search provider locator），scheduler head 为 V2（bounded Cron unknown outcome），AI Search instance head 为 V2
+（tagged manual source locator）；其它 lineage 仍按各自现行 head。已经进入发布版本的 migration filename、order 和
+bytes 永久不可修改。
 
 workspace 固定使用 `refinery 0.9.2`，关闭默认 features，只启用 `rusqlite`。生产永远运行到 embedded head，
 不接受 caller target、runtime migration slice、`Target::Fake`、down migration 或 grouped migration。

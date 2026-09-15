@@ -6,6 +6,11 @@ fn upload_metadata_debug_and_binding_helpers_cover_the_closed_wire_union() {
         "main_module":"index.js",
         "compatibility_date":"2026-09-08",
         "compatibility_flags":["nodejs_compat"],
+        "package_dependencies":[{
+            "name":"hono",
+            "packageJsonVersion":"^4.0.0",
+            "installedVersion":"4.9.0"
+        }],
         "bindings":[],
         "keep_bindings":["plain_text"],
         "annotations":{"message":"release"},
@@ -20,6 +25,7 @@ fn upload_metadata_debug_and_binding_helpers_cover_the_closed_wire_union() {
     for expected in [
         "index.js",
         "nodejs_compat",
+        "package_dependencies: 1",
         "has_assets: true",
         "has_observability: true",
         "has_cache_options: true",
@@ -73,6 +79,47 @@ fn upload_metadata_debug_and_binding_helpers_cover_the_closed_wire_union() {
             .iter()
             .all(|binding| !binding.has_unsupported_options())
     );
+}
+
+#[test]
+fn package_dependencies_accepts_only_the_wrangler_wire_shape() {
+    for package_dependencies in [
+        serde_json::json!([]),
+        serde_json::json!([{
+            "name":"hono",
+            "packageJsonVersion":"^4.0.0",
+            "installedVersion":"4.9.0"
+        }]),
+    ] {
+        assert!(
+            serde_json::from_value::<WorkerUploadMetadata>(serde_json::json!({
+                "main_module":"index.js",
+                "compatibility_date":"2026-09-08",
+                "package_dependencies":package_dependencies
+            }))
+            .is_ok()
+        );
+    }
+
+    for package_dependencies in [
+        serde_json::json!(null),
+        serde_json::json!([{"name":"hono"}]),
+        serde_json::json!([{
+            "name":"hono",
+            "packageJsonVersion":"^4.0.0",
+            "installedVersion":"4.9.0",
+            "unknown":true
+        }]),
+    ] {
+        assert!(
+            serde_json::from_value::<WorkerUploadMetadata>(serde_json::json!({
+                "main_module":"index.js",
+                "compatibility_date":"2026-09-08",
+                "package_dependencies":package_dependencies
+            }))
+            .is_err()
+        );
+    }
 }
 
 #[test]

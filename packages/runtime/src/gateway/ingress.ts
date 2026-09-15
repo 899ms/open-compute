@@ -4,6 +4,7 @@ const TOKEN_HEADER = "x-open-compute-internal-token";
 const INTERNAL_PATHS = new Set([
   "/internal/dispatch",
   "/internal/validate",
+  "/internal/probe",
   "/internal/validate-do",
   "/internal/queue",
   "/internal/scheduled",

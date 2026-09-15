@@ -1,6 +1,54 @@
 use super::*;
 
 impl<'a> WorkerRepository<'a> {
+    /// Inspect aggregate deployment runtime admission without exposing tenant content.
+    pub fn deployment_runtime_assessments(
+        &self,
+    ) -> Result<DeploymentRuntimeAssessmentSummary, PlatformError> {
+        self.db.with_read(|connection| {
+            let dispatchable: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM deployment_runtime_assessments WHERE state='dispatchable'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|_| db_error())?;
+            let quarantined: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM deployment_runtime_assessments WHERE state='quarantined'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|_| db_error())?;
+            let invalid_active: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM workers w
+                     LEFT JOIN deployment_runtime_assessments a
+                       ON a.deployment_id=w.active_deployment_id
+                     WHERE w.active_deployment_id IS NOT NULL
+                       AND (a.state IS NULL OR a.state!='dispatchable')",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|_| db_error())?;
+            let last_quarantine_reason = connection
+                .query_row(
+                    "SELECT reason FROM deployment_runtime_assessments
+                     WHERE state='quarantined' ORDER BY updated_at_ms DESC, deployment_id DESC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|_| db_error())?;
+            Ok(DeploymentRuntimeAssessmentSummary {
+                dispatchable: u64::try_from(dispatchable).map_err(|_| invariant())?,
+                quarantined: u64::try_from(quarantined).map_err(|_| invariant())?,
+                active_runtime_dispatchable: invalid_active == 0,
+                last_quarantine_reason,
+            })
+        })
+    }
+
     /// Transition staging to validating.
     pub fn begin_validation(&self, version_id: VersionId) -> Result<(), PlatformError> {
         self.transition(
@@ -108,6 +156,7 @@ impl<'a> WorkerRepository<'a> {
     }
 
     /// Atomically promote a ready version, optionally using compare-and-swap.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn promote(
         &self,
         account_id: AccountId,
@@ -129,6 +178,7 @@ impl<'a> WorkerRepository<'a> {
     }
 
     /// Promote only if both the optional active pointer and route generation still match.
+    #[cfg(any(test, feature = "test-support"))]
     #[allow(
         clippy::too_many_arguments,
         reason = "SQLite boundary inputs mirror authoritative persisted fields"
@@ -156,6 +206,7 @@ impl<'a> WorkerRepository<'a> {
     }
 
     /// Promote a version for any live Worker in the account, including system-owned Workers.
+    #[cfg(any(test, feature = "test-support"))]
     #[allow(
         clippy::too_many_arguments,
         reason = "SQLite boundary inputs mirror authoritative persisted fields"
@@ -184,6 +235,7 @@ impl<'a> WorkerRepository<'a> {
             &BTreeMap::new(),
             request_id,
             now_ms,
+            open_compute_core::StartupId::generate(),
         )
         .map(|(worker, _)| worker)
     }
@@ -204,6 +256,7 @@ impl<'a> WorkerRepository<'a> {
         annotations: &BTreeMap<String, String>,
         request_id: RequestId,
         now_ms: i64,
+        runtime_startup_id: open_compute_core::StartupId,
     ) -> Result<(WorkerRecord, DeploymentRecord), PlatformError> {
         let deployment_id = DeploymentId::generate();
         self.db.with_immediate(|tx| {
@@ -225,6 +278,21 @@ impl<'a> WorkerRepository<'a> {
                     "Deployment target is not a ready Version of this Worker",
                 ));
             }
+            let quarantined: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM worker_deployments d
+                       JOIN deployment_runtime_assessments a ON a.deployment_id=d.id
+                       WHERE d.worker_id=?1 AND d.version_id=?2 AND a.state='quarantined')",
+                    params![worker_id.to_string(), target.to_string()],
+                    |row| row.get(0),
+                )
+                .map_err(|_| db_error())?;
+            if quarantined {
+                return Err(PlatformError::new(
+                    ErrorCode::VersionNotReady,
+                    "a quarantined Version cannot be activated again",
+                ));
+            }
             if expected_active.is_some_and(|expected| current.active_version_id != Some(expected))
                 || expected_route_generation
                     .is_some_and(|expected| current.route_generation != expected)
@@ -244,6 +312,17 @@ impl<'a> WorkerRepository<'a> {
                     target.to_string(),
                     source.as_str(),
                     serde_json::to_vec(annotations).map_err(|_| invariant())?,
+                    now_ms,
+                ],
+            )
+            .map_err(|_| db_error())?;
+            tx.execute(
+                "INSERT INTO deployment_runtime_assessments
+                 (deployment_id, state, startup_id, reason, updated_at_ms)
+                 VALUES (?1, 'dispatchable', ?2, NULL, ?3)",
+                params![
+                    deployment_id.to_string(),
+                    runtime_startup_id.to_string(),
                     now_ms,
                 ],
             )
@@ -291,6 +370,90 @@ impl<'a> WorkerRepository<'a> {
                     deleted_at_ms: None,
                 },
             ))
+        })
+    }
+
+    /// Quarantine one exactly attributed active deployment and atomically roll back.
+    pub fn quarantine_active_deployment(
+        &self,
+        deployment_id: DeploymentId,
+        reason: &str,
+        request_id: RequestId,
+        now_ms: i64,
+    ) -> Result<bool, PlatformError> {
+        if reason.is_empty() || reason.len() > 128 || reason.chars().any(char::is_control) {
+            return Err(invariant());
+        }
+        self.db.with_immediate(|tx| {
+            let current: Option<(String, String)> = tx
+                .query_row(
+                    "SELECT w.id, w.account_id FROM workers w
+                     JOIN worker_deployments d ON d.id=w.active_deployment_id
+                     JOIN deployment_runtime_assessments a ON a.deployment_id=d.id
+                     WHERE d.id=?1 AND d.deleted_at_ms IS NULL AND a.state='dispatchable'",
+                    [deployment_id.to_string()],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()
+                .map_err(|_| db_error())?;
+            let Some((worker_id_text, account_id_text)) = current else {
+                return Ok(false);
+            };
+            let account_id = account_id_text.parse().map_err(|_| invariant())?;
+            let previous = tx
+                .query_row(
+                    "SELECT d.id FROM worker_deployments d
+                     JOIN deployment_runtime_assessments a ON a.deployment_id=d.id
+                     JOIN worker_versions v ON v.id=d.version_id
+                     WHERE d.worker_id=?1 AND d.id!=?2 AND d.deleted_at_ms IS NULL
+                       AND a.state='dispatchable' AND v.state='ready'
+                     ORDER BY d.created_at_ms DESC, d.id DESC LIMIT 1",
+                    params![worker_id_text, deployment_id.to_string()],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|_| db_error())?
+                .map(|value| value.parse().map_err(|_| invariant()))
+                .transpose()?;
+            let updated = tx
+                .execute(
+                    "UPDATE deployment_runtime_assessments
+                     SET state='quarantined', reason=?2, updated_at_ms=?3
+                     WHERE deployment_id=?1 AND state='dispatchable'",
+                    params![deployment_id.to_string(), reason, now_ms],
+                )
+                .map_err(|_| db_error())?;
+            if updated != 1 {
+                return Ok(false);
+            }
+            let changed = tx
+                .execute(
+                    "UPDATE workers SET active_deployment_id=?1,
+                       route_generation=route_generation+1, updated_at_ms=?2
+                     WHERE id=?3 AND account_id=?4 AND active_deployment_id=?5",
+                    params![
+                        previous.map(|value: DeploymentId| value.to_string()),
+                        now_ms,
+                        worker_id_text,
+                        account_id_text,
+                        deployment_id.to_string(),
+                    ],
+                )
+                .map_err(|_| db_error())?;
+            if changed != 1 {
+                return Err(invariant());
+            }
+            audit(
+                tx,
+                account_id,
+                "deployment.quarantine",
+                "deployment",
+                &deployment_id.to_string(),
+                request_id,
+                br#"{"state":"quarantined"}"#,
+                now_ms,
+            )?;
+            Ok(true)
         })
     }
 }
