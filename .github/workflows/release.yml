@@ -190,7 +190,7 @@ jobs:
           lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
-          rust-cache-key: llvm-cov
+          rust-cache-key: llvm-cov-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
           rust-workspaces: ". -> target/llvm-cov-target"
           llvm-cov: "true"
           rust-components: llvm-tools-preview
@@ -222,7 +222,7 @@ jobs:
           lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
-          rust-cache-key: default
+          rust-cache-key: default-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
       - name: Build untracked runtime and toolchain assets from this checkout
         run: bun run build
       - name: Fetch locked crates for offline Gate compile
@@ -262,7 +262,7 @@ jobs:
           lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
-          rust-cache-key: release-${{ matrix.target }}
+          rust-cache-key: release-${{ matrix.target }}-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
           rust-cache-save: "false"
           rust-cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.11
@@ -273,10 +273,10 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .temp/sccache
-          key: compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json', 'crates/storage/refinery-migrations/**/*.sql') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json') }}-${{ github.sha }}-
-            compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json') }}-
+            compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json', 'crates/storage/refinery-migrations/**/*.sql') }}-${{ github.sha }}-
+            compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json', 'crates/storage/refinery-migrations/**/*.sql') }}-
       - name: Enable local compiler cache without per-crate remote cache requests
         shell: bash
         run: |
