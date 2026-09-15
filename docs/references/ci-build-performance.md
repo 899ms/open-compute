@@ -11,7 +11,8 @@
 131 秒和 81 秒。之前每个生产库单独调用 Cargo，还会在不同调用中重复依赖检查。
 
 本轮把生产库 lint 合并为一次 `cargo clippy --workspace --lib --no-default-features --no-deps`，
-所有生产目标禁止 lint 第三方依赖；本机同一源码的 canonical Clippy 从冷依赖到通过为 28 秒。
+所有生产目标禁止 lint 第三方依赖；`--no-deps` 仍需让 Rust 编译依赖作为类型检查输入，
+只是不会对第三方源码运行 Clippy 规则；本机同一源码的 canonical Clippy 从冷依赖到通过为 28 秒。
 Rust target cache 不再保存失败的半成品，package 的 sccache 改为每个平台/锁定输入一个稳定 key，
 不再把 commit、run 和 attempt 写进 key。第一次 v2 key 会冷启动，之后相同平台和锁图可复用。
 
@@ -39,7 +40,8 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 ## 缓存与证据
 
 - Rust dependency cache 按工具链、OS/CPU、编译环境和 manifest/lock 分隔；release target 与 coverage
-  各自使用 profile key。受信任的分支/tag 运行允许失败后保存，PR 不向这些缓存写入。
+  各自使用 profile key。失败的普通 target cache 不保存，避免把不完整目录当成下一次构建输入；PR
+  仍不向共享 Rust cache 写入。
 - Cargo registry/index/git 下载使用独立、仅由 OS 与 `Cargo.lock` 定位的缓存，避免 profile-specific
   target cache 未命中时重新下载全部 Rust 依赖。
 - package 使用固定 sccache 0.16.0，512 MiB 本地缓存位于 `.temp/sccache`，整目录通过 Actions

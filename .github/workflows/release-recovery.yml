@@ -112,11 +112,23 @@ jobs:
           printf '//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}\n' > "$RUNNER_TEMP/.npmrc"
           export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc"
           npm whoami --registry https://registry.npmjs.org
-          if ! npm publish "$tarball" --access public --registry https://registry.npmjs.org; then
-            npm view "@open-compute/sdk@$RELEASE_VERSION" name >/dev/null
+          publish_status=0
+          npm publish "$tarball" --access public --registry https://registry.npmjs.org || publish_status=$?
+          for attempt in $(seq 1 12); do
+            read_shasum="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.shasum --registry https://registry.npmjs.org 2>/dev/null || true)"
+            read_integrity="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.integrity --registry https://registry.npmjs.org 2>/dev/null || true)"
+            if [ "$read_shasum" = "$expected_shasum" ] && [ "$read_integrity" = "$expected_integrity" ]; then
+              publish_status=0
+              break
+            fi
+            [ "$attempt" -eq 12 ] || sleep 5
+          done
+          if [ "$publish_status" -ne 0 ]; then
+            echo "npm publish failed and the expected version was not readable" >&2
+            exit "$publish_status"
           fi
-          test "$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.shasum)" = "$expected_shasum"
-          test "$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.integrity)" = "$expected_integrity"
+          test "$read_shasum" = "$expected_shasum"
+          test "$read_integrity" = "$expected_integrity"
       - name: Publish verified draft
         env:
           GH_TOKEN: ${{ github.token }}

@@ -545,17 +545,23 @@ jobs:
           printf '//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}\n' > "$RUNNER_TEMP/.npmrc"
           export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc"
           npm whoami --registry https://registry.npmjs.org
-          if ! npm publish "$tarball" --access public --registry https://registry.npmjs.org; then
-            # Cross-registry ordering has no transaction; an unknown publish
-            # result is resolved by reading the registry, never by republishing
-            # different bytes.
-            if ! npm view "@open-compute/sdk@$RELEASE_VERSION" name >/dev/null 2>&1; then
-              echo "npm publish failed and the version is absent" >&2
-              exit 1
+          publish_status=0
+          npm publish "$tarball" --access public --registry https://registry.npmjs.org || publish_status=$?
+          # npm publication and registry reads are eventually consistent. Resolve
+          # an unknown publish result by bounded read-back; never republish bytes.
+          for attempt in $(seq 1 12); do
+            read_shasum="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.shasum --registry https://registry.npmjs.org 2>/dev/null || true)"
+            read_integrity="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.integrity --registry https://registry.npmjs.org 2>/dev/null || true)"
+            if [ "$read_shasum" = "$expected_shasum" ] && [ "$read_integrity" = "$expected_integrity" ]; then
+              publish_status=0
+              break
             fi
+            [ "$attempt" -eq 12 ] || sleep 5
+          done
+          if [ "$publish_status" -ne 0 ]; then
+            echo "npm publish failed and the expected version was not readable" >&2
+            exit "$publish_status"
           fi
-          read_shasum="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.shasum --registry https://registry.npmjs.org)"
-          read_integrity="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.integrity --registry https://registry.npmjs.org)"
           if [ "$read_shasum" != "$expected_shasum" ] || [ "$read_integrity" != "$expected_integrity" ]; then
             echo "npm registry identity mismatch: shasum=$read_shasum integrity=$read_integrity" >&2
             exit 1
