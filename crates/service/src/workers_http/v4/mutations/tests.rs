@@ -4,9 +4,10 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use open_compute_core::{PlatformId, RequestId, SecretBytes, VersionId};
 use open_compute_storage::{
-    NewVersion, NewVersionProducts, StoredVersionSecret, VersionContentKind,
+    NewCronConfig, NewVersion, NewVersionProducts, StoredVersionSecret, VersionContentKind,
     WorkerObservabilitySettings,
 };
+use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
 use tower::ServiceExt as _;
 
@@ -263,11 +264,10 @@ async fn active_script_management_routes_project_and_mutate_day1_state() {
         )
         .await
         .unwrap();
-    assert_eq!(created.status(), StatusCode::OK);
-    let created_id = response_json(created).await["result"]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let status = created.status();
+    let created = response_json(created).await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let created_id = created["result"]["id"].as_str().unwrap().to_owned();
     let retired = app
         .clone()
         .oneshot(request(
@@ -385,6 +385,7 @@ fn seed_script_versions(
     account: open_compute_core::AccountId,
 ) -> SeededScript {
     let repo = WorkerRepository::new(storage.db());
+    let cron = empty_cron_config();
     let worker = repo
         .create_worker(account, "settings-worker", RequestId::generate(), 1, 100)
         .unwrap()
@@ -433,7 +434,10 @@ fn seed_script_versions(
             request_id: RequestId::generate(),
             now_ms: 2,
         },
-        &NewVersionProducts::default(),
+        &NewVersionProducts {
+            cron: Some(&cron),
+            ..NewVersionProducts::default()
+        },
         100,
     )
     .unwrap();
@@ -485,7 +489,10 @@ fn seed_script_versions(
             request_id: RequestId::generate(),
             now_ms: 5,
         },
-        &NewVersionProducts::default(),
+        &NewVersionProducts {
+            cron: Some(&cron),
+            ..NewVersionProducts::default()
+        },
         100,
     )
     .unwrap();
@@ -497,6 +504,18 @@ fn seed_script_versions(
         version,
         replacement,
         deployment,
+    }
+}
+
+fn empty_cron_config() -> NewCronConfig {
+    let descriptor = serde_json::json!({
+        "capabilityVersion": 1,
+        "declarations": [],
+    });
+    NewCronConfig {
+        capability_version: 1,
+        descriptor_sha256: Sha256::digest(serde_json::to_vec(&descriptor).unwrap()).into(),
+        declarations: Vec::new(),
     }
 }
 
@@ -513,7 +532,7 @@ async fn exercise_settings_and_delete(
         ("/settings", StatusCode::OK),
         ("/secrets", StatusCode::OK),
         ("/secrets/TOKEN", StatusCode::OK),
-        ("/schedules", StatusCode::INTERNAL_SERVER_ERROR),
+        ("/schedules", StatusCode::OK),
         ("/subdomain", StatusCode::OK),
     ] {
         let response = app

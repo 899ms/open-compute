@@ -331,6 +331,7 @@ fn create_instance(
                 vector_enabled: true,
                 keyword_enabled: true,
                 r2_source: None,
+                manual_source: None,
             },
             5_000,
         ),

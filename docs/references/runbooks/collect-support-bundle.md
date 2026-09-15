@@ -16,7 +16,8 @@
 ```
 
 预期 archive mode 0600，内容仅含 allowlisted release、redacted policy、object backend kind/format/authority fingerprint/capacity、doctor、metrics、schema、bounded
-content-free events/receipts、文件摘要与 `search.json`。`observability.sqlite`、WAL/SHM、Workers Logs event/source、
+content-free events/receipts、文件摘要、`search.json`、`deployment-runtime.json` 与可选的 bounded
+`workerd-last-exit.json`。`observability.sqlite`、WAL/SHM、Workers Logs event/source、
 query/filter value、tail frame、tail session/ticket/URL 和 collector envelope 一律不进入 bundle；只允许 health、容量、
 retention、oldest-event age 与 bounded drop counter。`search.json` 只公开 Vectorize/AI Search resource 的 bounded
 count/health status、schema version 和 AI backend catalog contract digest；不含 vector values、metadata、

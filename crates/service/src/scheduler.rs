@@ -209,6 +209,12 @@ pub struct CronActivationInspect {
     pub claimed_runs: u64,
     /// Last retained terminal outcome.
     pub last_outcome: Option<String>,
+    /// Stable terminal error classification for the last retained run.
+    pub last_error_code: Option<String>,
+    /// Stable classification for the last retained unknown delivery.
+    pub last_unknown_reason: Option<String>,
+    /// Fixed completion deadline for the oldest live delivery.
+    pub oldest_dispatch_deadline_at: Option<i64>,
     /// Oldest ready logical-run lag.
     pub lag_ms: u64,
 }

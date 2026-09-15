@@ -200,6 +200,7 @@ impl SnapInit for SupervisorSnapshot {
             last_transition_at: now,
             attempt: 0,
             last_exit: None,
+            last_exit_startup_id: None,
             next_retry_at: None,
             pid: None,
             pgid: None,
@@ -434,6 +435,19 @@ pub(crate) async fn initialized_worker_http_fixture() -> (
         loaded.config.observability.clone(),
         Arc::new(MetricsRegistry::new(&loaded.config.metrics, "test", "workerd").unwrap()),
     );
+    let scheduler = Arc::new(
+        SchedulerStore::open(
+            &storage.data_dir().ensure_scheduler_db().unwrap(),
+            loaded.config.data.sqlite_busy_timeout_ms,
+            1,
+        )
+        .unwrap(),
+    );
+    let promoter = Arc::new(crate::p2_3_promotion::P23PromotionCoordinator::new(
+        storage.clone(),
+        scheduler,
+        Duration::from_millis(10),
+    ));
     let api = WorkerApiState::new(
         storage.clone(),
         open_compute_artifacts::ArtifactStore::new(client),
@@ -442,6 +456,7 @@ pub(crate) async fn initialized_worker_http_fixture() -> (
         BundleLimits::default(),
         Duration::from_millis(10),
     )
+    .with_product_promoter(promoter)
     .with_observability(observability);
     assert!(format!("{api:?}").contains("WorkerApiState"));
     assert_eq!(

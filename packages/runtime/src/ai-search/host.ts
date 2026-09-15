@@ -72,6 +72,7 @@ export class AiSearchTransport extends WorkerEntrypoint<
       ![
         "namespace.list",
         "namespace.create",
+        "namespace.openComputeCreateManual",
         "namespace.delete",
         "namespace.search",
         "namespace.chatCompletions",
@@ -82,6 +83,7 @@ export class AiSearchTransport extends WorkerEntrypoint<
         "instance.stats",
         "items.list",
         "items.delete",
+        "items.openComputeUpsert",
         "item.info",
         "item.sync",
         "item.logs",

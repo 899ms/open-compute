@@ -115,7 +115,7 @@ fn partial_refinery_head_drift_is_rejected_before_the_next_migration() {
     db.with_exclusive(|transaction| {
         transaction
             .execute_batch(
-                "DELETE FROM refinery_schema_history WHERE version=2;
+                "DELETE FROM refinery_schema_history WHERE version>=2;
                  ALTER TABLE worker_versions DROP COLUMN resource_limits_json;
                  CREATE TABLE unexpected_platform_table(id INTEGER PRIMARY KEY) STRICT;",
             )

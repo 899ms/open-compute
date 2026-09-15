@@ -275,64 +275,18 @@ pub(super) async fn run(platform: BoundPlatform) -> Result<(), PlatformError> {
         scheduler_service.run(scheduler_shutdown_rx).await
     }));
 
-    let mut watch_rx = supervisor.subscribe();
-    let health_watch = health.clone();
-    let metrics_watch = metrics.clone();
-    let storage_watch = storage.clone();
-    let service_invocations_watch = service_invocations;
-    let version_pins_watch = version_pins.clone();
-    let images_watch = images;
-    let control_descriptor_watch = control_descriptor;
-    tokio::spawn(async move {
-        let mut generation_resources = RuntimeGenerationResources::new(
-            service_invocations_watch.as_ref().clone(),
-            version_pins_watch.clone(),
-        );
-        loop {
-            let snap = watch_rx.borrow().clone();
-            metrics_watch.observe_supervisor(&snap);
-            let generation_update = generation_resources.observe(&snap);
-            if snap.state == SupervisorState::Running
-                && generation_update.child_changed
-                && DurableObjectRepository::new(&storage_watch)
-                    .count_live_objects()
-                    .is_ok_and(|count| count > 0)
-            {
-                metrics_watch.inc_do_facet_reload(DoFacetReloadReason::Restart);
-            }
-            if generation_update.resources_cleared {
-                metrics_watch.set_service_invocation_counts(0, 0, 0);
-                if let Err(error) = images_watch.clear_sessions() {
-                    tracing::error!(
-                        code = error.code().as_str(),
-                        "failed to clear image sessions after runtime generation transition"
-                    );
-                }
-            }
-            if let Err(err) = health_watch.apply_supervisor(&snap) {
-                tracing::error!(
-                    code = err.code().as_str(),
-                    "runtime health transition failed"
-                );
-            }
-            let mut descriptor = control_descriptor_watch.clone();
-            descriptor.readiness = match snap.state {
-                SupervisorState::Running => "ready",
-                SupervisorState::BackingOff => "degraded",
-                SupervisorState::Failed => "failed",
-                _ => "starting",
-            }
-            .to_owned();
-            descriptor.published_at = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .ok()
-                .and_then(|duration| u64::try_from(duration.as_millis()).ok())
-                .unwrap_or(u64::MAX);
-            let _ = control_update_tx.send(descriptor);
-            if watch_rx.changed().await.is_err() {
-                break;
-            }
-        }
+    spawn_supervisor_watch(SupervisorWatch {
+        receiver: supervisor.subscribe(),
+        health: health.clone(),
+        metrics: metrics.clone(),
+        storage: storage.clone(),
+        service_invocations,
+        version_pins: version_pins.clone(),
+        images,
+        descriptor: control_descriptor,
+        diagnostics_root: loaded.config.data.path.clone(),
+        supervisor: supervisor.clone(),
+        control_update_tx,
     });
 
     let run_err = wait_signals_and_servers(
@@ -357,6 +311,131 @@ pub(super) async fn run(platform: BoundPlatform) -> Result<(), PlatformError> {
         None => Ok(()),
         Some(err) => Err(err),
     }
+}
+
+struct SupervisorWatch {
+    receiver: watch::Receiver<open_compute_runtime::supervisor::SupervisorSnapshot>,
+    health: HealthCoordinator,
+    metrics: Arc<MetricsRegistry>,
+    storage: Arc<PlatformStorage>,
+    service_invocations: Arc<ServiceInvocationRegistry>,
+    version_pins: VersionPins,
+    images: Arc<ImageBindingService>,
+    descriptor: crate::instance_control::GenerationDescriptor,
+    diagnostics_root: std::path::PathBuf,
+    supervisor: Arc<WorkerdSupervisor>,
+    control_update_tx: mpsc::UnboundedSender<crate::instance_control::GenerationDescriptor>,
+}
+
+fn spawn_supervisor_watch(mut watch: SupervisorWatch) {
+    tokio::spawn(async move {
+        let mut generation_resources = RuntimeGenerationResources::new(
+            watch.service_invocations.as_ref().clone(),
+            watch.version_pins.clone(),
+        );
+        let mut recorded_startup_id = None;
+        loop {
+            let snapshot = watch.receiver.borrow().clone();
+            if let (Some(startup_id), Some(exit), Some(diagnostics)) = (
+                snapshot.last_exit_startup_id,
+                snapshot.last_exit.as_ref(),
+                watch.supervisor.last_diagnostics(),
+            ) && recorded_startup_id != Some(startup_id)
+            {
+                let timestamp_ms = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+                    .unwrap_or(i64::MAX);
+                let mut deployments = watch.version_pins.active_deployments();
+                deployments.sort_unstable_by_key(ToString::to_string);
+                deployments.dedup();
+                let attribution = if exit.code_name != ErrorCode::RuntimeExitedInFlight.as_str() {
+                    "not_applicable"
+                } else if let [deployment_id] = deployments.as_slice() {
+                    match WorkerRepository::new(watch.storage.db()).quarantine_active_deployment(
+                        *deployment_id,
+                        "RUNTIME_UNEXPECTED_EXIT",
+                        RequestId::generate(),
+                        timestamp_ms,
+                    ) {
+                        Ok(true) => "deployment_quarantined",
+                        Ok(false) => "attribution_stale",
+                        Err(error) => {
+                            tracing::error!(
+                                code = error.code().as_str(),
+                                "failed to quarantine attributed deployment"
+                            );
+                            "attribution_failed"
+                        }
+                    }
+                } else if deployments.len() > 1 {
+                    "attribution_ambiguous"
+                } else {
+                    "unattributed"
+                };
+                if let Err(error) = crate::runtime_diagnostics::record(
+                    &watch.diagnostics_root,
+                    timestamp_ms,
+                    startup_id,
+                    exit,
+                    &diagnostics,
+                    attribution,
+                ) {
+                    tracing::error!(
+                        code = error.code().as_str(),
+                        "failed to persist workerd incident diagnostics"
+                    );
+                } else {
+                    recorded_startup_id = Some(startup_id);
+                }
+            }
+            watch.metrics.observe_supervisor(&snapshot);
+            let generation_update = generation_resources.observe(&snapshot);
+            if snapshot.state == SupervisorState::Running
+                && generation_update.child_changed
+                && DurableObjectRepository::new(&watch.storage)
+                    .count_live_objects()
+                    .is_ok_and(|count| count > 0)
+            {
+                watch
+                    .metrics
+                    .inc_do_facet_reload(DoFacetReloadReason::Restart);
+            }
+            if generation_update.resources_cleared {
+                watch.metrics.set_service_invocation_counts(0, 0, 0);
+                if let Err(error) = watch.images.clear_sessions() {
+                    tracing::error!(
+                        code = error.code().as_str(),
+                        "failed to clear image sessions after runtime generation transition"
+                    );
+                }
+            }
+            if let Err(error) = watch.health.apply_supervisor(&snapshot) {
+                tracing::error!(
+                    code = error.code().as_str(),
+                    "runtime health transition failed"
+                );
+            }
+            let mut descriptor = watch.descriptor.clone();
+            descriptor.readiness = match snapshot.state {
+                SupervisorState::Running => "ready",
+                SupervisorState::BackingOff => "degraded",
+                SupervisorState::Failed => "failed",
+                _ => "starting",
+            }
+            .to_owned();
+            descriptor.published_at = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .ok()
+                .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+                .unwrap_or(u64::MAX);
+            let _ = watch.control_update_tx.send(descriptor);
+            if watch.receiver.changed().await.is_err() {
+                break;
+            }
+        }
+    });
 }
 
 fn artifact_api(

@@ -19,8 +19,9 @@ use open_compute_artifacts::{
 use open_compute_core::config::MetricsConfig;
 use open_compute_core::{
     AiAuthConfig, AiBackendConfig, AiBackendProtocol, AiEmbeddingModelConfig,
-    AiEmbeddingProfileConfig, AiTokenizer, AiTokenizerArtifactConfig, AiTokenizerConfig,
-    DocumentParserConfig, PlatformConfig, R2Config, SecretString,
+    AiEmbeddingProfileConfig, AiSourceProviderConfig, AiTokenizer, AiTokenizerArtifactConfig,
+    AiTokenizerConfig, DocumentParserConfig, PlatformConfig, R2Config, SecretReference,
+    SecretString,
 };
 use open_compute_storage::{
     AiSearchObjectReference, R2BucketRepository, R2ObjectRecord, R2ObjectRepository,
@@ -91,7 +92,30 @@ impl SearchBehaviorFixture {
         Self::create_with_parser(executable).await
     }
 
+    async fn create_with_manual_provider(endpoint: String) -> Self {
+        let executable = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("ocd");
+        assert!(executable.is_file(), "missing test ocd at {executable:?}");
+        Self::create_with_parser_and_manual_endpoint(executable, endpoint).await
+    }
+
     async fn create_with_parser(parser_executable: PathBuf) -> Self {
+        Self::create_with_parser_and_manual_endpoint(
+            parser_executable,
+            "http://127.0.0.1:8099/source".to_owned(),
+        )
+        .await
+    }
+
+    async fn create_with_parser_and_manual_endpoint(
+        parser_executable: PathBuf,
+        manual_endpoint: String,
+    ) -> Self {
         let runtime =
             RuntimeFeatureFixture::create(open_compute_workers::VersionRuntimeFeatures::default())
                 .await;
@@ -118,7 +142,24 @@ impl SearchBehaviorFixture {
         let namespace = ResourceRepository::new(runtime.storage.db())
             .get(runtime.account, namespace_id)
             .unwrap();
-        let ai = keyword_ai_config();
+        let manual_credential = runtime._temp.path().join("manual-source-token");
+        std::fs::write(&manual_credential, "fixture-manual-token").unwrap();
+        std::fs::set_permissions(&manual_credential, std::fs::Permissions::from_mode(0o600))
+            .unwrap();
+        let mut ai = keyword_ai_config();
+        ai.source_providers.insert(
+            "fixture-manual".to_owned(),
+            AiSourceProviderConfig {
+                endpoint: manual_endpoint,
+                account_ids: vec![runtime.account],
+                source: "fixture-files".to_owned(),
+                credential: SecretReference {
+                    env: None,
+                    file: Some(manual_credential),
+                },
+                max_source_bytes: 4 * 1024 * 1024,
+            },
+        );
         let objects = ai_search_objects(&runtime._mock);
         let parser = Arc::new(
             DocumentParserBindingService::with_executable(
@@ -163,6 +204,7 @@ impl SearchBehaviorFixture {
             resource,
             read: true,
             write: true,
+            allow_extensions: true,
             request_id: RequestId::generate(),
             _bound_pin: self.pins.try_pin(resource_id).unwrap(),
         }

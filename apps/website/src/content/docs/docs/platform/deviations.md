@@ -29,6 +29,7 @@ Supported Worker API behavior is tracked against [Workers runtime APIs](https://
 | Cron                                                                                        | UTC only, five fields, plus documented local Quartz-like extensions                                   | [Cron Triggers](/docs/workers/configuration/cron-triggers/)         |
 | Cron recovery                                                                               | At most the newest slot within misfire grace; no full downtime replay                                 |                                                                     |
 | Cron known failures                                                                         | Configured bounded local retry unless `noRetry()` is called                                           |                                                                     |
+| Cron unknown dispatch                                                                       | Consumes a delivery attempt; retries only within budget and a fixed 15-minute deadline                |                                                                     |
 
 ## Storage
 
@@ -70,3 +71,7 @@ Supported Worker API behavior is tracked against [Workers runtime APIs](https://
 | Live values                                                                           | `ocd capabilities --json`; see [Limits](/docs/platform/limits/)      |                                                                                       |
 | Images                                                                                | Bounded local raster transform binding, not hosted Cloudflare Images | [Images](/docs/images/)                                                               |
 | Hosted delivery / upload / signing, URL transforms, video, AI upscale, product quotas | Out of scope                                                         |                                                                                       |
+
+## Namespaced extensions
+
+`open-compute:manual` AI Search is an explicit API superset, not a compatibility deviation. Only `open-compute:ai-search` types and the namespaced `openComputeCreateManual` / `openComputeUpsert` methods expose it. Official Cloudflare management routes, source enums, item shapes, and conformance counts remain unchanged.

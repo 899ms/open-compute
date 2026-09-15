@@ -20,12 +20,12 @@ ocd capabilities --json
 - Images、Vectorize、AI Search、Markdown Conversion、Workers Logs/realtime tail 与 Artifacts
 - Cloudflare-compatible `/client/v4` 管理 API、认证 Wrangler 工作流和 operator Dashboard
 
-多数产品状态为 `supported_with_deviation`，因为它们使用单机 local authority，而不是 Cloudflare 托管全球拓扑。Vectorize 使用确定性的精确搜索。AI Search 与 Markdown Conversion 使用 operator-configured provider，不代表提供完整 Workers AI inference。
+多数产品状态为 `supported_with_deviation`，因为它们使用单机 local authority，而不是 Cloudflare 托管全球拓扑。Vectorize 使用确定性的精确搜索。AI Search 与 Markdown Conversion 使用 operator-configured provider，不代表提供完整 Workers AI inference。单独提供类型的 `open-compute:manual` AI Search source 是 namespaced open-compute API superset，不计入 Cloudflare stable-member inventory。
 
 ## Runtime 与项目合同
 
 正式 release 内嵌由 formal runtime lock 选择并校验 checksum 的 `elliothux/workerd` fork，生产启动保持离线。项目使用标准 `wrangler.jsonc` 和项目内 Wrangler。只有当前 runtime contract 支持的 compatibility date 与 flag 才能通过 admission。
 
-Dynamic Worker Loader 由原生 runtime 提供有界 surface，但仍缺少文档所述 CPU、memory 和 subrequest enforcement，因此不代表完整 Workers for Platforms 产品。
+Dynamic Worker Loader 由原生 runtime 提供有界 surface，并执行文档列出的本地 CPU、memory、subrequest、startup 与 simultaneous-connection ceiling；仍有两个 experimental trust/tail member blocked，因此不代表完整 Workers for Platforms 产品。
 
 参见[产品](/zh/docs/products/)、[行为差异](/zh/docs/platform/deviations/)、[限制](/zh/docs/platform/limits/)、[未提供能力](/zh/docs/platform/unsupported/)和[生成的 Worker API 索引](/zh/docs/platform/reference/api/)。

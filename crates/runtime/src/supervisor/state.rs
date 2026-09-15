@@ -68,6 +68,8 @@ pub struct SupervisorSnapshot {
     pub attempt: u32,
     /// Last sanitized exit.
     pub last_exit: Option<SanitizedExit>,
+    /// Runtime generation that produced [`Self::last_exit`].
+    pub last_exit_startup_id: Option<StartupId>,
     /// Next retry instant while backing off.
     pub next_retry_at: Option<SystemTime>,
     /// Child PID while a process exists.
@@ -100,6 +102,7 @@ impl Debug for SupervisorSnapshot {
             .field("last_transition_at", &self.last_transition_at)
             .field("attempt", &self.attempt)
             .field("last_exit", &self.last_exit)
+            .field("last_exit_startup_id", &self.last_exit_startup_id)
             .field("next_retry_at", &self.next_retry_at)
             .field("pid", &self.pid)
             .field("pgid", &self.pgid)
@@ -118,6 +121,7 @@ impl SupervisorSnapshot {
             last_transition_at: now,
             attempt: 0,
             last_exit: None,
+            last_exit_startup_id: None,
             next_retry_at: None,
             pid: None,
             pgid: None,

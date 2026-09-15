@@ -12,6 +12,10 @@
 `/client/v4/open-compute/scheduler` 与 account-scoped `/client/v4/accounts/{account_id}/workflows`
 检查 scheduler 和 Workflow authority；Workflow 的 Unknown dispatch 保留 lease，不能把它当成可立即重试的业务失败。
 
+Cron claim 在 dispatch 前消耗 one-based delivery attempt；unknown outcome 只在剩余 retry budget 与固定 15 分钟
+deadline 内恢复。activation 进入 draining 后立即 terminalize ready run，claimed run 到期后不再 requeue。Cron
+inspection 的 last error、unknown classification 与 oldest live deadline 用于判断收敛，不要手动改 attempt 或 claim。
+
 Queue consumer 和 Cron activation 的 dispatch epoch 冻结在 scheduler projection 中。添加或编辑
 HTTP route 不会替换它；重试 promotion 或启动 reconcile 复用该 epoch，并继续严格校验 target、
 descriptor 与产品 generation。不要把当前 Worker route revision 写回已创建的 projection 或 claim。

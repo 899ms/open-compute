@@ -12,6 +12,8 @@ title: "Scheduler 恢复"
 
 优先等待 token/expiry recovery 和 bounded repair。通过 `/client/v4/open-compute/scheduler` 检查 scheduler，通过官方 account Workflows API 检查实例；Workflow 的 Unknown dispatch 保留 lease，不能把它当成可立即重试的业务失败。
 
+Cron claim 在 dispatch 前先消耗 one-based delivery attempt。transport-unknown outcome 保留 claim 到 lease 到期，之后只有同时剩余配置 retry budget 和固定 15 分钟 handler deadline 时才重试。activation 进入 draining 后会立即 terminalize ready run，并且不再 requeue 到期 claim。Cron inspection 报告最近 error、最近 unknown classification 与最早 live deadline，因此单个 unknown result 不会无限阻塞后续 deployment。
+
 Queue consumer 和 Cron activation 的 dispatch epoch 冻结在 scheduler projection 中。添加或编辑 HTTP route 不会替换它；重试 promotion 或启动 reconcile 复用该 epoch，并继续严格校验 target、descriptor 与产品 generation。不要把当前 Worker route revision 写回已创建的 projection 或 claim。
 
 只要 control 中存在 Queue、Cron activation、Workflow instance（包括 released/terminal/retained）、Workflow operation 或 Workflow version，就不能通过空库重建恢复调度历史。Workflow purge 在释放 control 引用后，scheduler 仍可能留有 GC receipt；损坏文件无法证明这些记录不存在。此时停止服务并按 [fresh-host restore](/zh/docs/ocd/incidents/fresh-host/) 恢复整机 snapshot；这不会撤销已发生的外部副作用。不要手动删除 referrer、operation、receipt 或 step row 绕过检查。

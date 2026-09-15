@@ -147,12 +147,13 @@ async fn p3_service_calls_from_queue_cron_do_and_workflow_event_sources() {
     let controller = VersionController::new(
         &harness.storage,
         harness.artifacts.clone(),
-        validator,
+        validator.clone(),
         BundleLimits::default(),
     )
     .with_product_promoter(open_compute_service::product_promotion_for_test(
         harness.storage.clone(),
         scheduler,
+        validator,
     ));
     let _target_version = deploy(
         &controller,

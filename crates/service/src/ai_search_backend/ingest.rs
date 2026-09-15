@@ -3,6 +3,68 @@
 use super::*;
 
 impl AiSearchBindingService {
+    pub(super) async fn manual_upsert(
+        &self,
+        authority: &Authority,
+        call: JsonCall,
+    ) -> Result<Value, PlatformError> {
+        let input: ManualUpsertPayload =
+            serde_json::from_value(call.payload).map_err(|_| protocol())?;
+        let resolved = self.resolve_instance(authority, call.instance.as_deref())?;
+        let source = resolved
+            .record
+            .manual_source
+            .as_ref()
+            .ok_or_else(unsupported)?;
+        validate_source(
+            &input.key,
+            &input.content_type,
+            1,
+            self.parser.max_input_bytes(),
+        )?;
+        if input.revision.is_empty()
+            || input.revision.len() > 256
+            || !input.revision.is_ascii()
+            || input.revision.trim() != input.revision
+            || input.revision.chars().any(char::is_control)
+        {
+            return Err(limit());
+        }
+        let reader = self.manual_source_reader(&resolved.record)?;
+        let observed = reader.resolve(&input.key, &input.revision).await?;
+        if observed.content_type != input.content_type {
+            return Err(protocol());
+        }
+        validate_source(
+            &input.key,
+            &input.content_type,
+            observed.size,
+            self.parser.max_input_bytes(),
+        )?;
+        let (store, inspection) = self.open_store(&resolved.record)?;
+        let config: ResolvedAiSearchConfig =
+            serde_json::from_slice(&inspection.public_config_json).map_err(|_| corrupt())?;
+        let metadata_json = materialize_upload_metadata(&config, &input.metadata)?;
+        let upsert = store.upsert_manual_generation(&NewAiSearchManualGeneration {
+            provider_id: &source.provider_id,
+            source: &source.source_namespace,
+            key: &input.key,
+            revision: &observed.revision,
+            sha256: observed.sha256,
+            object_size: observed.size,
+            content_type: &observed.content_type,
+            metadata_json: &metadata_json,
+            now_ms: unix_ms(),
+        })?;
+        if upsert.job_id.is_some() && input.wait_for_completion {
+            self.run_coordinator_with_timeout(&resolved.record).await?;
+        }
+        let item = store
+            .get_desired_item(&upsert.item_id)?
+            .ok_or_else(corrupt)?;
+        item_info_value_with_source(&item, None)
+    }
+
     pub(super) async fn resume_deleting_instance(
         &self,
         record: &AiSearchInstanceRecord,
@@ -282,6 +344,17 @@ impl AiSearchBindingService {
             let item = store.get_item(&input.item_id)?.ok_or_else(not_found)?;
             return item_info_value_with_source(&item, Some(source.bucket_name.as_str()));
         }
+        if matches!(item.source, AiSearchSourceReference::Manual(_)) {
+            if wait_for_completion && matches!(item.status.as_str(), "queued" | "running") {
+                if bounded_wait {
+                    self.run_coordinator_with_timeout(&instance.record).await?;
+                } else {
+                    self.run_coordinator(&instance.record, &store).await?;
+                }
+            }
+            let item = store.get_item(&input.item_id)?.ok_or_else(not_found)?;
+            return item_info_value_with_source(&item, None);
+        }
         let AiSearchSourceReference::Builtin(source) = &item.source else {
             return Err(corrupt());
         };
@@ -414,7 +487,9 @@ impl AiSearchBindingService {
             record.resource.id,
         );
         let source_reader: Arc<dyn crate::ai_search_coordinator::AiSearchSourceReader> =
-            if let Some(source) = &record.r2_source {
+            if record.manual_source.is_some() {
+                Arc::new(self.manual_source_reader(record)?)
+            } else if let Some(source) = &record.r2_source {
                 Arc::new(PlatformAiSearchSourceReader::new(
                     builtin_reader,
                     self.storage.clone(),
@@ -541,6 +616,40 @@ impl AiSearchBindingService {
                 };
                 crate::r2_backend::objects::validate_object_record(&logical, &download.metadata)?;
                 (download.metadata.size, download.body)
+            }
+            AiSearchSourceReference::Manual(source) => {
+                let bytes = self
+                    .manual_source_reader(&record)?
+                    .read_exact(source, &item.key, &item.content_type)
+                    .await?;
+                let mut response = Response::new(Body::from(bytes));
+                response.headers_mut().insert(
+                    "x-open-compute-filename",
+                    HeaderValue::from_str(&item.key).map_err(|_| corrupt())?,
+                );
+                response.headers_mut().insert(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_str(&item.content_type).map_err(|_| corrupt())?,
+                );
+                response.headers_mut().insert(
+                    header::CONTENT_LENGTH,
+                    HeaderValue::from_str(&source.object_size.to_string())
+                        .map_err(|_| corrupt())?,
+                );
+                for (name, value) in [
+                    (
+                        "x-open-compute-source-provider",
+                        source.provider_id.as_str(),
+                    ),
+                    ("x-open-compute-source", source.source.as_str()),
+                    ("x-open-compute-revision", source.revision.as_str()),
+                ] {
+                    response.headers_mut().insert(
+                        axum::http::HeaderName::from_static(name),
+                        HeaderValue::from_str(value).map_err(|_| corrupt())?,
+                    );
+                }
+                return Ok(response);
             }
         };
         let filename = HeaderValue::from_str(&item.key).map_err(|_| corrupt())?;

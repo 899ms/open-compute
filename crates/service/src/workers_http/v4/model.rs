@@ -17,6 +17,9 @@ pub(crate) struct WorkerUploadMetadata {
     /// Immutable runtime compatibility flags.
     #[serde(default)]
     pub compatibility_flags: Vec<String>,
+    /// Wrangler build provenance; accepted and intentionally not persisted.
+    #[serde(default)]
+    pub package_dependencies: Vec<WorkerUploadPackageDependency>,
     /// Environment and product bindings.
     #[serde(default)]
     pub bindings: Vec<WorkerUploadBinding>,
@@ -39,6 +42,18 @@ pub(crate) struct WorkerUploadMetadata {
     /// Standard resource limits declared through the Cloudflare upload wire.
     #[serde(default, deserialize_with = "deserialize_optional_resource_limits")]
     pub limits: Option<WorkerUploadResourceLimits>,
+}
+
+/// One package dependency emitted by Wrangler's dependency instrumentation.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorkerUploadPackageDependency {
+    #[serde(rename = "name")]
+    pub _name: String,
+    #[serde(rename = "packageJsonVersion")]
+    pub _package_json_version: String,
+    #[serde(rename = "installedVersion")]
+    pub _installed_version: String,
 }
 
 /// The fixed Wrangler `limits` schema accepted at the v4 boundary. Unknown fields are
@@ -142,6 +157,7 @@ impl std::fmt::Debug for WorkerUploadMetadata {
             .field("body_part", &self.body_part)
             .field("compatibility_date", &self.compatibility_date)
             .field("compatibility_flags", &self.compatibility_flags)
+            .field("package_dependencies", &self.package_dependencies.len())
             .field("bindings", &self.bindings.len())
             .field("keep_bindings", &self.keep_bindings)
             .field("annotations", &self.annotations)

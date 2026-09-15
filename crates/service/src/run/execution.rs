@@ -5,7 +5,7 @@ mod composition;
 use super::startup::PreparedPlatform;
 
 pub(super) async fn run_prepared(prepared: PreparedPlatform) -> Result<(), PlatformError> {
-    serve(composition::compose(prepared).await?).await
+    serve(Box::pin(composition::compose(prepared)).await?).await
 }
 
 async fn serve(composed: composition::ComposedPlatform) -> Result<(), PlatformError> {

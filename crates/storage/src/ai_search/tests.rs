@@ -116,6 +116,63 @@ fn instance_quarantine_removes_disposable_parse_cache_with_the_instance() {
 }
 
 #[test]
+fn manual_exact_revision_upsert_is_idempotent_and_generation_fenced() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let store = store(&directory.path().join("manual.sqlite"));
+    let input = NewAiSearchManualGeneration {
+        provider_id: "documents",
+        source: "primary",
+        key: "files/one.txt",
+        revision: "rev-1",
+        sha256: [1; 32],
+        object_size: 3,
+        content_type: "text/plain",
+        metadata_json: b"{}",
+        now_ms: 10,
+    };
+    let first = store
+        .upsert_manual_generation(&input)
+        .expect("first upsert");
+    assert!(first.job_id.is_some());
+    assert_eq!(
+        store
+            .upsert_manual_generation(&input)
+            .expect("idempotent upsert")
+            .job_id,
+        None
+    );
+    let changed = store
+        .upsert_manual_generation(&NewAiSearchManualGeneration {
+            revision: "rev-2",
+            sha256: [2; 32],
+            now_ms: 20,
+            ..input.clone()
+        })
+        .expect("changed revision");
+    assert_eq!(changed.item_id, first.item_id);
+    assert!(changed.job_id.is_some());
+    let metadata_changed = store
+        .upsert_manual_generation(&NewAiSearchManualGeneration {
+            metadata_json: br#"{"language":"en"}"#,
+            now_ms: 30,
+            revision: "rev-2",
+            sha256: [2; 32],
+            ..input
+        })
+        .expect("changed metadata");
+    assert!(metadata_changed.job_id.is_some());
+    let desired = store
+        .get_desired_item(&first.item_id)
+        .expect("read desired")
+        .expect("manual item");
+    let AiSearchSourceReference::Manual(reference) = desired.source else {
+        panic!("manual locator expected")
+    };
+    assert_eq!(reference.revision, "rev-2");
+    assert_eq!(reference.sha256, [2; 32]);
+}
+
+#[test]
 fn model_contract_shape_and_embedded_digest_fail_closed() {
     let directory = tempfile::tempdir().expect("tempdir");
     let public = br#"{"chunk":true,"chunk_overlap":10,"chunk_size":1,"custom_metadata":[],"fusion_method":"rrf","index_method":{"keyword":true,"vector":true},"max_num_results":10,"metadata":{},"score_threshold":0.4}"#;

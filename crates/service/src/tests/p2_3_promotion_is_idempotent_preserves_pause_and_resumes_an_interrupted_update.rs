@@ -478,7 +478,7 @@ async fn exercise_dispatch_and_operator_controls(
         scheduler.clone().dispatch_queue_batch(batch).await;
     }
     for run in scheduler_store
-        .claim_cron_runs(706_000, 60_000, 250, 1)
+        .claim_cron_runs(706_000, 60_000, 250, 3, 1)
         .map(|(items, _)| items)
         .unwrap()
     {

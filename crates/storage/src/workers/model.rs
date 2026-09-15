@@ -65,6 +65,19 @@ pub struct WorkerRecord {
     pub ownership: WorkerOwnership,
 }
 
+/// Secret-free deployment runtime-assessment aggregate.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DeploymentRuntimeAssessmentSummary {
+    /// Deployments admitted by a real runtime generation.
+    pub dispatchable: u64,
+    /// Deployments permanently excluded from activation.
+    pub quarantined: u64,
+    /// Whether every active pointer references a dispatchable assessment.
+    pub active_runtime_dispatchable: bool,
+    /// Most recent stable quarantine reason, if any.
+    pub last_quarantine_reason: Option<String>,
+}
+
 /// Mutable Script-level Workers Logs policy frozen into each runtime snapshot.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

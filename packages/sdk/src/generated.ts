@@ -128,6 +128,11 @@ export type SystemStatus = {
     readonly state: string;
     readonly message?: string;
   }[];
+  readonly operator_proxy: {
+    readonly mode: "direct" | "proxy" | "invalid";
+    readonly source_variable?: string;
+    readonly origin?: string;
+  };
   readonly observability?: {
     readonly state: "healthy" | "degraded";
     readonly retention_ms: number;
@@ -137,6 +142,12 @@ export type SystemStatus = {
     readonly tail_sessions: number;
     readonly closed_client_drops: number;
     readonly overload_drops: number;
+  };
+  readonly deployment_runtime?: {
+    readonly dispatchable: number;
+    readonly quarantined: number;
+    readonly active_runtime_dispatchable: boolean;
+    readonly last_quarantine_reason?: string;
   };
 };
 

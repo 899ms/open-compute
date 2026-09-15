@@ -23,6 +23,7 @@ fn git(cwd: &Path, token: &str, args: &[&str]) -> Output {
         .args(args)
         .current_dir(cwd)
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_TERMINAL_PROMPT", "0")
         .env("HOME", cwd)
         .output()
         .unwrap()
@@ -196,6 +197,7 @@ async fn git_cli_push_clone_v1_v2_and_token_fences_interoperate() {
             .args(["clone", &remote_for_clone, clone_v1.to_str().unwrap()])
             .current_dir(&temp_path)
             .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_TERMINAL_PROMPT", "0")
             .env("HOME", &temp_path)
             .output()
             .unwrap();

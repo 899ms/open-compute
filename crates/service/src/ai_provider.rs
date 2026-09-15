@@ -5,14 +5,8 @@ mod vision;
 pub use vision::OpenAiVisionClient;
 
 use crate::auth::resolve_admin_auth;
-use bytes::Bytes;
-use http_body_util::{BodyExt as _, Full, Limited};
+use hyper::StatusCode;
 use hyper::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue, RETRY_AFTER};
-use hyper::{Method, Request, StatusCode, Uri};
-use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use hyper_util::client::legacy::Client;
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::rt::TokioExecutor;
 use open_compute_core::{
     AiAuthConfig, AiBackendConfig, AiConfig, AiGenerationCapability,
     ResolvedEmbeddingModelContract, ResolvedVlmModelContract,
@@ -21,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
-type ProviderTransport = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
+type ProviderTransport = crate::operator_http::OperatorHttpClient;
 
 /// Stable, content-free provider failure classification.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -130,7 +124,7 @@ pub struct ChatCompletion {
 #[derive(Clone)]
 pub struct OpenAiProviderClient {
     transport: ProviderTransport,
-    endpoint: Uri,
+    endpoint: url::Url,
     remote_model: String,
     contract_sha256: String,
     dimensions: usize,
@@ -172,16 +166,12 @@ impl OpenAiProviderClient {
             .ok_or(AiProviderError::ContractMismatch)?;
         let endpoint = backend
             .endpoint
-            .parse::<Uri>()
+            .parse::<url::Url>()
             .map_err(|_| AiProviderError::ContractMismatch)?;
         let headers = resolve_backend_headers(backend)?;
-        let connector = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
         Ok(Self {
-            transport: Client::builder(TokioExecutor::new()).build(connector),
+            transport: ProviderTransport::from_process_env()
+                .map_err(|_| AiProviderError::ContractMismatch)?,
             endpoint,
             remote_model: contract.remote_model.clone(),
             contract_sha256: contract.contract_sha256.clone(),
@@ -234,15 +224,14 @@ impl OpenAiProviderClient {
         if body.len() > self.max_request_bytes {
             return Err(AiProviderError::InvalidRequest);
         }
-        let builder = Request::builder()
-            .method(Method::POST)
-            .uri(&self.endpoint)
-            .header(CONTENT_TYPE, "application/json");
-        let mut request = builder
-            .body(Full::new(Bytes::from(body)))
-            .map_err(|_| AiProviderError::InvalidRequest)?;
-        apply_backend_headers(&mut request, &self.headers);
-        let response = tokio::time::timeout(self.timeout, self.transport.request(request))
+        let request = self
+            .transport
+            .request(reqwest::Method::POST, self.endpoint.clone())
+            .map_err(|_| AiProviderError::ContractMismatch)?
+            .header(CONTENT_TYPE, "application/json")
+            .headers(self.headers.clone())
+            .body(body);
+        let response = tokio::time::timeout(self.timeout, request.send())
             .await
             .map_err(|_| AiProviderError::Timeout)?
             .map_err(|_| AiProviderError::Transient)?;
@@ -274,14 +263,7 @@ impl OpenAiProviderClient {
         if !is_json {
             return Err(AiProviderError::MalformedResponse);
         }
-        let bytes = tokio::time::timeout(
-            self.timeout,
-            Limited::new(response.into_body(), self.max_response_bytes).collect(),
-        )
-        .await
-        .map_err(|_| AiProviderError::Timeout)?
-        .map_err(|_| AiProviderError::MalformedResponse)?
-        .to_bytes();
+        let bytes = collect_response(response, self.max_response_bytes, self.timeout).await?;
         let response: EmbeddingResponse =
             serde_json::from_slice(&bytes).map_err(|_| AiProviderError::MalformedResponse)?;
         self.validate_response(response, inputs.len())
@@ -335,7 +317,7 @@ impl OpenAiProviderClient {
 #[derive(Clone)]
 pub struct OpenAiChatClient {
     transport: ProviderTransport,
-    endpoint: Uri,
+    endpoint: url::Url,
     remote_model: String,
     provider_revision: Option<String>,
     headers: HeaderMap,
@@ -376,16 +358,12 @@ impl OpenAiChatClient {
             .ok_or(AiProviderError::ContractMismatch)?;
         let endpoint = backend
             .endpoint
-            .parse::<Uri>()
+            .parse::<url::Url>()
             .map_err(|_| AiProviderError::ContractMismatch)?;
         let headers = resolve_backend_headers(backend)?;
-        let connector = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
         Ok(Self {
-            transport: Client::builder(TokioExecutor::new()).build(connector),
+            transport: ProviderTransport::from_process_env()
+                .map_err(|_| AiProviderError::ContractMismatch)?,
             endpoint,
             remote_model: model.remote_model.clone(),
             provider_revision: model.provider_revision.clone(),
@@ -408,14 +386,7 @@ impl OpenAiChatClient {
         if !content_type_is(&response, "application/json") {
             return Err(AiProviderError::MalformedResponse);
         }
-        let bytes = tokio::time::timeout(
-            self.timeout,
-            Limited::new(response.into_body(), self.max_response_bytes).collect(),
-        )
-        .await
-        .map_err(|_| AiProviderError::Timeout)?
-        .map_err(|_| AiProviderError::MalformedResponse)?
-        .to_bytes();
+        let bytes = collect_response(response, self.max_response_bytes, self.timeout).await?;
         let response: ChatResponse =
             serde_json::from_slice(&bytes).map_err(|_| AiProviderError::MalformedResponse)?;
         if !valid_response_model(response.model.as_deref()) || response.choices.len() != 1 {
@@ -451,7 +422,7 @@ impl OpenAiChatClient {
             return Err(AiProviderError::MalformedResponse);
         }
         Ok(ChatSseStream {
-            body: response.into_body(),
+            body: response,
             buffer: Vec::new(),
             consumed: 0,
             maximum: self.max_response_bytes,
@@ -521,7 +492,7 @@ impl OpenAiChatClient {
         messages: &[ChatMessage],
         max_tokens: u32,
         stream: bool,
-    ) -> Result<hyper::Response<hyper::body::Incoming>, AiProviderError> {
+    ) -> Result<reqwest::Response, AiProviderError> {
         if messages.is_empty()
             || max_tokens == 0
             || messages
@@ -540,15 +511,14 @@ impl OpenAiChatClient {
         if body.len() > self.max_request_bytes {
             return Err(AiProviderError::InvalidRequest);
         }
-        let builder = Request::builder()
-            .method(Method::POST)
-            .uri(&self.endpoint)
-            .header(CONTENT_TYPE, "application/json");
-        let mut request = builder
-            .body(Full::new(Bytes::from(body)))
-            .map_err(|_| AiProviderError::InvalidRequest)?;
-        apply_backend_headers(&mut request, &self.headers);
-        let response = tokio::time::timeout(self.timeout, self.transport.request(request))
+        let request = self
+            .transport
+            .request(reqwest::Method::POST, self.endpoint.clone())
+            .map_err(|_| AiProviderError::ContractMismatch)?
+            .header(CONTENT_TYPE, "application/json")
+            .headers(self.headers.clone())
+            .body(body);
+        let response = tokio::time::timeout(self.timeout, request.send())
             .await
             .map_err(|_| AiProviderError::Timeout)?
             .map_err(|_| AiProviderError::Transient)?;
@@ -559,7 +529,7 @@ impl OpenAiChatClient {
 /// Bounded parser over an OpenAI-compatible SSE response body.
 #[derive(Debug)]
 pub struct ChatSseStream {
-    body: hyper::body::Incoming,
+    body: reqwest::Response,
     buffer: Vec<u8>,
     consumed: usize,
     maximum: usize,
@@ -597,12 +567,12 @@ impl ChatSseStream {
                 }
                 continue;
             }
-            let frame = tokio::time::timeout_at(self.deadline, self.body.frame())
+            let data = tokio::time::timeout_at(self.deadline, self.body.chunk())
                 .await
                 .map_err(|_| AiProviderError::Timeout)?
-                .ok_or(AiProviderError::MalformedResponse)?
-                .map_err(|_| AiProviderError::Transient)?;
-            if let Some(data) = frame.data_ref() {
+                .map_err(|_| AiProviderError::Transient)?
+                .ok_or(AiProviderError::MalformedResponse)?;
+            {
                 self.consumed = self
                     .consumed
                     .checked_add(data.len())
@@ -610,7 +580,7 @@ impl ChatSseStream {
                 if self.consumed > self.maximum {
                     return Err(AiProviderError::MalformedResponse);
                 }
-                self.buffer.extend_from_slice(data);
+                self.buffer.extend_from_slice(&data);
             }
         }
     }
@@ -622,9 +592,7 @@ impl ChatSseStream {
     }
 }
 
-fn classify_status(
-    response: hyper::Response<hyper::body::Incoming>,
-) -> Result<hyper::Response<hyper::body::Incoming>, AiProviderError> {
+fn classify_status(response: reqwest::Response) -> Result<reqwest::Response, AiProviderError> {
     let status = response.status();
     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
         return Err(AiProviderError::Unauthorized);
@@ -648,7 +616,7 @@ fn classify_status(
     Ok(response)
 }
 
-fn content_type_is(response: &hyper::Response<hyper::body::Incoming>, expected: &str) -> bool {
+fn content_type_is(response: &reqwest::Response, expected: &str) -> bool {
     response
         .headers()
         .get(CONTENT_TYPE)
@@ -688,10 +656,25 @@ fn resolve_backend_headers(backend: &AiBackendConfig) -> Result<HeaderMap, AiPro
     Ok(headers)
 }
 
-fn apply_backend_headers(request: &mut Request<Full<Bytes>>, headers: &HeaderMap) {
-    for (name, value) in headers {
-        request.headers_mut().insert(name, value.clone());
+async fn collect_response(
+    mut response: reqwest::Response,
+    maximum: usize,
+    timeout: Duration,
+) -> Result<Vec<u8>, AiProviderError> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    let mut bytes = Vec::new();
+    loop {
+        let chunk = tokio::time::timeout_at(deadline, response.chunk())
+            .await
+            .map_err(|_| AiProviderError::Timeout)?
+            .map_err(|_| AiProviderError::MalformedResponse)?;
+        let Some(chunk) = chunk else { break };
+        if bytes.len().saturating_add(chunk.len()) > maximum {
+            return Err(AiProviderError::MalformedResponse);
+        }
+        bytes.extend_from_slice(&chunk);
     }
+    Ok(bytes)
 }
 
 fn valid_response_model(model: Option<&str>) -> bool {

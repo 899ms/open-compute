@@ -15,6 +15,18 @@ ocd --config /etc/open-compute/config.toml config check
 
 内嵌默认模板与 `share/default-config.toml` 同结构。运行中的数值上限以 `ocd --config /abs/config.toml capabilities --json` 的 `limits` 为准。
 
+## Operator HTTP proxy
+
+operator-owned AI、target、release 与远程 S3 请求在 `ocd` 启动时选择一个 proxy，第一个非空变量生效：
+
+```text
+HTTPS_PROXY → https_proxy → ALL_PROXY → all_proxy → HTTP_PROXY → http_proxy → direct
+```
+
+选中值必须是无 credential 的 canonical `http://host:port` URL。`NO_PROXY` 优先于 `no_proxy`，支持 `*`、exact IP、IP CIDR、exact domain 与 domain suffix；loopback destination 始终直连。不支持 macOS System Settings、PAC/WPAD、SOCKS、proxy authentication、interception CA 或 OS proxy discovery。必须把变量写入实际启动 `ocd` 的 shell、launchd unit 或 service environment；显式 proxy 无效或不可达时 fail closed。tenant Worker egress 与 public Git import 不使用该策略。
+
+`GET /client/v4/open-compute/system/status` 只报告 `direct`、`proxy` 或 `invalid`；有效 proxy 还会报告命中的变量名和无 credential 的 origin。
+
 ## 密钥
 
 密钥只走引用，不要写进 unit、镜像、仓库或配置明文。

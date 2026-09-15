@@ -18,7 +18,18 @@ const { AiSearchNamespaceBinding, AiSearchInstanceBinding } =
     "./validation.js": validation,
   });
 const instance = { id: "docs", status: "ready" };
-const item = { id: "item-1", key: "guide.txt", status: "completed" };
+const manualSource = {
+  provider_id: "files",
+  source: "primary",
+  key: "guide.txt",
+  revision: "rev-1",
+};
+const item = {
+  id: "item-1",
+  key: "guide.txt",
+  status: "completed",
+  open_compute_source: manualSource,
+};
 const job = { id: "job-1", source: "user" };
 
 function transport(calls) {
@@ -32,16 +43,36 @@ function transport(calls) {
         };
       if (
         operation === "namespace.create" ||
+        operation === "namespace.openComputeCreateManual" ||
+        operation === "items.openComputeUpsert" ||
         operation.endsWith(".info") ||
         operation === "instance.update"
       )
-        return operation.startsWith("item.")
+        return operation.startsWith("item.") ||
+          operation === "items.openComputeUpsert"
           ? item
           : operation.startsWith("job.")
             ? job
             : instance;
       if (operation.endsWith(".search"))
-        return { search_query: "cache", chunks: [] };
+        return {
+          search_query: "cache",
+          chunks: [
+            {
+              id: "018ff000-0000-8000-8000-000000000002",
+              ...(operation === "namespace.search"
+                ? { instance_id: "docs" }
+                : {}),
+              type: "keyword",
+              score: 1,
+              text: "cache",
+              item: {
+                key: "guide.txt",
+                open_compute_source: manualSource,
+              },
+            },
+          ],
+        };
       if (operation.endsWith(".chatCompletions"))
         return {
           choices: [{ message: { role: "assistant", content: "answer" } }],
@@ -98,6 +129,9 @@ function transport(calls) {
           "content-type": "text/plain",
           "content-length": "5",
           "x-open-compute-filename": "guide.txt",
+          "x-open-compute-source-provider": "files",
+          "x-open-compute-source": "primary",
+          "x-open-compute-revision": "rev-1",
         },
       });
     },
@@ -121,6 +155,15 @@ test("AI Search namespace, instance, item, job, upload, download, and stream sur
   assert.equal(
     (await namespace.create({ id: "new-docs", index_method: { vector: true } }))
       .constructor,
+    AiSearchInstanceBinding,
+  );
+  assert.equal(
+    (
+      await namespace.openComputeCreateManual("files", {
+        id: "manual-docs",
+        index_method: { keyword: true },
+      })
+    ).constructor,
     AiSearchInstanceBinding,
   );
   const token = "018ff000-0000-8000-8000-000000000001";
@@ -161,11 +204,25 @@ test("AI Search namespace, instance, item, job, upload, download, and stream sur
     })) instanceof ReadableStream,
   );
   const direct = new AiSearchInstanceBinding(raw);
-  assert.equal((await direct.search({ query: "cache" })).chunks.length, 0);
+  assert.equal(
+    (await direct.search({ query: "cache" })).chunks[0].item.open_compute_source
+      .revision,
+    "rev-1",
+  );
   assert.equal((await direct.info()).id, "docs");
   assert.equal((await direct.update({ paused: true })).id, "docs");
   assert.equal((await direct.stats()).completed, 1);
   assert.equal((await direct.items.list()).result[0].id, "item-1");
+  assert.equal(
+    (
+      await direct.items.openComputeUpsert({
+        key: "files/guide.txt",
+        revision: "rev-1",
+        contentType: "text/plain",
+      })
+    ).id,
+    "item-1",
+  );
   assert.equal(
     (
       await direct.items.upload("guide.txt", "guide", {
@@ -174,10 +231,9 @@ test("AI Search namespace, instance, item, job, upload, download, and stream sur
     ).id,
     "item-1",
   );
-  assert.equal(
-    (await direct.items.get("item-1").download()).filename,
-    "guide.txt",
-  );
+  const download = await direct.items.get("item-1").download();
+  assert.equal(download.filename, "guide.txt");
+  assert.equal(download.open_compute_source.revision, "rev-1");
   assert.equal((await direct.items.get("item-1").logs()).result.length, 0);
   assert.equal((await direct.items.get("item-1").chunks()).result.length, 0);
   await direct.items.delete("item-1");
@@ -194,6 +250,16 @@ test("AI Search namespace, instance, item, job, upload, download, and stream sur
   assert.deepEqual(calls.find((call) => call.operation === "upload").options, {
     metadata: { rank: "2" },
   });
+  assert.deepEqual(
+    calls.find((call) => call.operation === "items.openComputeUpsert").payload,
+    {
+      key: "files/guide.txt",
+      revision: "rev-1",
+      contentType: "text/plain",
+      metadata: {},
+      waitForCompletion: false,
+    },
+  );
 });
 
 test("AI Search rejects unknown options, limits, unsupported first tranche, and malformed backend success", async () => {

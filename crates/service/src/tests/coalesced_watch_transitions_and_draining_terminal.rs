@@ -56,6 +56,7 @@ fn coalesced_watch_transitions_and_draining_terminal() {
         last_transition_at: now,
         attempt: 1,
         last_exit: None,
+        last_exit_startup_id: None,
         next_retry_at: None,
         pid: Some(1),
         pgid: Some(1),

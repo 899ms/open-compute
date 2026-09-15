@@ -15,6 +15,18 @@ ocd --config /etc/open-compute/config.toml config check
 
 The embedded default template matches `share/default-config.toml`. Live numeric limits come from `ocd --config /abs/config.toml capabilities --json` `limits`.
 
+## Operator HTTP proxy
+
+Operator-owned AI, target, release, and remote S3 requests select one proxy when `ocd` starts. The first non-empty variable wins:
+
+```text
+HTTPS_PROXY → https_proxy → ALL_PROXY → all_proxy → HTTP_PROXY → http_proxy → direct
+```
+
+The selected value must be a credential-free canonical `http://host:port` URL. `NO_PROXY` takes precedence over `no_proxy` and accepts `*`, exact IPs, IP CIDRs, exact domains, and domain suffixes. Loopback destinations always connect directly. macOS System Settings, PAC/WPAD, SOCKS, proxy authentication, interception CAs, and OS proxy discovery are not supported. Put the variables in the actual shell, launchd unit, or service environment that starts `ocd`; invalid or unreachable explicit proxies fail closed. Tenant Worker egress and public Git imports do not use this policy.
+
+`GET /client/v4/open-compute/system/status` reports only `direct`, `proxy`, or `invalid`; for a valid proxy it also reports the selecting variable and credential-free origin.
+
 ## Secrets
 
 Secrets are references only. Do not put them in units, images, the repository, or config plaintext.

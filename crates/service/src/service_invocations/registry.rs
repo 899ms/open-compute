@@ -508,12 +508,15 @@ impl ServiceInvocationRegistry {
                     "Assets-only Service target has no RPC entrypoint",
                 ));
             }
-            let pin = self.pins.pin(target.target_version_id).map_err(|_| {
-                PlatformError::new(
-                    ErrorCode::ServiceTargetNotReady,
-                    "Service target is fenced for deletion",
-                )
-            })?;
+            let pin = self
+                .pins
+                .pin_deployment(target.target_version_id, target.target_deployment_id)
+                .map_err(|_| {
+                    PlatformError::new(
+                        ErrorCode::ServiceTargetNotReady,
+                        "Service target is fenced for deletion",
+                    )
+                })?;
             let confirmed =
                 repository.resolve(request.caller_version_id, &request.binding_name, digest)?;
             if confirmed.target_version_id == target.target_version_id

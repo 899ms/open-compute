@@ -1,13 +1,6 @@
 //! Bounded HTTP fetch for formal release metadata and binaries.
 
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper::body::Incoming;
-use hyper::{Method, Request, StatusCode, Uri};
-use hyper_rustls::HttpsConnectorBuilder;
-use hyper_util::client::legacy::Client;
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::rt::TokioExecutor;
+use hyper::StatusCode;
 use open_compute_core::{ErrorCode, PlatformError};
 use std::collections::HashMap;
 use std::future::Future;
@@ -43,7 +36,7 @@ pub trait ReleaseHttp: Send + Sync {
 /// Production HTTPS/HTTP client with strict timeouts and size limits.
 #[derive(Clone, Debug)]
 pub struct LiveReleaseHttp {
-    client: Client<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>,
+    client: crate::operator_http::OperatorHttpClient,
     timeout: Duration,
     user_agent: String,
 }
@@ -56,14 +49,8 @@ impl LiveReleaseHttp {
 
     /// Build a client with an explicit per-request timeout (tests inject short values).
     pub fn with_timeout(timeout: Duration) -> Result<Self, PlatformError> {
-        crate::tls::install_default_provider();
-        let connector = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
         Ok(Self {
-            client: Client::builder(TokioExecutor::new()).build(connector),
+            client: crate::operator_http::OperatorHttpClient::from_process_env()?,
             timeout,
             user_agent: format!("open-compute-ocd/{}", env!("CARGO_PKG_VERSION")),
         })
@@ -85,22 +72,12 @@ impl ReleaseHttp for LiveReleaseHttp {
                             "release URL must use HTTP or HTTPS",
                         ));
                     }
-                    let uri: Uri = current.as_str().parse().map_err(|_| {
-                        PlatformError::new(ErrorCode::ReleaseUnsupported, "release URL is invalid")
-                    })?;
-                    let request = Request::builder()
-                        .method(Method::GET)
-                        .uri(uri)
+                    let request = self
+                        .client
+                        .request(reqwest::Method::GET, current.clone())?
                         .header("user-agent", &self.user_agent)
-                        .header("accept", "application/octet-stream, application/json")
-                        .body(Full::new(Bytes::new()))
-                        .map_err(|_| {
-                            PlatformError::new(
-                                ErrorCode::Internal,
-                                "failed to build release HTTP request",
-                            )
-                        })?;
-                    let response = self.client.request(request).await.map_err(|_| {
+                        .header("accept", "application/octet-stream, application/json");
+                    let response = request.send().await.map_err(|_| {
                         PlatformError::new(
                             ErrorCode::PlatformUnavailable,
                             "release HTTP request failed",
@@ -144,7 +121,7 @@ impl ReleaseHttp for LiveReleaseHttp {
                             "release HTTP request returned a non-success status",
                         ));
                     }
-                    return collect_body(response.into_body(), max_bytes).await;
+                    return collect_body(response, max_bytes).await;
                 }
                 Err(PlatformError::new(
                     ErrorCode::PlatformUnavailable,
@@ -215,25 +192,24 @@ impl ReleaseHttp for FixtureReleaseHttp {
     }
 }
 
-async fn collect_body(body: Incoming, max_bytes: usize) -> Result<Vec<u8>, PlatformError> {
+async fn collect_body(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, PlatformError> {
     let mut out = Vec::new();
-    let mut body = body;
-    while let Some(frame) = body.frame().await {
-        let frame = frame.map_err(|_| {
-            PlatformError::new(
-                ErrorCode::PlatformUnavailable,
-                "failed to read release HTTP body",
-            )
-        })?;
-        if let Some(data) = frame.data_ref() {
-            if out.len().saturating_add(data.len()) > max_bytes {
-                return Err(PlatformError::new(
-                    ErrorCode::LimitInvalid,
-                    "release HTTP body exceeds the size bound",
-                ));
-            }
-            out.extend_from_slice(data);
+    while let Some(data) = response.chunk().await.map_err(|_| {
+        PlatformError::new(
+            ErrorCode::PlatformUnavailable,
+            "failed to read release HTTP body",
+        )
+    })? {
+        if out.len().saturating_add(data.len()) > max_bytes {
+            return Err(PlatformError::new(
+                ErrorCode::LimitInvalid,
+                "release HTTP body exceeds the size bound",
+            ));
         }
+        out.extend_from_slice(&data);
     }
     Ok(out)
 }

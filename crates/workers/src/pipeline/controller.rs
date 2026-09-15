@@ -602,7 +602,11 @@ impl<'a> VersionController<'a> {
                     "Queue/Cron promotion coordinator is unavailable",
                 ));
             } else {
-                repo.create_deployment_checked(
+                let admitted_generation = self
+                    .validator
+                    .validate_deployment(candidate.clone())
+                    .await?;
+                let (_, deployment) = repo.create_deployment_checked(
                     request.account_id,
                     request.worker_id,
                     version.id,
@@ -612,7 +616,20 @@ impl<'a> VersionController<'a> {
                     &BTreeMap::new(),
                     request.request_id,
                     request.now_ms,
+                    admitted_generation,
                 )?;
+                if self.validator.current_generation() != Some(admitted_generation) {
+                    repo.quarantine_active_deployment(
+                        deployment.id,
+                        "RUNTIME_GENERATION_CHANGED",
+                        request.request_id,
+                        request.now_ms,
+                    )?;
+                    return Err(PlatformError::new(
+                        ErrorCode::RuntimeUnavailable,
+                        "workerd generation changed while deployment admission committed",
+                    ));
+                }
             }
             let worker = repo.get_worker(request.account_id, request.worker_id)?;
             let deployment_id = worker.active_deployment_id.ok_or_else(invariant)?;

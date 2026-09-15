@@ -1,7 +1,7 @@
 //! Immutable cross-Worker Service declarations and dynamic target authority.
 
 use crate::{ControlDb, VersionContentKind, VersionState};
-use open_compute_core::{AccountId, ErrorCode, PlatformError, VersionId, WorkerId};
+use open_compute_core::{AccountId, DeploymentId, ErrorCode, PlatformError, VersionId, WorkerId};
 use rusqlite::{OptionalExtension, Transaction, params};
 use std::str::FromStr;
 
@@ -50,6 +50,8 @@ pub struct ResolvedServiceTarget {
     pub caller_worker_id: WorkerId,
     /// Active target version selected for this call.
     pub target_version_id: VersionId,
+    /// Active target deployment selected for this call.
+    pub target_deployment_id: DeploymentId,
     /// Target descriptor digest required by `RuntimeSource`.
     pub target_worker_code_sha256: [u8; 32],
     /// Current target route generation.
@@ -104,7 +106,7 @@ impl<'a> ServiceRepository<'a> {
                     "SELECT s.version_id, s.binding_name, s.target_worker_id, s.entrypoint,
                             s.props_json, s.descriptor_sha256, s.created_at_ms,
                             caller.account_id, caller.id, caller.deleted_at_ms, cd.state,
-                            target.deleted_at_ms, target.route_generation,
+                            target.deleted_at_ms, target.route_generation, active.id,
                             td.id, td.content_kind, td.state, td.worker_code_sha256
                      FROM version_services s
                      JOIN worker_versions cd ON cd.id = s.version_id
@@ -122,10 +124,11 @@ impl<'a> ServiceRepository<'a> {
                         let caller_state: String = row.get(10)?;
                         let target_deleted: Option<i64> = row.get(11)?;
                         let route_generation: i64 = row.get(12)?;
-                        let target_version: Option<String> = row.get(13)?;
-                        let content_kind: Option<String> = row.get(14)?;
-                        let target_state: Option<String> = row.get(15)?;
-                        let target_digest: Option<Vec<u8>> = row.get(16)?;
+                        let target_deployment: Option<String> = row.get(13)?;
+                        let target_version: Option<String> = row.get(14)?;
+                        let content_kind: Option<String> = row.get(15)?;
+                        let target_state: Option<String> = row.get(16)?;
+                        let target_digest: Option<Vec<u8>> = row.get(17)?;
                         Ok((
                             service,
                             account,
@@ -134,6 +137,7 @@ impl<'a> ServiceRepository<'a> {
                             caller_state,
                             target_deleted,
                             route_generation,
+                            target_deployment,
                             target_version,
                             content_kind,
                             target_state,
@@ -151,6 +155,7 @@ impl<'a> ServiceRepository<'a> {
                 caller_state,
                 target_deleted,
                 route_generation,
+                target_deployment,
                 target_version,
                 content_kind,
                 target_state,
@@ -171,6 +176,7 @@ impl<'a> ServiceRepository<'a> {
                 return Err(target_not_ready());
             }
             let target_version = target_version.ok_or_else(target_not_ready)?;
+            let target_deployment = target_deployment.ok_or_else(target_not_ready)?;
             let content_kind = content_kind.ok_or_else(target_not_ready)?;
             let target_digest = target_digest.ok_or_else(target_not_ready)?;
             Ok(ResolvedServiceTarget {
@@ -178,6 +184,8 @@ impl<'a> ServiceRepository<'a> {
                 account_id: AccountId::from_str(&account).map_err(|_| invariant())?,
                 caller_worker_id: WorkerId::from_str(&caller_worker).map_err(|_| invariant())?,
                 target_version_id: VersionId::from_str(&target_version).map_err(|_| invariant())?,
+                target_deployment_id: DeploymentId::from_str(&target_deployment)
+                    .map_err(|_| invariant())?,
                 target_worker_code_sha256: target_digest
                     .as_slice()
                     .try_into()

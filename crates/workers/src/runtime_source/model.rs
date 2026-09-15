@@ -8,7 +8,7 @@ pub enum RuntimeScope {
     Runtime,
     /// Only a currently validating version; secrets are omitted.
     Validation,
-    /// A validating or ready version used to prove a named export; secrets are omitted.
+    /// A validating or ready version used for deployment admission; secrets are omitted.
     Probe,
 }
 

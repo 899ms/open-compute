@@ -49,6 +49,14 @@ interface AiSearchTransport {
   ): Promise<unknown>;
   download(instance: string | undefined, itemId: string): Promise<Response>;
 }
+
+interface OpenComputeManualUpsertInput {
+  key: string;
+  revision: string;
+  contentType: string;
+  metadata?: Record<string, string>;
+  waitForCompletion?: boolean;
+}
 function isTransport(value: unknown): value is AiSearchTransport {
   return (
     value !== null &&
@@ -85,6 +93,9 @@ class ItemBinding {
     const filename = response.headers.get("x-open-compute-filename");
     const contentType = response.headers.get("content-type");
     const size = Number(response.headers.get("content-length"));
+    const providerId = response.headers.get("x-open-compute-source-provider");
+    const source = response.headers.get("x-open-compute-source");
+    const revision = response.headers.get("x-open-compute-revision");
     if (
       !response.ok ||
       response.body === null ||
@@ -94,7 +105,27 @@ class ItemBinding {
       size < 0
     )
       fail("AI_SEARCH_PROTOCOL_ERROR");
-    return { body: response.body, filename, contentType, size };
+    if (
+      [providerId, source, revision].filter((value) => value !== null).length %
+      3
+    )
+      fail("AI_SEARCH_PROTOCOL_ERROR");
+    return {
+      body: response.body,
+      filename,
+      contentType,
+      size,
+      ...(providerId === null
+        ? {}
+        : {
+            open_compute_source: {
+              provider_id: text(providerId, 64),
+              source: text(source, 128),
+              key: filename,
+              revision: text(revision, 256),
+            },
+          }),
+    };
   }
   async sync(): Promise<AiSearchItemInfo> {
     return itemInfo(
@@ -258,6 +289,40 @@ class ItemsBinding {
       ["key"],
     );
     text(deleted.key, 1024);
+  }
+  async openComputeUpsert(
+    input: OpenComputeManualUpsertInput,
+  ): Promise<AiSearchItemInfo> {
+    const value = exact(input, [
+      "key",
+      "revision",
+      "contentType",
+      "metadata",
+      "waitForCompletion",
+    ]);
+    const payload = {
+      key: text(value.key, 1024),
+      revision: text(value.revision, 256),
+      contentType: text(value.contentType, 256),
+      metadata:
+        value.metadata === undefined ? {} : uploadMetadata(value.metadata),
+      waitForCompletion:
+        value.waitForCompletion === undefined
+          ? false
+          : value.waitForCompletion === true,
+    };
+    if (
+      value.waitForCompletion !== undefined &&
+      typeof value.waitForCompletion !== "boolean"
+    )
+      fail();
+    return itemInfo(
+      await this.#transport.call(
+        "items.openComputeUpsert",
+        this.#instance,
+        payload,
+      ),
+    );
   }
 }
 class JobBinding {
@@ -432,6 +497,20 @@ export class AiSearchNamespaceBinding {
     const parsed = config(value, false);
     instanceInfo(
       await this.#transport.call("namespace.create", undefined, parsed),
+    );
+    return new AiSearchInstanceBinding(this.#transport, parsed.id as string);
+  }
+  async openComputeCreateManual(
+    providerId: string,
+    value: AiSearchConfig,
+  ): Promise<AiSearchInstance> {
+    const parsed = config(value, false);
+    instanceInfo(
+      await this.#transport.call(
+        "namespace.openComputeCreateManual",
+        undefined,
+        { providerId: text(providerId, 64), config: parsed },
+      ),
     );
     return new AiSearchInstanceBinding(this.#transport, parsed.id as string);
   }

@@ -81,27 +81,28 @@ Write standard module workers (`export default { fetch }`) with the bindings you
 
 ### Runtime & bindings
 
-| Module                | Status             |
-| --------------------- | ------------------ |
-| Workers               | ██████████ 100% ✅ |
-| KV                    | ██████████ 100% ✅ |
-| R2                    | ██████████ 100% ✅ |
-| D1                    | ██████████ 100% ✅ |
-| Durable Objects       | ██████████ 100% ✅ |
-| Alarms                | ██████████ 100% ✅ |
-| Queues                | ██████████ 100% ✅ |
-| Cron                  | ██████████ 100% ✅ |
-| Workflows             | ██████████ 100% ✅ |
-| Static Assets         | ██████████ 100% ✅ |
-| Service Bindings      | ██████████ 100% ✅ |
-| Cache                 | ██████████ 100% ✅ |
-| Images                | ██████████ 100% ✅ |
-| Version Metadata      | ██████████ 100% ✅ |
-| WebSocket Hibernation | ██████████ 100% ✅ |
-| Vectorize             | ██████████ 100% ✅ |
-| Markdown Conversion   | ██████████ 100% ✅ |
-| AI Search             | ██████████ 100% ✅ |
-| Artifacts             | ██████████ 100% ✅ |
+| Module                  | Status             |
+| ----------------------- | ------------------ |
+| Workers                 | ██████████ 100% ✅ |
+| Workers Standard limits | ██████████ 100% ✅ |
+| KV                      | ██████████ 100% ✅ |
+| R2                      | ██████████ 100% ✅ |
+| D1                      | ██████████ 100% ✅ |
+| Durable Objects         | ██████████ 100% ✅ |
+| Alarms                  | ██████████ 100% ✅ |
+| Queues                  | ██████████ 100% ✅ |
+| Cron                    | ██████████ 100% ✅ |
+| Workflows               | ██████████ 100% ✅ |
+| Static Assets           | ██████████ 100% ✅ |
+| Service Bindings        | ██████████ 100% ✅ |
+| Cache                   | ██████████ 100% ✅ |
+| Images                  | ██████████ 100% ✅ |
+| Version Metadata        | ██████████ 100% ✅ |
+| WebSocket Hibernation   | ██████████ 100% ✅ |
+| Vectorize               | ██████████ 100% ✅ |
+| Markdown Conversion     | ██████████ 100% ✅ |
+| AI Search               | ██████████ 100% ✅ |
+| Artifacts               | ██████████ 100% ✅ |
 
 ### Management
 
@@ -114,11 +115,10 @@ Write standard module workers (`export default { fetch }`) with the bindings you
 
 ### Partial
 
-| Module                  | Status                                                  |
-| ----------------------- | ------------------------------------------------------- |
-| Dynamic Workers         | ████████░░ 76% — core Worker Loader APIs are available  |
-| Workers Standard limits | ██░░░░░░░░ 20% — planning                               |
-| Workers AI              | ██░░░░░░░░ 20% — Markdown Conversion and AI Search only |
+| Module          | Status                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| Dynamic Workers | █████████░ 92% — 23/25 Loader members; JS/Wasm, RPC, dynamic DO facets, and limits are qualified |
+| Workers AI      | ██░░░░░░░░ 20% — Markdown Conversion and AI Search only                                          |
 
 ### Planning
 

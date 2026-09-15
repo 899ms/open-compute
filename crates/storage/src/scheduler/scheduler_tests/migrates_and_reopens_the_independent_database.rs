@@ -108,7 +108,7 @@ fn legacy_head_is_adopted_and_reshaped_on_reopen() {
             row.get(0)
         })
         .unwrap();
-    assert_eq!(history, 1);
+    assert_eq!(history, current_scheduler_schema_version());
 }
 
 #[test]

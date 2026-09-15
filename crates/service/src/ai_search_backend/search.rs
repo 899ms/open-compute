@@ -376,8 +376,7 @@ impl AiSearchBindingService {
             .iter()
             .map(|candidate| {
                 let chunk = by_id.get(candidate.chunk_id.as_str()).ok_or_else(corrupt)?;
-                let metadata: Value =
-                    serde_json::from_slice(&chunk.metadata_json).map_err(|_| corrupt())?;
+                let item = search_item_value(&search_store, chunk)?;
                 Ok(json!({
                     "id": chunk.id,
                     "type": retrieval_type,
@@ -387,11 +386,7 @@ impl AiSearchBindingService {
                     } else {
                         expanded.get(&candidate.chunk_id).map_or(chunk.text.as_str(), String::as_str)
                     },
-                    "item": {
-                        "timestamp": chunk.item_created_at_ms,
-                        "key": chunk.item_key,
-                        "metadata": metadata,
-                    },
+                    "item": item,
                     "scoring_details": {
                         "vector_rank": candidate.vector_rank,
                         "vector_score": candidate.vector_score,
@@ -437,6 +432,32 @@ impl AiSearchBindingService {
             .await
             .map_err(provider_error)
     }
+}
+
+fn search_item_value(
+    store: &AiSearchStore,
+    chunk: &AiSearchChunkRecord,
+) -> Result<Value, PlatformError> {
+    let metadata: Value = serde_json::from_slice(&chunk.metadata_json).map_err(|_| corrupt())?;
+    let mut item = json!({
+        "timestamp": chunk.item_created_at_ms,
+        "key": chunk.item_key,
+        "metadata": metadata,
+    });
+    if let AiSearchSourceReference::Manual(source) =
+        store.get_item(&chunk.item_id)?.ok_or_else(corrupt)?.source
+    {
+        item.as_object_mut().ok_or_else(corrupt)?.insert(
+            "open_compute_source".to_owned(),
+            json!({
+                "provider_id": source.provider_id,
+                "source": source.source,
+                "key": chunk.item_key,
+                "revision": source.revision,
+            }),
+        );
+    }
+    Ok(item)
 }
 
 struct RetrievalPlan {

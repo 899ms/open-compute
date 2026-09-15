@@ -5,7 +5,6 @@ use open_compute_core::{
     AccountId, CronActivationId, CronRunId, CronSchedule, ErrorCode, PlatformError, VersionId,
     WorkerId, WorkloadSummary,
 };
-use rand::TryRngCore as _;
 use rusqlite::{OptionalExtension as _, Transaction, TransactionBehavior, params};
 
 /// Exact control-authoritative Cron activation copied into the scheduler database.
@@ -56,12 +55,38 @@ pub struct ClaimedCronRun {
     pub expression: String,
     /// Logical UTC scheduled time.
     pub scheduled_at_ms: i64,
-    /// Product retries already consumed.
+    /// Logical deliveries already started, including this claim.
     pub attempt: u8,
     /// Secret scheduler-only completion fence.
     pub claim_token: [u8; 32],
     /// Persisted lease expiry.
     pub claim_until_ms: i64,
+    /// Fixed Cloudflare Scheduled handler completion deadline.
+    pub dispatch_deadline_at_ms: i64,
+}
+
+/// Stable classification for a Cron delivery whose result is unknown.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CronUnknownReason {
+    /// Dispatch exceeded the transport timeout.
+    TransportTimeout,
+    /// The runtime connection ended without a result.
+    ConnectionLoss,
+    /// The runtime returned an invalid result.
+    MalformedResponse,
+    /// The supervised runtime generation changed during dispatch.
+    RuntimeGenerationLost,
+}
+
+impl CronUnknownReason {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::TransportTimeout => "transport-timeout",
+            Self::ConnectionLoss => "connection-loss",
+            Self::MalformedResponse => "malformed-response",
+            Self::RuntimeGenerationLost => "runtime-generation-lost",
+        }
+    }
 }
 
 /// Known native scheduled-handler result applied under the exact lease.
@@ -101,6 +126,8 @@ pub struct CronSlotSummary {
 #[path = "cron/inspection.rs"]
 mod inspection;
 pub use inspection::CronRuntimeInspection;
+#[path = "cron/delivery.rs"]
+mod delivery;
 
 impl SchedulerStore {
     /// Idempotently stage or verify one exact Cron schedule projection.
@@ -186,14 +213,51 @@ impl SchedulerStore {
         activation_generation: u64,
         now_ms: i64,
     ) -> Result<u64, PlatformError> {
-        self.set_cron_schedule_state(
-            activation_id,
-            activation_generation,
-            "draining",
-            &["staged", "accepting", "draining"],
-            now_ms,
-        )?;
-        self.cron_activation_in_flight(activation_id, activation_generation)
+        let mut connection = self.lock()?;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(cron_sql_error)?;
+        let changed = tx
+            .execute(
+                "UPDATE cron_schedules SET state = 'draining', updated_at_ms = ?1
+             WHERE activation_id = ?2 AND activation_generation = ?3
+               AND state IN ('staged', 'accepting', 'draining')",
+                params![
+                    now_ms,
+                    activation_id.to_string(),
+                    as_i64(activation_generation)?
+                ],
+            )
+            .map_err(cron_sql_error)?;
+        if changed != 1 {
+            return Err(PlatformError::new(
+                ErrorCode::CronActivationStale,
+                "Cron activation generation or state is stale",
+            ));
+        }
+        tx.execute(
+            "UPDATE cron_runs SET state = 'failed', next_attempt_at_ms = NULL,
+                    error_code = 'CRON_ACTIVATION_DRAINED', completed_at_ms = ?1
+             WHERE activation_id = ?2 AND activation_generation = ?3 AND state = 'ready'",
+            params![
+                now_ms,
+                activation_id.to_string(),
+                as_i64(activation_generation)?
+            ],
+        )
+        .map_err(cron_sql_error)?;
+        let count: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM cron_runs WHERE activation_id = ?1
+               AND activation_generation = ?2 AND state = 'claimed'",
+                params![activation_id.to_string(), as_i64(activation_generation)?],
+                |row| row.get(0),
+            )
+            .map_err(map_sql_error)?;
+        tx.commit().map_err(cron_sql_error)?;
+        drop(connection);
+        self.wake.notify();
+        u64::try_from(count).map_err(|_| cron_invariant())
     }
 
     /// Delete one drained schedule after all nonterminal runs are gone.
@@ -309,178 +373,6 @@ impl SchedulerStore {
             self.wake.notify();
         }
         Ok(summary)
-    }
-
-    /// Recover expired unknown outcomes and claim a bounded due run set atomically.
-    pub fn claim_cron_runs(
-        &self,
-        now_ms: i64,
-        lease_ms: u64,
-        infrastructure_backoff_ms: u64,
-        limit: u32,
-    ) -> Result<(Vec<ClaimedCronRun>, u64), PlatformError> {
-        if lease_ms == 0 || limit == 0 {
-            return Err(cron_invariant());
-        }
-        let claim_until_ms = add_ms(now_ms, lease_ms)?;
-        let mut connection = self.lock()?;
-        let tx = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(cron_sql_error)?;
-        let recovered =
-            recover_expired_cron_runs_tx(&tx, now_ms, infrastructure_backoff_ms, limit)?;
-        let ids = {
-            let mut statement = tx
-                .prepare(
-                    "SELECT r.id FROM cron_runs r JOIN cron_schedules s
-                       ON s.activation_id = r.activation_id
-                     WHERE r.state = 'ready' AND r.next_attempt_at_ms <= ?1
-                       AND s.activation_generation = r.activation_generation
-                       AND s.state IN ('accepting', 'draining')
-                     ORDER BY r.next_attempt_at_ms, r.scheduled_at_ms, r.id LIMIT ?2",
-                )
-                .map_err(map_sql_error)?;
-            statement
-                .query_map(params![now_ms, i64::from(limit)], |row| {
-                    row.get::<_, String>(0)
-                })
-                .map_err(map_sql_error)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(map_sql_error)?
-        };
-        let mut runs = Vec::with_capacity(ids.len());
-        for id in ids {
-            let token = random_claim_token()?;
-            let changed = tx
-                .execute(
-                    "UPDATE cron_runs SET state = 'claimed', next_attempt_at_ms = NULL,
-                            claim_token = ?1, claimed_at_ms = ?2, claim_until_ms = ?3
-                     WHERE id = ?4 AND state = 'ready' AND next_attempt_at_ms <= ?2",
-                    params![token.as_slice(), now_ms, claim_until_ms, id],
-                )
-                .map_err(cron_sql_error)?;
-            if changed != 1 {
-                return Err(cron_invariant());
-            }
-            runs.push(read_claimed_run_tx(&tx, &id, token, claim_until_ms)?);
-        }
-        tx.commit().map_err(cron_sql_error)?;
-        Ok((runs, recovered))
-    }
-
-    /// Apply one known scheduled-handler result under the exact token and generation.
-    pub fn complete_cron_run(
-        &self,
-        run: &ClaimedCronRun,
-        completion: CronCompletion,
-        now_ms: i64,
-        max_retries: u8,
-    ) -> Result<CronCompletionResult, PlatformError> {
-        if max_retries > 3 {
-            return Err(cron_invariant());
-        }
-        let connection = self.lock()?;
-        let exact: bool = connection
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM cron_runs WHERE id = ?1
-                   AND activation_id = ?2 AND activation_generation = ?3
-                   AND state = 'claimed' AND claim_token = ?4)",
-                params![
-                    run.id.to_string(),
-                    run.activation_id.to_string(),
-                    as_i64(run.activation_generation)?,
-                    run.claim_token.as_slice(),
-                ],
-                |row| row.get(0),
-            )
-            .map_err(map_sql_error)?;
-        if !exact {
-            return Ok(CronCompletionResult::Stale);
-        }
-        let (state, attempt, no_retry, error_code, result) = match completion {
-            CronCompletion::Success => (
-                "complete",
-                run.attempt,
-                false,
-                None,
-                CronCompletionResult::Terminal,
-            ),
-            CronCompletion::Failure {
-                no_retry,
-                error_code,
-            } if !no_retry && run.attempt < max_retries => (
-                "ready",
-                run.attempt + 1,
-                false,
-                Some(error_code),
-                CronCompletionResult::Retried,
-            ),
-            CronCompletion::Failure {
-                no_retry,
-                error_code,
-            } => (
-                "failed",
-                run.attempt,
-                no_retry,
-                Some(error_code),
-                CronCompletionResult::Terminal,
-            ),
-        };
-        let next_attempt_at_ms = (state == "ready")
-            .then(|| cron_retry_at(run.id, attempt, now_ms))
-            .transpose()?;
-        let completed_at_ms = (state != "ready").then_some(now_ms);
-        let changed = connection
-            .execute(
-                "UPDATE cron_runs SET state = ?1, attempt = ?2, no_retry = ?3,
-                        next_attempt_at_ms = ?4, claim_token = NULL, claimed_at_ms = NULL,
-                        claim_until_ms = NULL, error_code = ?5, completed_at_ms = ?6
-                 WHERE id = ?7 AND activation_id = ?8 AND activation_generation = ?9
-                   AND state = 'claimed' AND claim_token = ?10",
-                params![
-                    state,
-                    i64::from(attempt),
-                    i64::from(no_retry),
-                    next_attempt_at_ms,
-                    error_code,
-                    completed_at_ms,
-                    run.id.to_string(),
-                    run.activation_id.to_string(),
-                    as_i64(run.activation_generation)?,
-                    run.claim_token.as_slice(),
-                ],
-            )
-            .map_err(cron_sql_error)?;
-        if changed != 1 {
-            return Ok(CronCompletionResult::Stale);
-        }
-        drop(connection);
-        self.wake.notify();
-        Ok(result)
-    }
-
-    /// Recover a bounded set of expired unknown Cron outcomes without product retry cost.
-    pub fn recover_expired_cron_runs(
-        &self,
-        now_ms: i64,
-        infrastructure_backoff_ms: u64,
-        limit: u32,
-    ) -> Result<u64, PlatformError> {
-        if limit == 0 {
-            return Err(cron_invariant());
-        }
-        let mut connection = self.lock()?;
-        let tx = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(cron_sql_error)?;
-        let recovered =
-            recover_expired_cron_runs_tx(&tx, now_ms, infrastructure_backoff_ms, limit)?;
-        tx.commit().map_err(cron_sql_error)?;
-        if recovered > 0 {
-            drop(connection);
-            self.wake.notify();
-        }
-        Ok(recovered)
     }
 
     /// Boundedly retain terminal history by age and per-activation row cap.
@@ -652,69 +544,6 @@ fn due_schedules_tx(
         .map_err(map_sql_error)
 }
 
-fn read_claimed_run_tx(
-    tx: &Transaction<'_>,
-    id: &str,
-    claim_token: [u8; 32],
-    claim_until_ms: i64,
-) -> Result<ClaimedCronRun, PlatformError> {
-    tx.query_row(
-        "SELECT r.id, r.activation_id, r.activation_generation, s.account_id, s.worker_id,
-                r.version_id, r.execution_generation, r.expression, r.scheduled_at_ms,
-                r.attempt FROM cron_runs r JOIN cron_schedules s
-                  ON s.activation_id = r.activation_id WHERE r.id = ?1 AND r.state = 'claimed'",
-        [id],
-        |row| {
-            let run: String = row.get(0)?;
-            let activation: String = row.get(1)?;
-            let account: String = row.get(3)?;
-            let worker: String = row.get(4)?;
-            let version: String = row.get(5)?;
-            Ok(ClaimedCronRun {
-                id: run.parse().map_err(|_| rusqlite::Error::InvalidQuery)?,
-                activation_id: activation
-                    .parse()
-                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                activation_generation: u64::try_from(row.get::<_, i64>(2)?)
-                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                account_id: account.parse().map_err(|_| rusqlite::Error::InvalidQuery)?,
-                worker_id: worker.parse().map_err(|_| rusqlite::Error::InvalidQuery)?,
-                version_id: version.parse().map_err(|_| rusqlite::Error::InvalidQuery)?,
-                execution_generation: u64::try_from(row.get::<_, i64>(6)?)
-                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                expression: row.get(7)?,
-                scheduled_at_ms: row.get(8)?,
-                attempt: u8::try_from(row.get::<_, i64>(9)?)
-                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                claim_token,
-                claim_until_ms,
-            })
-        },
-    )
-    .map_err(map_sql_error)
-}
-
-fn recover_expired_cron_runs_tx(
-    tx: &Transaction<'_>,
-    now_ms: i64,
-    infrastructure_backoff_ms: u64,
-    limit: u32,
-) -> Result<u64, PlatformError> {
-    let next_attempt = add_ms(now_ms, infrastructure_backoff_ms)?;
-    let changed = tx
-        .execute(
-            "UPDATE cron_runs SET state = 'ready', next_attempt_at_ms = ?1,
-                    claim_token = NULL, claimed_at_ms = NULL, claim_until_ms = NULL
-             WHERE id IN (
-               SELECT id FROM cron_runs WHERE state = 'claimed' AND claim_until_ms <= ?2
-               ORDER BY claim_until_ms, id LIMIT ?3
-             )",
-            params![next_attempt, now_ms, i64::from(limit)],
-        )
-        .map_err(cron_sql_error)?;
-    u64::try_from(changed).map_err(|_| cron_invariant())
-}
-
 fn validate_projection(projection: &CronScheduleProjection) -> Result<(), PlatformError> {
     if projection.execution_generation == 0
         || projection.activation_generation == 0
@@ -728,29 +557,6 @@ fn validate_projection(projection: &CronScheduleProjection) -> Result<(), Platfo
         return Err(cron_invariant());
     }
     Ok(())
-}
-
-fn cron_retry_at(id: CronRunId, attempt: u8, now_ms: i64) -> Result<i64, PlatformError> {
-    let exponent = u32::from(attempt.saturating_sub(1));
-    let seconds = 2_u64.checked_shl(exponent).ok_or_else(cron_invariant)?;
-    let uuid = id.as_uuid();
-    let bytes = uuid.as_bytes();
-    let jitter_ms = u64::from(u16::from_be_bytes([bytes[14], bytes[15]])) % 1000;
-    add_ms(
-        now_ms,
-        seconds
-            .checked_mul(1000)
-            .and_then(|value| value.checked_add(jitter_ms))
-            .ok_or_else(cron_invariant)?,
-    )
-}
-
-fn random_claim_token() -> Result<[u8; 32], PlatformError> {
-    let mut token = [0_u8; 32];
-    rand::rngs::OsRng
-        .try_fill_bytes(&mut token)
-        .map_err(|_| cron_invariant())?;
-    Ok(token)
 }
 
 fn add_ms(now_ms: i64, delta_ms: u64) -> Result<i64, PlatformError> {

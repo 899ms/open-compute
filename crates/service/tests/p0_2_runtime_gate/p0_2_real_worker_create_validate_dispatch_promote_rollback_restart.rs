@@ -120,12 +120,13 @@ pub(super) async fn run() {
     let controller = VersionController::new(
         &storage,
         artifacts.clone(),
-        validator,
+        validator.clone(),
         BundleLimits::default(),
     )
     .with_product_promoter(open_compute_service::product_promotion_for_test(
         storage.clone(),
         scheduler.clone(),
+        validator,
     ));
 
     let a = deploy(

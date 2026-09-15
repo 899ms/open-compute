@@ -84,7 +84,7 @@ impl WorkerdTransport {
         target: DispatchTarget,
         request: Request,
     ) -> Result<Response, PlatformError> {
-        self.send(target, request, false, false).await
+        self.send(target, request, false, false, false).await
     }
 
     /// Execute one trusted native facet delete after the control-plane fence commits.
@@ -263,13 +263,15 @@ impl WorkerdTransport {
         candidate: ValidationCandidate,
         entrypoint: String,
     ) -> Result<(), PlatformError> {
-        self.validate_candidate(candidate, Some(entrypoint)).await
+        self.validate_candidate(candidate, Some(entrypoint), true)
+            .await
     }
 
     async fn validate_candidate(
         &self,
         candidate: ValidationCandidate,
         entrypoint: Option<String>,
+        probe: bool,
     ) -> Result<(), PlatformError> {
         let target = DispatchTarget {
             account_id: candidate.account_id,
@@ -285,7 +287,7 @@ impl WorkerdTransport {
             .uri("/")
             .body(Body::empty())
             .map_err(|_| runtime_unavailable())?;
-        let response = self.send(target, request, true, false).await?;
+        let response = self.send(target, request, true, false, probe).await?;
         match response.status() {
             StatusCode::NO_CONTENT => Ok(()),
             StatusCode::NOT_FOUND => Err(PlatformError::new(
@@ -296,7 +298,18 @@ impl WorkerdTransport {
                 ErrorCode::BundleRuntimeInvalid,
                 "real workerd rejected version startup",
             )),
-            _ => Err(runtime_unavailable()),
+            StatusCode::CONFLICT => Err(PlatformError::new(
+                ErrorCode::RuntimeUnavailable,
+                "real runtime validation reported a non-runnable version",
+            )),
+            StatusCode::INTERNAL_SERVER_ERROR => Err(PlatformError::new(
+                ErrorCode::RuntimeUnavailable,
+                "real runtime validation failed internally",
+            )),
+            _ => Err(PlatformError::new(
+                ErrorCode::RuntimeUnavailable,
+                "real runtime validation returned an unexpected status",
+            )),
         }
     }
 
@@ -534,7 +547,40 @@ impl RuntimeValidator for WorkerdTransport {
         &self,
         candidate: ValidationCandidate,
     ) -> Pin<Box<dyn Future<Output = Result<(), PlatformError>> + Send + '_>> {
-        Box::pin(async move { self.validate_candidate(candidate, None).await })
+        Box::pin(async move { self.validate_candidate(candidate, None, false).await })
+    }
+
+    fn validate_deployment(
+        &self,
+        candidate: ValidationCandidate,
+    ) -> Pin<
+        Box<dyn Future<Output = Result<open_compute_core::StartupId, PlatformError>> + Send + '_>,
+    > {
+        Box::pin(async move {
+            let before = self.current_generation().ok_or_else(|| {
+                PlatformError::new(
+                    ErrorCode::RuntimeUnavailable,
+                    "runtime generation is unavailable before deployment admission",
+                )
+            })?;
+            self.validate_candidate(candidate, None, true).await?;
+            if self.current_generation() != Some(before) {
+                return Err(PlatformError::new(
+                    ErrorCode::RuntimeUnavailable,
+                    "runtime generation changed during deployment admission",
+                ));
+            }
+            Ok(before)
+        })
+    }
+
+    fn current_generation(&self) -> Option<open_compute_core::StartupId> {
+        self.supervisor
+            .lock()
+            .ok()
+            .and_then(|slot| slot.as_ref().map(|supervisor| supervisor.snapshot()))
+            .filter(|snapshot| snapshot.state == SupervisorState::Running)
+            .and_then(|snapshot| snapshot.startup_id)
     }
 
     fn validate_entrypoint(
@@ -565,7 +611,7 @@ impl RuntimeValidator for WorkerdTransport {
                 .uri("/")
                 .body(Body::empty())
                 .map_err(|_| runtime_unavailable())?;
-            let response = self.send(target, request, true, true).await?;
+            let response = self.send(target, request, true, true, false).await?;
             match response.status() {
                 StatusCode::NO_CONTENT => Ok(()),
                 StatusCode::NOT_FOUND | StatusCode::UNPROCESSABLE_ENTITY => {

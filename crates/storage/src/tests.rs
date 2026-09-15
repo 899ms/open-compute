@@ -148,6 +148,8 @@ mod p0_2_delete_referrer_recovery_and_worker_identity_are_fenced;
 
 mod p0_2_concurrent_promotions_have_one_linearization_winner;
 
+mod deployment_runtime_assessment_quarantine_rolls_back;
+
 mod filesystem_helpers_cover_secure_success_and_failure_paths;
 
 mod control_db_read_write_helpers_and_failures_are_enforced;

@@ -20,12 +20,12 @@ With `--config <absolute-path>`, configured limits come from that file. Without 
 - Images, Vectorize, AI Search, Markdown Conversion, Workers Logs/realtime tail, and Artifacts
 - Cloudflare-compatible `/client/v4` management APIs, the certified Wrangler workflow, and the operator Dashboard
 
-Most products are reported as `supported_with_deviation` because they use a single local authority instead of Cloudflare's hosted global topology. Vectorize uses deterministic exact search. AI Search and Markdown Conversion use operator-configured providers; full Workers AI inference is not implied.
+Most products are reported as `supported_with_deviation` because they use a single local authority instead of Cloudflare's hosted global topology. Vectorize uses deterministic exact search. AI Search and Markdown Conversion use operator-configured providers; full Workers AI inference is not implied. The separately typed `open-compute:manual` AI Search source is a namespaced open-compute API superset and is excluded from the Cloudflare stable-member inventory.
 
 ## Runtime and project contract
 
 The release embeds a checksum-verified `elliothux/workerd` fork selected by the formal runtime lock. Production startup remains offline. Projects use standard `wrangler.jsonc` and project-local Wrangler. Compatibility dates and flags are admitted only when the current runtime contract supports them.
 
-Dynamic Worker Loader support is native but remains bounded by the documented missing CPU, memory, and subrequest enforcement. It is not a claim of the complete Workers for Platforms product.
+Dynamic Worker Loader support is native and enforces the documented local CPU, memory, subrequest, startup, and simultaneous-connection ceilings. The two experimental trust/tail members remain blocked, so this is not a claim of the complete Workers for Platforms product.
 
 See [Products](/docs/products/), [Behavior differences](/docs/platform/deviations/), [Limits](/docs/platform/limits/), [Not available](/docs/platform/unsupported/), and the [generated Worker API index](/docs/platform/reference/api/).

@@ -137,6 +137,17 @@ pub struct AiSearchInstanceSpec {
     pub keyword_enabled: bool,
     /// Immutable R2 source and schedule, absent for built-in-only instances.
     pub r2_source: Option<AiSearchR2SourceSpec>,
+    /// Namespaced manual source authority, absent for official instances.
+    pub manual_source: Option<AiSearchManualSourceSpec>,
+}
+
+/// Frozen operator provider selected by a namespaced manual instance.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AiSearchManualSourceSpec {
+    /// Operator-configured provider identity.
+    pub provider_id: String,
+    /// Fixed provider source namespace.
+    pub source_namespace: String,
 }
 
 /// Frozen R2 source identity needed by the instance lifecycle driver.
@@ -228,6 +239,12 @@ impl ResourceDriver for AiSearchInstanceResourceDriver<'_> {
                 material.push(0);
                 material.extend_from_slice(&source.sync_interval_seconds.to_be_bytes());
             }
+            if let Some(source) = &spec.manual_source {
+                material.push(0);
+                material.extend_from_slice(source.provider_id.as_bytes());
+                material.push(0);
+                material.extend_from_slice(source.source_namespace.as_bytes());
+            }
             material
         })
     }
@@ -246,7 +263,7 @@ impl ResourceDriver for AiSearchInstanceResourceDriver<'_> {
         let record = match catalog.get_instance(resource.account_id, resource.id) {
             Ok(record) => record,
             Err(error) if error.code() == ErrorCode::ResourceNotFound => catalog
-                .ensure_instance_with_r2_source(
+                .ensure_instance_with_sources(
                     resource,
                     spec.namespace_resource_id,
                     &spec.instance_key,
@@ -256,6 +273,12 @@ impl ResourceDriver for AiSearchInstanceResourceDriver<'_> {
                     spec.r2_source
                         .as_ref()
                         .map(|source| (source.bucket_resource_id, source.bucket_name.as_str())),
+                    spec.manual_source.as_ref().map(|source| {
+                        (
+                            source.provider_id.as_str(),
+                            source.source_namespace.as_str(),
+                        )
+                    }),
                 )?,
             Err(error) => return Err(error),
         };

@@ -162,6 +162,7 @@ export async function handleDispatch(
   env: LoaderEnv,
   ctx: ExecutionContext,
   validation: boolean,
+  probe = false,
 ) {
   const requestId =
     request.headers.get("x-open-compute-request-id") || crypto.randomUUID();
@@ -176,7 +177,7 @@ export async function handleDispatch(
       env,
       envelope,
       validation,
-      Boolean(entrypoint),
+      probe || Boolean(entrypoint),
       internalToken,
     );
     const runtimeKey = validation
@@ -184,6 +185,9 @@ export async function handleDispatch(
       : envelope.runtimeKey;
     const versionId = envelope.loaderKey.split("/")[2]!;
     const tenant = validation ? undefined : tenantRequest(request);
+    if (validation && probe && snapshot.contentKind === "assets_only") {
+      return new Response(null, { status: 204 });
+    }
     if (
       !validation &&
       !entrypoint &&

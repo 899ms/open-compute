@@ -36,6 +36,20 @@ pub struct AiSearchInstanceRecord {
     pub model_contract_sha256: [u8; 32],
     /// Immutable R2 source authority, absent for built-in-only instances.
     pub r2_source: Option<AiSearchR2SourceRecord>,
+    /// Immutable namespaced manual source authority, absent for official instances.
+    pub manual_source: Option<AiSearchManualSourceRecord>,
+}
+
+/// Immutable operator-provider selection for a manual AI Search instance.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSearchManualSourceRecord {
+    /// Operator-configured provider identity.
+    pub provider_id: String,
+    /// Fixed provider source namespace.
+    pub source_namespace: String,
+    /// Reference creation timestamp.
+    pub created_at_ms: i64,
 }
 
 /// Immutable central authority for an R2-backed AI Search instance.
@@ -143,13 +157,14 @@ impl<'a> AiSearchCatalog<'a> {
         schema_version: u32,
         model_contract_sha256: [u8; 32],
     ) -> Result<AiSearchInstanceRecord, PlatformError> {
-        self.ensure_instance_with_r2_source(
+        self.ensure_instance_with_sources(
             resource,
             namespace_resource_id,
             instance_key,
             storage_key,
             schema_version,
             model_contract_sha256,
+            None,
             None,
         )
     }
@@ -170,6 +185,45 @@ impl<'a> AiSearchCatalog<'a> {
         r2_source: Option<(ResourceId, &str)>,
     ) -> Result<AiSearchInstanceRecord, PlatformError> {
         validate_instance_key(instance_key)?;
+        if resource.kind != BindingKind::AiSearchInstance
+            || resource.state != ResourceState::Creating
+            || schema_version != super::AI_SEARCH_SCHEMA_VERSION
+            || schema_version != resource.driver_schema_version
+        {
+            return Err(invariant());
+        }
+        self.ensure_instance_with_sources(
+            resource,
+            namespace_resource_id,
+            instance_key,
+            storage_key,
+            schema_version,
+            model_contract_sha256,
+            r2_source,
+            None,
+        )
+    }
+
+    /// Materialize an instance with exactly one optional external source authority.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "SQLite boundary inputs mirror authoritative persisted fields"
+    )]
+    pub fn ensure_instance_with_sources(
+        self,
+        resource: &ResourceRecord,
+        namespace_resource_id: ResourceId,
+        instance_key: &str,
+        storage_key: &str,
+        schema_version: u32,
+        model_contract_sha256: [u8; 32],
+        r2_source: Option<(ResourceId, &str)>,
+        manual_source: Option<(&str, &str)>,
+    ) -> Result<AiSearchInstanceRecord, PlatformError> {
+        validate_instance_key(instance_key)?;
+        if r2_source.is_some() && manual_source.is_some() {
+            return Err(invariant());
+        }
         if resource.kind != BindingKind::AiSearchInstance
             || resource.state != ResourceState::Creating
             || schema_version != super::AI_SEARCH_SCHEMA_VERSION
@@ -214,6 +268,20 @@ impl<'a> AiSearchCatalog<'a> {
                 )
                 .map_err(|_| invariant())?;
             }
+            if let Some((provider_id, source_namespace)) = manual_source {
+                tx.execute(
+                    "INSERT INTO ai_search_manual_sources
+                     (instance_resource_id, provider_id, source_namespace, created_at_ms)
+                     VALUES (?1, ?2, ?3, ?4) ON CONFLICT(instance_resource_id) DO NOTHING",
+                    params![
+                        resource.id.to_string(),
+                        provider_id,
+                        source_namespace,
+                        resource.created_at_ms,
+                    ],
+                )
+                .map_err(|_| invariant())?;
+            }
             let stored = read_instance(tx, resource)?;
             if stored.namespace_resource_id != namespace_resource_id
                 || stored.instance_key != instance_key
@@ -225,6 +293,12 @@ impl<'a> AiSearchCatalog<'a> {
                     .as_ref()
                     .map(|source| (source.bucket_resource_id, source.bucket_name.as_str()))
                     != r2_source
+                || stored.manual_source.as_ref().map(|source| {
+                    (
+                        source.provider_id.as_str(),
+                        source.source_namespace.as_str(),
+                    )
+                }) != manual_source
             {
                 return Err(invariant());
             }
@@ -514,9 +588,28 @@ fn read_instance(
             })
         })
         .transpose()?;
+    let manual_source = connection
+        .query_row(
+            "SELECT provider_id, source_namespace, created_at_ms
+               FROM ai_search_manual_sources WHERE instance_resource_id=?1",
+            [resource.id.to_string()],
+            |row| {
+                Ok(AiSearchManualSourceRecord {
+                    provider_id: row.get(0)?,
+                    source_namespace: row.get(1)?,
+                    created_at_ms: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|_| invariant())?;
     if r2_source
         .as_ref()
         .is_some_and(|source| source.created_at_ms != resource.created_at_ms)
+        || manual_source
+            .as_ref()
+            .is_some_and(|source| source.created_at_ms != resource.created_at_ms)
+        || r2_source.is_some() && manual_source.is_some()
     {
         return Err(invariant());
     }
@@ -528,6 +621,7 @@ fn read_instance(
         schema_version: u32::try_from(row.3).map_err(|_| invariant())?,
         model_contract_sha256: row.4.try_into().map_err(|_| invariant())?,
         r2_source,
+        manual_source,
     })
 }
 

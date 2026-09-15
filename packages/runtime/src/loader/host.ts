@@ -80,8 +80,17 @@ export default {
     if (request.method === "POST" && path === "/internal/scheduled") {
       return handleScheduled(request, env, ctx);
     }
-    if (request.method === "POST" && path === "/internal/validate")
-      return handleDispatch(request, env, ctx, true);
+    if (
+      request.method === "POST" &&
+      ["/internal/validate", "/internal/probe"].includes(path)
+    )
+      return handleDispatch(
+        request,
+        env,
+        ctx,
+        true,
+        path === "/internal/probe",
+      );
     if (request.method === "POST" && path === "/internal/validate-do") {
       return validateDurableObjectClass(request, env);
     }

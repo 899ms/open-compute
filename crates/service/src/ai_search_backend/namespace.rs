@@ -22,6 +22,9 @@ impl AiSearchBindingService {
         }
         let mut records = AiSearchCatalog::new(self.storage.db())
             .list_instances(authority.account_id, authority.resource.id)?;
+        if !authority.allow_extensions {
+            records.retain(|record| record.manual_source.is_none());
+        }
         if let Some(search) = page.search {
             let search = search.to_lowercase();
             records.retain(|record| record.instance_key.to_lowercase().contains(&search));
@@ -59,12 +62,64 @@ impl AiSearchBindingService {
         authority: &Authority,
         call: JsonCall,
     ) -> Result<Value, PlatformError> {
+        self.namespace_create_inner(authority, call, None)
+    }
+
+    pub(super) fn namespace_open_compute_create_manual(
+        &self,
+        authority: &Authority,
+        call: JsonCall,
+    ) -> Result<Value, PlatformError> {
+        require_namespace(authority)?;
+        if !authority.allow_extensions {
+            return Err(unsupported());
+        }
+        if call.instance.is_some() {
+            return Err(protocol());
+        }
+        let payload: ManualCreatePayload =
+            serde_json::from_value(call.payload).map_err(|_| protocol())?;
+        let provider = self
+            .ai
+            .source_providers
+            .get(&payload.provider_id)
+            .filter(|provider| provider.account_ids.contains(&authority.account_id))
+            .ok_or_else(not_found)?;
+        self.namespace_create_inner(
+            authority,
+            JsonCall {
+                operation: "namespace.openComputeCreateManual".to_owned(),
+                instance: None,
+                payload: payload.config,
+            },
+            Some(AiSearchManualSourceSpec {
+                provider_id: payload.provider_id,
+                source_namespace: provider.source.clone(),
+            }),
+        )
+    }
+
+    fn namespace_create_inner(
+        &self,
+        authority: &Authority,
+        call: JsonCall,
+        manual_source: Option<AiSearchManualSourceSpec>,
+    ) -> Result<Value, PlatformError> {
         require_namespace(authority)?;
         if call.instance.is_some() {
             return Err(protocol());
         }
         let mut input: AiSearchCreateInput =
             serde_json::from_value(call.payload).map_err(|_| protocol())?;
+        if manual_source.is_some()
+            && (input.source_type.is_some()
+                || input.source.is_some()
+                || input.source_params.is_some()
+                || input.token_id.is_some()
+                || input.sync_interval.is_some())
+        {
+            return Err(protocol());
+        }
         if input.source_type.as_deref() == Some("r2") && input.token_id.is_none() {
             input.token_id = Some(crate::ai_search_config::stable_ai_search_token_id(
                 &authority.account_id.to_string(),
@@ -114,6 +169,7 @@ impl AiSearchBindingService {
                 vector_enabled: prepared.vector_enabled,
                 keyword_enabled: prepared.keyword_enabled,
                 r2_source,
+                manual_source,
             },
             self.storage.sqlite_busy_timeout_ms(),
         );
@@ -222,7 +278,26 @@ impl AiSearchBindingService {
             serde_json::from_slice(&inspection.public_config_json).map_err(|_| corrupt())?;
         let config: ResolvedAiSearchConfig =
             serde_json::from_slice(&inspection.public_config_json).map_err(|_| corrupt())?;
-        if config.source_type.is_none() {
+        if let Some(source) = &record.manual_source {
+            value.insert(
+                "type".to_owned(),
+                Value::String("open-compute:manual".to_owned()),
+            );
+            value.insert(
+                "source".to_owned(),
+                Value::String(format!(
+                    "open-compute:manual:{}:{}",
+                    source.provider_id, source.source_namespace
+                )),
+            );
+            value.insert(
+                "open_compute_source".to_owned(),
+                json!({
+                    "provider_id": source.provider_id,
+                    "source": source.source_namespace,
+                }),
+            );
+        } else if config.source_type.is_none() {
             value.insert("type".to_owned(), Value::String("file".to_owned()));
             value.insert("source".to_owned(), Value::String("builtin".to_owned()));
         }

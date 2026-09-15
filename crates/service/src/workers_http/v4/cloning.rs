@@ -79,6 +79,7 @@ pub(super) async fn clone_active(
         body_part: None,
         compatibility_date: snapshot.version.compatibility_date.clone(),
         compatibility_flags: snapshot.version.compatibility_flags.clone(),
+        package_dependencies: Vec::new(),
         limits: Some(WorkerUploadResourceLimits {
             cpu_ms: Some(resource_limits.cpu_ms),
             sub_requests: Some(resource_limits.sub_requests),

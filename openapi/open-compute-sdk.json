@@ -43377,7 +43377,8 @@
         "required": [
           "state",
           "version",
-          "components"
+          "components",
+          "operator_proxy"
         ],
         "properties": {
           "state": {
@@ -43405,6 +43406,29 @@
                 "message": {
                   "type": "string"
                 }
+              }
+            }
+          },
+          "operator_proxy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "direct",
+                  "proxy",
+                  "invalid"
+                ]
+              },
+              "source_variable": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
               }
             }
           },
@@ -43455,6 +43479,31 @@
               "overload_drops": {
                 "type": "integer",
                 "minimum": 0
+              }
+            }
+          },
+          "deployment_runtime": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "dispatchable",
+              "quarantined",
+              "active_runtime_dispatchable"
+            ],
+            "properties": {
+              "dispatchable": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "quarantined": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "active_runtime_dispatchable": {
+                "type": "boolean"
+              },
+              "last_quarantine_reason": {
+                "type": "string"
               }
             }
           }

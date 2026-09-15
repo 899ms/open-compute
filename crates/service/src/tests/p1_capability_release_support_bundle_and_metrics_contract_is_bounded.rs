@@ -99,7 +99,7 @@ async fn p1_capability_release_support_bundle_and_metrics_contract_is_bounded() 
     let result = crate::support_bundle::create_support_bundle(&loaded, &output)
         .await
         .unwrap();
-    assert_eq!(result.entries, 10);
+    assert_eq!(result.entries, 11);
     assert_eq!(
         fs::metadata(&output).unwrap().permissions().mode() & 0o777,
         0o600
@@ -114,6 +114,7 @@ async fn p1_capability_release_support_bundle_and_metrics_contract_is_bounded() 
     for name in [
         b"config-policy.json".as_slice(),
         b"doctor.json".as_slice(),
+        b"deployment-runtime.json".as_slice(),
         b"metrics.prom".as_slice(),
         b"object-storage.json".as_slice(),
         b"receipts/last-snapshot.json".as_slice(),
@@ -202,6 +203,21 @@ async fn p1_capability_release_support_bundle_and_metrics_contract_is_bounded() 
         env: None,
         file: Some(admin_secret),
     };
+    let source_secret = dir.path().join("manual-source-secret");
+    write_mode(&source_secret, "p1-manual-source-secret", 0o600);
+    loaded.config.ai.source_providers.insert(
+        "manual".to_owned(),
+        open_compute_core::AiSourceProviderConfig {
+            endpoint: "http://127.0.0.1:8090/provider".to_owned(),
+            account_ids: vec![open_compute_core::AccountId::generate()],
+            source: "files".to_owned(),
+            credential: SecretReference {
+                env: None,
+                file: Some(source_secret),
+            },
+            max_source_bytes: 1024,
+        },
+    );
     let admin_output = fs::canonicalize(dir.path())
         .unwrap()
         .join("admin-support.tar");
@@ -213,6 +229,16 @@ async fn p1_capability_release_support_bundle_and_metrics_contract_is_bounded() 
             .unwrap()
             .windows(b"p1-support-admin-secret".len())
             .any(|window| window == b"p1-support-admin-secret")
+    );
+    assert!(
+        !fs::read(
+            fs::canonicalize(dir.path())
+                .unwrap()
+                .join("admin-support.tar")
+        )
+        .unwrap()
+        .windows(b"p1-manual-source-secret".len())
+        .any(|window| window == b"p1-manual-source-secret")
     );
 
     assert_metrics(&loaded.config.metrics);

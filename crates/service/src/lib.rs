@@ -52,6 +52,7 @@ mod object_storage;
 mod observability;
 mod observability_backend;
 mod observability_filter;
+mod operator_http;
 pub mod operator_session;
 mod p2_3_promotion;
 #[cfg(test)]
@@ -68,6 +69,7 @@ mod resource_binding;
 mod resources;
 pub mod run;
 pub mod runtime_bridge;
+mod runtime_diagnostics;
 pub mod runtime_generation;
 pub mod scheduler;
 pub mod search_api;
@@ -98,12 +100,16 @@ pub mod wrangler_launcher;
 pub fn product_promotion_for_test(
     storage: std::sync::Arc<open_compute_storage::PlatformStorage>,
     scheduler: std::sync::Arc<open_compute_storage::SchedulerStore>,
+    validator: std::sync::Arc<dyn open_compute_workers::RuntimeValidator>,
 ) -> std::sync::Arc<dyn open_compute_workers::ProductPromotionCoordinator> {
-    std::sync::Arc::new(p2_3_promotion::P23PromotionCoordinator::new(
-        storage,
-        scheduler,
-        std::time::Duration::from_secs(1),
-    ))
+    std::sync::Arc::new(
+        p2_3_promotion::P23PromotionCoordinator::new(
+            storage,
+            scheduler,
+            std::time::Duration::from_secs(1),
+        )
+        .with_runtime_validator(validator),
+    )
 }
 
 /// Attach the production Cloudflare v4 account mapping to an HTTP test state.

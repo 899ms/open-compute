@@ -525,6 +525,7 @@ class GateTests(unittest.TestCase):
                 self.assertEqual(kwargs['env']['ALLOWED'], 'yes')
                 self.assertNotIn('SECRET', kwargs['env'])
                 self.assertEqual(kwargs['env']['BUN_RUNTIME_TRANSPILER_CACHE_PATH'], '0')
+                self.assertEqual(kwargs['env']['NODE_DISABLE_COMPILE_CACHE'], '1')
                 kwargs['stdout'].write(json.dumps({
                     'schemaVersion': 1,
                     'status': 'passed',

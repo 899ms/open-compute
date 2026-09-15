@@ -18,9 +18,6 @@ use aws_sdk_s3::types::{
     CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier,
     ObjectStorageClass as S3ObjectStorageClass, StorageClass,
 };
-use aws_smithy_http_client::Builder as HttpBuilder;
-use aws_smithy_http_client::tls::rustls_provider::CryptoMode;
-use aws_smithy_http_client::tls::{Provider as TlsProvider, TlsContext, TrustStore};
 use aws_smithy_runtime_api::client::orchestrator::HttpResponse;
 use base64::Engine as _;
 use futures::Stream;
@@ -34,9 +31,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+mod http;
 mod tls;
 
-use tls::der_to_pem;
+use http::build_verified_http_client;
 
 /// AWS SDK response body kept entirely inside the S3 adapter boundary.
 pub(crate) struct S3ObjectBody(ByteStream);
@@ -103,6 +101,7 @@ impl S3Backend {
         let retry = RetryConfig::standard()
             .with_max_attempts(config.max_retries.saturating_add(1).min(8))
             .with_initial_backoff(Duration::from_millis(config.retry_backoff_ms));
+        let http_client = build_verified_http_client(&config.endpoint)?;
         let conf = aws_sdk_s3::config::Builder::new()
             .behavior_version(BehaviorVersion::latest())
             .region(Region::new(config.region.clone()))
@@ -111,7 +110,7 @@ impl S3Backend {
             .credentials_provider(creds)
             .timeout_config(timeout)
             .retry_config(retry)
-            .http_client(build_verified_http_client())
+            .http_client(http_client)
             .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
             .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
             .build();
@@ -769,28 +768,4 @@ fn authority_sha256(config: &S3Config) -> [u8; 32] {
     }
     digest.update([u8::from(config.force_path_style)]);
     digest.finalize().into()
-}
-
-fn build_verified_http_client() -> aws_smithy_runtime_api::client::http::SharedHttpClient {
-    let mut trust = TrustStore::empty();
-    for cert in webpki_root_certs::TLS_SERVER_ROOT_CERTS {
-        trust = trust.with_pem_certificate(der_to_pem(cert.as_ref()));
-    }
-    let tls = TlsContext::builder()
-        .with_trust_store(trust)
-        .build()
-        .unwrap_or_else(|_| {
-            TlsContext::builder()
-                .with_trust_store(TrustStore::empty())
-                .build()
-                .unwrap_or_else(|_| {
-                    TlsContext::builder()
-                        .build()
-                        .unwrap_or_else(|_| unreachable!("tls context builder"))
-                })
-        });
-    HttpBuilder::new()
-        .tls_provider(TlsProvider::Rustls(CryptoMode::AwsLc))
-        .tls_context(tls)
-        .build_https()
 }

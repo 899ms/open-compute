@@ -6,7 +6,7 @@ use super::*;
 #[derive(Clone)]
 pub struct OpenAiVisionClient {
     transport: ProviderTransport,
-    endpoint: Uri,
+    endpoint: url::Url,
     remote_model: String,
     headers: HeaderMap,
     max_request_bytes: usize,
@@ -42,13 +42,9 @@ impl OpenAiVisionClient {
             .backends
             .get(&contract.backend_name)
             .ok_or(AiProviderError::ContractMismatch)?;
-        let connector = HttpsConnectorBuilder::new()
-            .with_webpki_roots()
-            .https_or_http()
-            .enable_http1()
-            .build();
         Ok(Self {
-            transport: Client::builder(TokioExecutor::new()).build(connector),
+            transport: ProviderTransport::from_process_env()
+                .map_err(|_| AiProviderError::ContractMismatch)?,
             endpoint: backend
                 .endpoint
                 .parse()
@@ -105,14 +101,14 @@ impl OpenAiVisionClient {
         if body.len() > self.max_request_bytes {
             return Err(AiProviderError::InvalidRequest);
         }
-        let mut request = Request::builder()
-            .method(Method::POST)
-            .uri(&self.endpoint)
+        let request = self
+            .transport
+            .request(reqwest::Method::POST, self.endpoint.clone())
+            .map_err(|_| AiProviderError::ContractMismatch)?
             .header(CONTENT_TYPE, "application/json")
-            .body(Full::new(Bytes::from(body)))
-            .map_err(|_| AiProviderError::InvalidRequest)?;
-        apply_backend_headers(&mut request, &self.headers);
-        let response = tokio::time::timeout(self.timeout, self.transport.request(request))
+            .headers(self.headers.clone())
+            .body(body);
+        let response = tokio::time::timeout(self.timeout, request.send())
             .await
             .map_err(|_| AiProviderError::Timeout)?
             .map_err(|_| AiProviderError::Transient)?;
@@ -120,14 +116,7 @@ impl OpenAiVisionClient {
         if !content_type_is(&response, "application/json") {
             return Err(AiProviderError::MalformedResponse);
         }
-        let bytes = tokio::time::timeout(
-            self.timeout,
-            Limited::new(response.into_body(), self.max_response_bytes).collect(),
-        )
-        .await
-        .map_err(|_| AiProviderError::Timeout)?
-        .map_err(|_| AiProviderError::MalformedResponse)?
-        .to_bytes();
+        let bytes = collect_response(response, self.max_response_bytes, self.timeout).await?;
         let response: ChatResponse =
             serde_json::from_slice(&bytes).map_err(|_| AiProviderError::MalformedResponse)?;
         if !valid_response_model(response.model.as_deref()) || response.choices.len() != 1 {

@@ -125,7 +125,8 @@ impl AiSearchStore {
                 "SELECT i.id, i.key, ji.item_generation, i.source,
                    g.object_key, g.object_sha256, g.r2_object_version, g.r2_etag,
                    g.r2_uploaded_at_ms, g.object_size, g.content_type,
-                   i.metadata_json, ji.next_batch_ordinal
+                   i.metadata_json, ji.next_batch_ordinal, i.source_provider,
+                   i.source_namespace, g.manual_revision, g.manual_sha256
                  FROM index_job_items ji JOIN items i ON i.id=ji.item_id
                  JOIN item_generations g
                    ON g.item_id=ji.item_id AND g.generation=ji.item_generation
@@ -146,6 +147,10 @@ impl AiSearchStore {
                         row.get::<_, String>(10)?,
                         row.get::<_, Vec<u8>>(11)?,
                         row.get::<_, i64>(12)?,
+                        row.get::<_, Option<String>>(13)?,
+                        row.get::<_, Option<String>>(14)?,
+                        row.get::<_, Option<String>>(15)?,
+                        row.get::<_, Option<Vec<u8>>>(16)?,
                     ))
                 },
             )
@@ -166,6 +171,19 @@ impl AiSearchStore {
                 object_size: to_u64(item.9)?,
                 uploaded_at_ms: item.8.ok_or_else(invariant_error)?,
             }),
+            "open-compute:manual" => {
+                AiSearchSourceReference::Manual(AiSearchManualObjectReference {
+                    provider_id: item.13.ok_or_else(invariant_error)?,
+                    source: item.14.ok_or_else(invariant_error)?,
+                    revision: item.15.ok_or_else(invariant_error)?,
+                    sha256: item
+                        .16
+                        .ok_or_else(invariant_error)?
+                        .try_into()
+                        .map_err(|_| invariant_error())?,
+                    object_size: to_u64(item.9)?,
+                })
+            }
             _ => return Err(invariant_error()),
         };
         let claimed_item = ClaimedAiSearchItem {

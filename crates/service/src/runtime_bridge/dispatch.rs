@@ -9,6 +9,7 @@ impl WorkerdTransport {
         mut request: Request,
         validation: bool,
         durable_object_class: bool,
+        probe: bool,
     ) -> Result<Response, PlatformError> {
         let endpoint = self.endpoint()?;
         let (port, credential) = (endpoint.port, endpoint.credential);
@@ -95,6 +96,8 @@ impl WorkerdTransport {
             "http://127.0.0.1:{port}{}",
             if durable_object_class {
                 "/internal/validate-do"
+            } else if probe {
+                "/internal/probe"
             } else if validation {
                 "/internal/validate"
             } else {

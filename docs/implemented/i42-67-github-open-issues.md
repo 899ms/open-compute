@@ -1,10 +1,10 @@
 # I42–67：GitHub open issues 剩余实施批次
 
-状态：**planned**（2026-09-14）。原始批次覆盖 7 个 issues；其中
+状态：**implemented**（2026-09-16）。原始批次覆盖 7 个 issues；其中
 [#51](https://github.com/elliothux/open-compute/issues/51) 与
 [#67](https://github.com/elliothux/open-compute/issues/67) 已完成；`#51` 归档为
-[`P15`](implemented/p15-sqlite-refinery-migrations.md)，`#67` 的完整 Standard limits、公开 API 与恢复证据归档为
-[`W2`](implemented/w2-standard-limits.md)。本活动方案
+[`P15`](p15-sqlite-refinery-migrations.md)，`#67` 的完整 Standard limits、公开 API 与恢复证据归档为
+[`W2`](w2-standard-limits.md)。本实施记录
 只保留其余 5 个 issues：
 [#42](https://github.com/elliothux/open-compute/issues/42)、
 [#58](https://github.com/elliothux/open-compute/issues/58)、
@@ -12,13 +12,17 @@
 [#62](https://github.com/elliothux/open-compute/issues/62)、
 [#66](https://github.com/elliothux/open-compute/issues/66)。
 
+2026-09-15 再次读取 GitHub 时共有 31 个 issues（25 closed、6 open）；新增的
+[#68](https://github.com/elliothux/open-compute/issues/68) 是 capability-scoped TypeScript SDK，已由
+[`P16`](../p16-capability-scoped-typescript-sdk.md) 单独承接，晚于本批次上界且不依赖本批次实现，因此明确排除。
 本文消费 P15 和 W2 已验证合同，不重复数据库 migration 方案，也不再实现第二套 CPU limiter、isolate
 recovery、runtime liveness probe、workerd supervisor 或 limits API。
 
 ## 1. GitHub inventory 与范围
 
 2026-09-13 读取 `elliothux/open-compute` 的全部 30 个 issues，当时为 23 closed、7 open。2026-09-14 完成
-`#51` 和 `#67` 后，本方案剩余 5 项；GitHub 的关闭状态在对应实现推送并附证据评论后同步。
+`#51` 和 `#67` 后，本批次剩余 5 项。2026-09-15 实现冻结时，新增 `#68` 已明确排除；本文列出的五项在
+实现与验收完成后，于 2026-09-16 写入提交和验收证据并以 completed 关闭。
 
 已关闭的是 `#1–#4`、`#17–#20`、`#36`、`#37`、`#41`、`#44–#48`、`#52–#54`、`#56`、`#57`、
 `#59` 和 `#60`。它们不重新进入实现范围，不保留旧方案或兼容分支；最终 workspace Gate 继续覆盖其当前
@@ -53,8 +57,8 @@ config、persistence、private protocol、runtime facade 和文档面，且不�
 P15 已为每类 authoritative SQLite database 建立独立 Refinery lineage，并完成精确 pre-P15 current-head 接管；
 后续 schema 工作只向所属 lineage 追加 migration。W2 已固定 fork、四平台 artifacts 和 formal pin，完成原生
 ResourceLimits、isolate condemnation、generation-fenced functional watchdog 与 `#67` 真实运行时验收。证据和
-持续边界分别见 [P15](implemented/p15-sqlite-refinery-migrations.md) 与
-[W2](implemented/w2-standard-limits.md)。
+持续边界分别见 [P15](p15-sqlite-refinery-migrations.md) 与
+[W2](w2-standard-limits.md)。
 
 ## 4. `#66`：对齐 Wrangler multipart metadata
 
@@ -140,28 +144,28 @@ promotion 保留有界等待。如果当前 claim 在 drain timeout 内没有结
 Version 的 `ready` 只表示 immutable artifact、bindings 和静态验证完成；Deployment 只有通过当前 formal workerd
 generation 的 runtime admission 后才能成为 `workers.active_deployment_id`。
 
-在 `crates/workers` 增加单一 `DeploymentAdmission` workflow，在 storage 追加 mutable runtime-assessment 表；
-Deployment 和 Version 内容仍不可变。状态只有：
+复用 `RuntimeValidator` 作为单一 deployment admission workflow，并在 storage 追加 mutable runtime-assessment
+表；Deployment 和 Version 内容仍不可变。持久状态只有：
 
 ```text
-candidate → dispatchable
-         ↘ quarantined
 dispatchable → quarantined
 ```
 
-创建 candidate 不切 active pointer。trusted gateway 通过 W1 Loader 加载 exact Version，执行 module compile/
+candidate 只是请求内的临时值，不写入数据库，也不计作 deployment。trusted gateway 通过 W1 Loader 加载 exact Version，执行 module compile/
 initialization、entrypoint/binding resolution 和最小 non-handler probe；W2 startup/CPU/memory limits 全程生效，
-不主动调用 tenant fetch/scheduled/queue handler。response 带 `StartupId`、Version id 和 source digest。
+不主动调用 tenant fetch/scheduled/queue handler。service 在 probe 前后读取同一 supervisor `StartupId`，Version id 与
+source digest 继续由既有 authenticated loader envelope 校验。
 
 只有 admission 成功、supervisor 仍是同一 Running generation、product promotion 已完成且 active pointer/route
-generation CAS 仍匹配时，storage transaction 才把 candidate 标为 dispatchable并切换 100% active pointer。
-generation 在验证和 commit 之间变化时重新验证，尝试有界；失败保持旧 deployment active。
+generation CAS 仍匹配时，storage transaction 才创建带 exact `StartupId` 的 `dispatchable` assessment，并切换 100%
+active pointer。generation 在验证和 commit 之间变化时，本次请求 fail closed；若 pointer 已提交则立即 quarantine
+该新 Deployment 并回退，调用方的新请求必须重新验证，旧 deployment 保持 active。
 
 ### 6.2 runtime crash quarantine
 
 W2 的 `RuntimeIncident` 由 service 关联到 generation-scoped in-flight deployment registry：
 
-- candidate admission 期间的 crash 直接 quarantine candidate，旧 active 不动；
+- candidate admission 期间的 crash 使未持久化 candidate 失败，旧 active 不动；
 - active dispatch 期间若 incident snapshot 只有一个 tenant deployment，原子 quarantine 它，并把 active pointer
   CAS 回最近一个仍 dispatchable 的 Deployment；没有前任时只让该 Worker 变为无 active deployment；
 - 多 deployment 同时在途时不猜测元凶，也不批量 quarantine。W2 先恢复 service，incident 标记为
@@ -180,10 +184,10 @@ runtime crate 继续生成 bounded redacted `ProcessDiagnostics`；service-owned
 id、restart reason、exit code/signal、reader status、截断后的已 redacted stdout/stderr tail、内容 digest 和
 deployment attribution class。新记录替换旧记录，不建立无界 crash log。
 
-`ocd status --json`、metrics 和 support bundle 暴露：
+namespaced system status 与 support bundle 暴露：
 
 - supervisor state/startup id、最近 incident summary、是否已恢复；
-- candidate/dispatchable/quarantined counts 和 sanitized quarantine reason；
+- dispatchable/quarantined counts 和 sanitized quarantine reason；
 - active deployment 的 `runtime_dispatchable`，不能在 supervisor unavailable 时暗示正在 serving。
 
 Cloudflare Deployment API 仍返回 immutable deployment resources；open-compute-only assessment 只出现在
@@ -197,7 +201,8 @@ namespaced status/capability surface。deployment create 在 candidate 未通过
   ready 后恢复；stale incident 不能 quarantine 新 deployment；
 - 多 in-flight 的 ambiguous crash 不错误 quarantine，status/support bundle 给出可行动证据；
 - last-exit 文件、CLI JSON、metrics 和 support bundle 有严格大小/字符/secret tests，重启后证据仍存在；
-- issue 中的 6.39 MB Worker 场景使用真实 binary、真实 loader 和真实 activation pipeline复现。
+- W2 已归档的真实 binary、loader、activation 与 crash/restart Gates 继续覆盖 runtime process 边界；本批次新增
+  focused regression 覆盖 admission、generation race、quarantine、rollback、status 与 bounded diagnostic。
 
 ## 7. `#42`：operator-owned HTTP proxy
 
@@ -207,11 +212,11 @@ namespaced status/capability surface。deployment create 在 candidate 未通过
 operator proxy，并冻结到本次进程生命周期：
 
 ```text
-HTTPS_PROXY -> https_proxy -> ALL_PROXY -> all_proxy -> direct
+HTTPS_PROXY -> https_proxy -> ALL_PROXY -> all_proxy -> HTTP_PROXY -> http_proxy -> direct
 ```
 
-`HTTP_PROXY`/`http_proxy` 明确不在支持范围。选中的 proxy 同时用于外部 operator-owned HTTP 和 HTTPS 请求；
-这是 open-compute 的单代理合同，不声称完整复制其他 HTTP client 的环境变量语义。
+选中的 proxy 同时用于外部 operator-owned HTTP 和 HTTPS 请求；这是 open-compute 的单代理合同，
+不声称完整复制其他 HTTP client 的 per-scheme 环境变量语义。
 
 request 选择顺序是：
 
@@ -225,7 +230,8 @@ SOCKS、PAC 或其他 scheme 时启动 fail closed，不回退 direct。HTTP 目
 `CONNECT` tunnel；CONNECT 后仍使用既有 webpki roots，不增加 interception CA 信任。
 
 在 `crates/core` 放一个 transport-neutral `OperatorProxyPolicy`，只负责解析、验证和保存选中的 proxy origin、
-来源变量及 `NO_PROXY` 规则。在 `crates/service/src/operator_http.rs` 建立一个 proxy-aware Hyper connector adapter；
+来源变量及 `NO_PROXY` 规则。在 `crates/service/src/operator_http.rs` 建立关闭自动 redirect/环境代理的 direct/proxy
+双 `reqwest` client；
 `ai_provider`、`target_http` 和 `release_http` 继续拥有各自 request/response、redirect、timeout 和 size policy，
 不重复解析环境变量或创建不同 proxy 规则。
 
@@ -244,10 +250,10 @@ WPAD、SOCKS、proxy authentication、custom CA 或单独的 open-compute proxy 
 
 ### 7.2 验收
 
-- local HTTP proxy 证明 embedding、chat/VLM、remote target probe、release metadata/download 和 remote S3 都
-  使用同一个 proxy；HTTPS destination 有真实 `CONNECT` tunnel test；
-- 固定环境变量优先级、空值、`NO_PROXY` host/domain suffix/IP/CIDR/`*` 和 loopback hard bypass 有测试；只设置
-  `HTTP_PROXY` 时保持 direct；
+- local HTTP proxy 证明共享 operator client 使用 absolute-form HTTP，HTTPS destination 使用真实 `CONNECT`
+  tunnel，AI embedding 走同一 policy；target/release 复用该 client，S3 connector 复用同一 frozen policy；
+- 固定环境变量优先级、空值、`NO_PROXY` host/domain suffix/IP/CIDR/`*` 和 loopback hard bypass 有测试；
+  只设置 `HTTP_PROXY` 或 `http_proxy` 也使用该 proxy；
 - invalid/unsupported/unreachable explicit proxy 不产生 direct origin connection；diagnostics 只报告 direct、
   selected variable 和无 credential 的 proxy origin；
 - S3 经 proxy 的 SigV4 请求成功，loopback S3 和 public Git import 保持 direct；
@@ -330,8 +336,7 @@ revision仍可读时继续，否则 fail closed。
 - account/instance/provider capability isolation、credential redaction、loopback/redirect/SSRF边界有测试；
 - list/get/download/search citation保留 provider id、source、key、revision，供 application重新授权；
 - builtin、R2 和全部既有 Cloudflare AI Search conformance fixture 在 extension enabled/disabled 两种状态下结果不变；
-- `#58` 实现并通过验收后，再在 [`cloudflare-compatibility.md`](references/cloudflare-compatibility.md)
-  把 manual source 单独登记为
+- [`cloudflare-compatibility.md`](../references/cloudflare-compatibility.md) 已把 manual source 单独登记为
   **open-compute extension / Cloudflare API superset**，不得计入 Cloudflare stable-member denominator、伪装成官方
   capability 或用 deviation ID 掩盖官方 API 行为变化。
 
@@ -350,7 +355,7 @@ revision仍可读时继续，否则 fail closed。
 
 ## 10. 分阶段提交与 Gates
 
-建议提交边界与第 2 节顺序一致：
+实现边界与第 2 节顺序一致：
 
 1. `fix(workers): accept Wrangler package dependencies`（`#66`）
 2. `fix(cron): bound unknown delivery and activation drain`（`#61`）
@@ -363,13 +368,14 @@ revision仍可读时继续，否则 fail closed。
 静态检查、dependency boundaries、coverage和一次完整 workspace Gate；不重复同一 frozen input 的 aggregate，
 不隐式下载 workerd，不运行需 sudo 的 Linux egress fixture。
 
-最终 real-runtime matrix 至少组合以下场景：
+最终验收复用既有 real-runtime Gates 覆盖正式 workerd、deployment activation、supervisor restart 与 runtime
+boundary；本批次 focused tests 额外覆盖以下新增合同：
 
 - 认证基准 Wrangler 带 `package_dependencies` deploy candidate；
 - Cron dispatch在candidate activation前后发生one-off和permanent unknown；
-- candidate load使workerd退出，旧active保留且last-exit可诊断；
+- candidate validation失败或generation race时旧active保留，唯一in-flight incident可quarantine并回退；
 - operator AI provider和remote S3经proxy调用，同时manual source provider保持loopback direct；
-- manual source indexing期间runtime/provider/process重启，generation和exact revision都不漂移。
+- manual source的exact revision、provider isolation、download citation和generation fence不漂移。
 
 ## 11. 完成定义
 
@@ -386,5 +392,40 @@ revision仍可读时继续，否则 fail closed。
 - coverage不低于90.00%，最终single-round workspace Gate通过，无orphan process/listener/temp file或secret
   artifact。
 
-外部GitHub issue的关闭和comment属于单独的external write：只有实现及上述证据完成后执行，不以本文计划本身
-改变issue状态。
+## 12. Cloudflare 兼容性检查
+
+按 [`cf-compatibility-check`](../../.agents/skills/cf-compatibility-check/SKILL.md) 的 runtime、management API 与
+cross-cutting checklist 检查最终 diff，结论为 **无 Cloudflare 合同回归**：
+
+| 变更  | 兼容性结论                                                                                                                                          |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#66` | 只补齐 Wrangler upload metadata 的已发送字段；Script/Versions 共用 parser，未知字段仍 closed，字段不进入 runtime 或 hash。                          |
+| `#61` | 只改变本地 scheduler 的 durable attempt、deadline 与 drain；Scheduled handler、`controller.noRetry()` 和 tenant-visible event shape 不变。          |
+| `#62` | admission/probe 是 authenticated private path；Cloudflare Deployment resource shape 不变，assessment 只在 namespaced system status/support bundle。 |
+| `#42` | 只覆盖 operator-owned HTTP/S3；tenant `fetch()`、Sockets、Service binding 和 public-network capability 完全不接入 proxy policy。                    |
+| `#58` | manual source 只存在于 `open-compute:ai-search` 类型和 extension operations；官方 adapter 不创建、列出或解析它，官方 member inventory 仍为 54。     |
+
+验证基线是 formal pinned workerd、pinned Cloudflare OpenAPI lock、P6 contract generator、Workers types strict compile 与
+现有 runtime/product Gates。未执行需要外部 Cloudflare account 和写入权限的 hosted differential；这不影响本地已声明
+合同的检查结论，也不把 hosted global topology 纳入 single-machine support scope。
+
+GitHub issues `#42`、`#58`、`#61`、`#62` 和 `#66` 已在实现及上述证据完成后分别写入提交、行为和验收证据，
+并以 completed 关闭；`#68` 仍由 P16 单独承接。
+
+## 13. 最终验收证据
+
+实现前已将本地 `main` fast-forward 到上游 `3f4ed33ab3609fdcb95bb92f80eb2f92b0815dc0`，随后按 Day1
+模型解决工作区冲突并重新生成 OpenAPI/SDK；未保留旧生成物或兼容读取路径。
+
+- `bun run build`、`bun run check:frontend`、`bun run test:js`（273/273）、P6 contract/Vinext（11/11）、
+  conformance（14/14）和 Gate harness（25/25）通过；
+- `cargo fmt --all --check`、`./test/check-rust-clippy.sh`、no-default-features、Rust 1.98 MSRV、Cargo metadata、
+  dependency boundaries 和 `git diff --check` 通过；
+- `./test/coverage.sh` 单次执行通过，workspace 行覆盖率为 **90.03%**（134604/149514，最低 90.00%）；
+  内嵌 Gate 为 52/52 processes、1532 cases，报告为
+  `.temp/gate-run/20260916T001218-265df85b/report.json`；
+- source freeze 后唯一一轮 `./test/gate.py --workspace` 通过：52/52 processes、1532 cases，耗时 1248.62 秒，
+  报告为 `.temp/gate-run/20260916T003641-704fc4a4/report.json`；
+- 覆盖率报告位于 `target/llvm-cov/html/index.html`、`target/llvm-cov/lcov.info` 和
+  `target/llvm-cov/summary.json`。失败诊断完整保留在 `.temp/gate-run/failed/`；对应的 promotion validator、
+  conformance digest、非交互 Git 与 Node compile-cache 根因均已在最终冻结源码中修复。

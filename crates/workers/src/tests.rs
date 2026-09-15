@@ -34,6 +34,19 @@ impl RuntimeValidator for AcceptAllValidator {
         Box::pin(async { Ok(()) })
     }
 
+    fn validate_deployment(
+        &self,
+        _candidate: ValidationCandidate,
+    ) -> std::pin::Pin<
+        Box<dyn Future<Output = Result<StartupId, open_compute_core::PlatformError>> + Send + '_>,
+    > {
+        Box::pin(async { Ok(test_startup_id()) })
+    }
+
+    fn current_generation(&self) -> Option<StartupId> {
+        Some(test_startup_id())
+    }
+
     fn validate_entrypoint(
         &self,
         _candidate: ValidationCandidate,
@@ -43,6 +56,12 @@ impl RuntimeValidator for AcceptAllValidator {
     > {
         Box::pin(async { Ok(()) })
     }
+}
+
+fn test_startup_id() -> StartupId {
+    "018f47a2-3b4c-7def-8abc-0123456789ab"
+        .parse()
+        .expect("fixed test startup id")
 }
 
 fn module(name: &str, bytes: &[u8]) -> ModuleInput {

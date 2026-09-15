@@ -200,19 +200,10 @@ pub(super) async fn create_deployment(
                 )
             })
     } else {
-        WorkerRepository::new(api.storage.db())
-            .create_deployment_checked(
-                account,
-                worker.id,
-                target,
-                None,
-                Some(worker.route_generation),
-                DeploymentSource::VersionsApi,
-                &body.annotations,
-                context.request_id(),
-                now,
-            )
-            .map(|(_, deployment)| deployment)
+        Err(PlatformError::new(
+            open_compute_core::ErrorCode::RuntimeUnavailable,
+            "deployment admission coordinator is unavailable",
+        ))
     };
     match result {
         Ok(record) => match DeploymentItem::from_record(&record) {
