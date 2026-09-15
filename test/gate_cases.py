@@ -80,7 +80,10 @@ ONCE = {
     'single-binary': ('readonly_commands_need_only_the_single_executable',),
     # Default Node builtins, process.env isolation, and fail-closed stubs.
     'p0-2': ('nodejs::p0_2_nodejs_default_surface_isolation_and_unsupported_stubs',),
-    'p6-wrangler-resources': ('fixed_wrangler_resource_commands_use_live_v4_authorities',),
+    'p6-wrangler-resources': (
+        'fixed_wrangler_resource_commands_use_live_v4_authorities',
+        'w2_wrangler_limits_settings_clone_and_restart',
+    ),
     'p6-cloudflare-sdk': ('official_cloudflare_sdk_matches_live_ocd_contract',),
     'p12-wrangler': ('target_commands_and_wrangler_wrapper_preserve_the_day1_boundary',),
 }
@@ -89,7 +92,10 @@ TIMING = {
     'p0-1': ('p0_1_process_gate', 'round_drop_recovers_orphan_without_platform_handle'),
     # Cohesive real-runtime matrices also own concurrent requests, stream cleanup,
     # generation changes or drain assertions. Do not demote the entire matrix.
-    'p0-2': ('p0_2_real_worker_create_validate_dispatch_promote_rollback_restart',),
+    'p0-2': (
+        'p0_2_real_worker_create_validate_dispatch_promote_rollback_restart',
+        'resource_limits_recovery::w2_resource_limits_protect_neighbors_and_recover_a_wedged_generation',
+    ),
     'p0-3': ('p0_3_real_binding_matrix',),
     'p0-4': ('p0_4_real_kv_matrix',),
     'p0-5': (
@@ -133,6 +139,8 @@ TIMING = {
     'p5-search': ('p5_real_vectorize_ai_search_and_markdown_matrix',),
     'runtime': (
         'argv_exact_stdin_fd3_and_auth_probe',
+        'begin_drain_during_startup_cancels_the_attempt',
+        'begin_drain_stops_a_running_generation_gracefully',
         'compile_failure_does_not_inherit_prior_exit',
         'control_faults_reap_pid_and_pgid',
         'drop_does_not_signal_or_double_wait_reaped_pid',
@@ -149,6 +157,9 @@ TIMING = {
         'shutdown_cancels_slow_compile_control_probe_and_backoff',
         'shutdown_does_not_consume_budget_and_is_idempotent',
         'shutdown_waits_for_held_blocking_spawn',
+        'stale_suspicion_is_dropped',
+        'stalled_event_loop_restarts_once',
+        'suspicion_healthy_probe_does_not_restart',
         'teardown_retains_lease_until_reap_is_proved',
         'term_and_kill_and_descendant',
         'term_grace_then_kill_order',

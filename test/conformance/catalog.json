@@ -3343,10 +3343,14 @@
     },
     {
       "id": "dynamic_workers::WorkerLoaderWorkerCode::limits:property#0",
-      "status": "blocked",
-      "compileCases": [],
-      "runtimeCases": [],
-      "deviations": []
+      "status": "supported",
+      "compileCases": [
+        "ts::test/conformance/fixtures/dynamic-loader-surface.ts"
+      ],
+      "runtimeCases": [
+        "p0-2::resource_limits_recovery::w2_resource_limits_protect_neighbors_and_recover_a_wedged_generation",
+        "p6-wrangler-resources::w2_wrangler_limits_settings_clone_and_restart"
+      ]
     },
     {
       "id": "dynamic_workers::WorkerLoaderWorkerCode::mainModule:property#0",
@@ -3412,10 +3416,14 @@
     },
     {
       "id": "dynamic_workers::WorkerStubEntrypointOptions::limits:property#0",
-      "status": "blocked",
-      "compileCases": [],
-      "runtimeCases": [],
-      "deviations": []
+      "status": "supported",
+      "compileCases": [
+        "ts::test/conformance/fixtures/dynamic-loader-surface.ts"
+      ],
+      "runtimeCases": [
+        "p0-2::resource_limits_recovery::w2_resource_limits_protect_neighbors_and_recover_a_wedged_generation",
+        "p6-wrangler-resources::w2_wrangler_limits_settings_clone_and_restart"
+      ]
     },
     {
       "id": "dynamic_workers::WorkerStubEntrypointOptions::props:property#0",
@@ -3430,17 +3438,25 @@
     },
     {
       "id": "dynamic_workers::workerdResourceLimits::cpuMs:property#0",
-      "status": "blocked",
-      "compileCases": [],
-      "runtimeCases": [],
-      "deviations": []
+      "status": "supported",
+      "compileCases": [
+        "ts::test/conformance/fixtures/dynamic-loader-surface.ts"
+      ],
+      "runtimeCases": [
+        "p0-2::resource_limits_recovery::w2_resource_limits_protect_neighbors_and_recover_a_wedged_generation",
+        "p6-wrangler-resources::w2_wrangler_limits_settings_clone_and_restart"
+      ]
     },
     {
       "id": "dynamic_workers::workerdResourceLimits::subRequests:property#0",
-      "status": "blocked",
-      "compileCases": [],
-      "runtimeCases": [],
-      "deviations": []
+      "status": "supported",
+      "compileCases": [
+        "ts::test/conformance/fixtures/dynamic-loader-surface.ts"
+      ],
+      "runtimeCases": [
+        "p0-2::resource_limits_recovery::w2_resource_limits_protect_neighbors_and_recover_a_wedged_generation",
+        "p6-wrangler-resources::w2_wrangler_limits_settings_clone_and_restart"
+      ]
     },
     {
       "id": "kv::KVNamespace::delete:method#0",
@@ -31078,16 +31094,6 @@
     }
   ],
   "blockedGaps": [
-    {
-      "id": "dynamic-workers.custom-limits-p2",
-      "memberIds": [
-        "dynamic_workers::WorkerLoaderWorkerCode::limits:property#0",
-        "dynamic_workers::WorkerStubEntrypointOptions::limits:property#0",
-        "dynamic_workers::workerdResourceLimits::cpuMs:property#0",
-        "dynamic_workers::workerdResourceLimits::subRequests:property#0"
-      ],
-      "reason": "P2 owns default and custom resource enforcement. P1 rejects every explicit code/entrypoint limit dictionary, including empty dictionaries; it does not claim support for these stable options."
-    },
     {
       "id": "dynamic-workers.experimental-controls",
       "memberIds": [

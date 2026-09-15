@@ -59,6 +59,7 @@ fn descriptor_env_date_and_secret_validation_matrix() {
             0,
             "2026-09-08".into(),
             Vec::new(),
+            open_compute_storage::EffectiveResourceLimits::standard_defaults(),
             Some((bundle.sha256(), bundle.manifest())),
             None,
             vars,

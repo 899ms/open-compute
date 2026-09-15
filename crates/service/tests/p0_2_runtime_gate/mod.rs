@@ -40,6 +40,7 @@ use open_compute_storage::{
 use open_compute_workers::{
     BundleLimits, CanonicalBundle, CreateVersionOutcome, CreateVersionRequest, ModuleInput,
     ModuleType, ResourcePins, RuntimeSource, RuntimeValidator, VersionController, VersionPins,
+    VersionResourceLimitsInput, VersionRuntimeFeatures,
 };
 use std::collections::BTreeMap;
 use std::convert::Infallible;
@@ -53,6 +54,7 @@ use std::time::{Duration, Instant};
 
 mod http;
 mod nodejs;
+mod resource_limits_recovery;
 mod wrangler;
 
 mod p0_2_real_worker_create_validate_dispatch_promote_rollback_restart;
@@ -544,6 +546,7 @@ struct DispatchResponse {
     status: u16,
     body: String,
     loader_outcome: Option<LoaderOutcome>,
+    cf_error_type: Option<String>,
 }
 
 struct PendingUpload {
@@ -609,11 +612,17 @@ async fn dispatch(
         .unwrap();
     let status = response.status().as_u16();
     let loader_outcome = response.extensions().get::<LoaderOutcome>().copied();
+    let cf_error_type = response
+        .headers()
+        .get("cf-error-type")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
     let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     DispatchResponse {
         status,
         body: String::from_utf8(bytes.to_vec()).unwrap(),
         loader_outcome,
+        cf_error_type,
     }
 }
 

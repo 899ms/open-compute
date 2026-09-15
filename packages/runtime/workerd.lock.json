@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
-  "release": "v1.20260905.0-open-compute-p1.b3e1a278",
-  "revision": "b3e1a27840299f493d9425dc4d9972381d02ef23",
+  "release": "v1.20260905.0-open-compute-p3.d711abf4",
+  "revision": "d711abf405f2d56b6518a863bb5dbcace14289f1",
   "expectedVersionOutput": "workerd 2026-09-05",
   "effectiveCompatibilityDate": "2026-09-08",
   "requiredCompatibilityFlags": [],
@@ -32,26 +32,26 @@
     "darwin-arm64": {
       "archiveName": "workerd-darwin-arm64.gz",
       "archiveUrl": null,
-      "archiveSha256": "86267b9e0a6a10e2540300a8aeeb0b233b3b65560de54708dedcd98bbe45cd7d",
-      "binarySha256": "a9bf1e0397076b8e70f726c6e7aa5670f602e1a0f3ca4e68f29b0adb1284f447"
+      "archiveSha256": "c9b4f23846a23b3d3da227c388460c5bbf077d317a4128a92d22fbf8279e2223",
+      "binarySha256": "c7b705be0db10313d2aef8b41994628280c9cf6017efe657cb376339ea58afbd"
     },
     "darwin-x64": {
       "archiveName": "workerd-darwin-64.gz",
       "archiveUrl": null,
-      "archiveSha256": "58aa9b0bd24b861227767b0b2f762c390e634bdaac7619dbf11de76e2f130035",
-      "binarySha256": "7ae867847fe0852691f6cc7eaad98651273f7a4da3e39e24b116822a0d1d76bc"
+      "archiveSha256": "ba5156706b6e0f582a9830d7c7fc4a3fbd362700e01b7f17df7f94fb117c2742",
+      "binarySha256": "a0b1fd8b12e5a16356c48792cc99ca6d51222e3ea10508d2eb21fe0463990e46"
     },
     "linux-arm64": {
       "archiveName": "workerd-linux-arm64.gz",
       "archiveUrl": null,
-      "archiveSha256": "99096f05ed2402de219b3a6983be9ac199b5ea80f91244c76ed77d00b355cf07",
-      "binarySha256": "620aff7892cb5652ec287aebd55e2e757b89653508cb3f297ba5a5b44513f4fb"
+      "archiveSha256": "9e2d3991227e5d70a3cd928f14afc1e780b3f24a549b616cbe4fa2a387486c2b",
+      "binarySha256": "325f64c3f501b811a0ae69d90a5beca1528a641784e3f346c18df16cc2ed9ef0"
     },
     "linux-x64": {
       "archiveName": "workerd-linux-64.gz",
       "archiveUrl": null,
-      "archiveSha256": "b16ffda8dd2dcd754337939862c11ae8c823d6214a7791c56166de8abdfbca66",
-      "binarySha256": "51568f9cda2686d6ba9bb2e129cae6d30d5bfcf498074f961d3ba593e140687f"
+      "archiveSha256": "fd0cbf37c2ba7676f6be421d7bc0db595e50f006ddc1bc801428b0e1333499df",
+      "binarySha256": "d9d8d6a6e3509fb9016d6f00677df2e6142d555b41399bfef3c3ebe0ce3262ce"
     }
   },
   "source": {

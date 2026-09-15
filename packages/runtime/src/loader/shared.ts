@@ -49,6 +49,7 @@ export const INTERNAL_HEADERS = Object.freeze([
   "x-open-compute-route-generation",
   "x-open-compute-request-id",
   "x-open-compute-output-gate",
+  "x-open-compute-resource-limit",
   "x-open-compute-binding-id",
   "x-open-compute-binding-token",
   "x-open-compute-descriptor-sha256",
@@ -100,10 +101,11 @@ export function lockWorkerCode(env: LoaderEnv): {
   };
 }
 
-/** Select compatibility metadata only from the authenticated immutable Version snapshot. */
+/** Select compatibility metadata and resource limits only from the immutable snapshot. */
 export function snapshotWorkerCode(snapshot: RuntimeSnapshot): {
   compatibilityDate: string;
   compatibilityFlags: string[];
+  limits: { cpuMs: number; subRequests: number };
 } {
   if (
     snapshot.compatibilityDate !== "2026-09-08" ||
@@ -112,13 +114,19 @@ export function snapshotWorkerCode(snapshot: RuntimeSnapshot): {
       snapshot.compatibilityFlags.length === 0 ||
       (snapshot.compatibilityFlags.length === 1 &&
         snapshot.compatibilityFlags[0] === "nodejs_compat")
-    )
+    ) ||
+    !Number.isSafeInteger(snapshot.limits?.cpuMs) ||
+    !Number.isSafeInteger(snapshot.limits?.subRequests)
   ) {
     throw bindingError("VERSION_INVARIANT_VIOLATION");
   }
   return {
     compatibilityDate: snapshot.compatibilityDate,
     compatibilityFlags: [...snapshot.compatibilityFlags],
+    limits: {
+      cpuMs: snapshot.limits.cpuMs,
+      subRequests: snapshot.limits.subRequests,
+    },
   };
 }
 
