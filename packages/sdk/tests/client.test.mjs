@@ -32,6 +32,9 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
   const surface = JSON.parse(
     await readFile(new URL("../surface.json", import.meta.url), "utf8"),
   );
+  const packageJson = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
   const extension = JSON.parse(
     await readFile(
       new URL("../../../openapi/open-compute-extension.json", import.meta.url),
@@ -56,7 +59,7 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
   );
   assert.equal(surface.schemaVersion, 1);
   assert.equal(surface.package, "@open-compute/sdk");
-  assert.equal(surface.packageVersion, "0.1.7");
+  assert.equal(surface.packageVersion, packageJson.version);
   assert.equal(surface.operations.length, 140);
   assert.equal(surface.excludedOperations.length, 1);
   const byNode = (list) =>

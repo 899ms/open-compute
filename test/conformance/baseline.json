@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "openComputeRevision": "15402444d9c1741152bf502af8005c21b94c2a33a5901839f7f683e03552e50e",
+  "openComputeRevision": "e11f16aea09320b2568d2bb926e6ef091bc8ba39639490593e1d3ece28c24b73",
   "sourceDigestScope": "git-visible production, test, toolchain, manifest, and maintained reference inputs; excludes generated Python caches, test/conformance/baseline.json, and non-reference docs",
   "workerdLockSha256": "a30ede574449484b9600424551deed8b493689d4007e39e4080a31229480d84f",
   "workerd": {

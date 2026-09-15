@@ -87,7 +87,10 @@ vinext/Next.js 端到端或 hosted Cloudflare differential。其冻结摘要和�
 `release/0.1.1` 这类按版本命名的分支。版本候选应从最新 `main` 推进到 `release`，而不是从
 旧的 `release` 反向开发：
 
-1. 在最新 `main` 修改根 `Cargo.toml` 的 workspace 版本为新的 `X.Y.Z`；
+1. 在最新 `main` 修改根 `Cargo.toml` 的 workspace 版本为新的 `X.Y.Z`，并在同一个 version PR 中把
+   `packages/sdk/package.json` 的 `version` 改为同一 `X.Y.Z`（`@open-compute/sdk` 与 `ocd` 共享同一
+   stable 版本，没有独立 SDK tag；release workflow 的 validate job 会拒绝 SDK 与 workspace 版本不一致
+   的 tag）；
 2. 运行 Cargo，让它更新 `Cargo.lock` 中所有 workspace package 的版本，不手改 lockfile；
 3. 检查并上传 Git LFS 实体，不能只把 pointer 推到 Git：
 
