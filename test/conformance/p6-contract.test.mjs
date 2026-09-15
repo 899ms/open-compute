@@ -24,7 +24,7 @@ test("P6 pinned OpenAPI subset and capability projection are internally reproduc
         import.meta.url,
       ).pathname,
       sdkRoot: new URL(
-        "../../packages/cloudflare-extension/node_modules/cloudflare/",
+        "../../packages/sdk/node_modules/cloudflare/",
         import.meta.url,
       ).pathname,
     }),
@@ -57,11 +57,11 @@ test("vendor extension operations have stable typed envelopes and exact request 
         operation,
       })),
   );
-  assert.equal(operations.length, 18);
+  assert.equal(operations.length, 19);
   assert.equal(operations.filter(({ method }) => method === "post").length, 8);
   assert.equal(
     new Set(operations.map(({ operation }) => operation.operationId)).size,
-    18,
+    19,
   );
   assert.ok(
     operations.every(
@@ -139,7 +139,7 @@ test("settings surfaces, asset upload variants, and old routes are classified ex
     capability.managementApi.routes.filter(
       (item) => item.status === "supported",
     ).length,
-    165,
+    167,
   );
   assert.equal(
     capability.managementApi.routes.filter(

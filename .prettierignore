@@ -8,3 +8,5 @@ third_party
 apps/dashboard/src/route-tree.gen.ts
 packages/runtime/dist
 packages/docs/.vitepress/dist
+packages/sdk/surface.json
+openapi/open-compute-sdk.json

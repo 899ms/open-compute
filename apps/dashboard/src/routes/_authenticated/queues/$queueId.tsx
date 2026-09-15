@@ -31,17 +31,13 @@ function QueueDetailPage() {
   const queue = useQuery({
     queryKey: ["cloudflare-v4", "queues", queueId],
     queryFn: ({ signal }) =>
-      client!.cloudflare.queues.get(
-        queueId,
-        { account_id: accountId! },
-        { signal },
-      ),
+      client!.queues.get(queueId, { account_id: accountId! }, { signal }),
     enabled,
   });
   const metrics = useQuery({
     queryKey: ["cloudflare-v4", "queues", queueId, "metrics"],
     queryFn: ({ signal }) =>
-      client!.cloudflare.queues.getMetrics(
+      client!.queues.getMetrics(
         queueId,
         { account_id: accountId! },
         { signal },
@@ -51,7 +47,7 @@ function QueueDetailPage() {
   const consumers = useQuery({
     queryKey: ["cloudflare-v4", "queues", queueId, "consumers"],
     queryFn: ({ signal }) =>
-      client!.cloudflare.queues.consumers.list(
+      client!.queues.consumers.list(
         queueId,
         { account_id: accountId! },
         { signal },
@@ -60,7 +56,7 @@ function QueueDetailPage() {
   });
   const configMutation = useMutation({
     mutationFn: (input: QueueConfigInput) =>
-      client!.cloudflare.queues.edit(queueId, {
+      client!.queues.update(queueId, {
         account_id: accountId!,
         settings: {
           ...(input.deliveryDelaySeconds !== undefined
@@ -88,7 +84,7 @@ function QueueDetailPage() {
   });
   const deliveryMutation = useMutation({
     mutationFn: (paused: boolean) =>
-      client!.cloudflare.queues.edit(queueId, {
+      client!.queues.update(queueId, {
         account_id: accountId!,
         settings: { delivery_paused: paused },
       }),

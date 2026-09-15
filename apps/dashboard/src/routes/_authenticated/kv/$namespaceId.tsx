@@ -36,7 +36,7 @@ function KvDetailPage() {
   const keys = useQuery({
     queryKey: ["cloudflare-v4", "kv", namespaceId, "keys"],
     queryFn: ({ signal }) =>
-      client!.cloudflare.kv.namespaces.keys.list(
+      client!.kv.namespaces.keys.list(
         namespaceId,
         { account_id: accountId! },
         { signal },
@@ -46,7 +46,7 @@ function KvDetailPage() {
   const value = useQuery({
     queryKey: ["cloudflare-v4", "kv", namespaceId, "values", selectedKey],
     queryFn: async ({ signal }) => {
-      const response = await client!.cloudflare.kv.namespaces.values.get(
+      const response = await client!.kv.namespaces.values.get(
         selectedKey!,
         {
           account_id: accountId!,
@@ -73,7 +73,7 @@ function KvDetailPage() {
         throw new Error(
           "Expiration TTL must be an integer of at least 60 seconds.",
         );
-      return client!.cloudflare.kv.namespaces.values.update(draftKey.trim(), {
+      return client!.kv.namespaces.values.update(draftKey.trim(), {
         account_id: accountId!,
         namespace_id: namespaceId,
         value: draftValue,
@@ -96,7 +96,7 @@ function KvDetailPage() {
   });
   const remove = useMutation({
     mutationFn: (key: string) =>
-      client!.cloudflare.kv.namespaces.values.delete(key, {
+      client!.kv.namespaces.values.delete(key, {
         account_id: accountId!,
         namespace_id: namespaceId,
       }),

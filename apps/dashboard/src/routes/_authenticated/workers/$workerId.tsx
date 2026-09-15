@@ -98,7 +98,7 @@ function WorkerDetailPage() {
   const deployments = useQuery({
     queryKey: ["cloudflare-v4", "workers", workerId, "deployments"],
     queryFn: ({ signal }) =>
-      client!.cloudflare.workers.scripts.deployments.list(
+      client!.workers.scripts.deployments.list(
         workerId,
         { account_id: accountId! },
         { signal },
@@ -108,7 +108,7 @@ function WorkerDetailPage() {
   const versions = useQuery({
     queryKey: ["cloudflare-v4", "workers", workerId, "versions"],
     queryFn: ({ signal }) =>
-      client!.cloudflare.workers.scripts.versions.list(
+      client!.workers.scripts.versions.list(
         workerId,
         { account_id: accountId! },
         { signal },
@@ -143,7 +143,7 @@ function WorkerDetailPage() {
             2,
         ),
       );
-      return client!.cloudflare.workers.observability.telemetry.query(
+      return client!.workers.observability.telemetry.query(
         {
           account_id: accountId!,
           queryId: `dashboard-worker-${workerId}`,
@@ -185,7 +185,7 @@ function WorkerDetailPage() {
     };
     const sendHeartbeat = async () => {
       try {
-        await client.cloudflare.workers.observability.telemetry.liveTailHeartbeat(
+        await client.workers.observability.telemetry.liveTailHeartbeat(
           {
             account_id: accountId,
             scriptId: workerId,
@@ -200,22 +200,21 @@ function WorkerDetailPage() {
       clearLiveError();
       setLiveStatus("connecting");
       try {
-        const prepared =
-          await client.cloudflare.workers.observability.telemetry.liveTail(
-            {
-              account_id: accountId,
-              scriptId: workerId,
-              filterCombination: "and",
-              filters: [
-                {
-                  key: "$workers.preview.slug",
-                  operation: "is_null",
-                  type: "string",
-                },
-              ],
-            },
-            { signal: abort.signal },
-          );
+        const prepared = await client.workers.observability.telemetry.liveTail(
+          {
+            account_id: accountId,
+            scriptId: workerId,
+            filterCombination: "and",
+            filters: [
+              {
+                key: "$workers.preview.slug",
+                operation: "is_null",
+                type: "string",
+              },
+            ],
+          },
+          { signal: abort.signal },
+        );
         if (disposed) return;
         socket = new WebSocket(prepared.wsUrl);
         socket.addEventListener("open", () => {
@@ -276,7 +275,7 @@ function WorkerDetailPage() {
       );
       if (!deployment)
         throw new Error("The selected deployment is no longer available.");
-      return client!.cloudflare.workers.scripts.deployments.create(workerId, {
+      return client!.workers.scripts.deployments.create(workerId, {
         account_id: accountId!,
         strategy: "percentage",
         versions: deployment.versions.map((version) => ({
@@ -305,7 +304,7 @@ function WorkerDetailPage() {
   });
   const deleteDeploymentMutation = useMutation({
     mutationFn: (deploymentID: string) =>
-      client!.cloudflare.workers.scripts.deployments.delete(deploymentID, {
+      client!.workers.scripts.deployments.delete(deploymentID, {
         account_id: accountId!,
         script_name: workerId,
       }),
@@ -326,7 +325,7 @@ function WorkerDetailPage() {
   });
   const deleteWorkerMutation = useMutation({
     mutationFn: () =>
-      client!.cloudflare.workers.scripts.delete(workerId, {
+      client!.workers.scripts.delete(workerId, {
         account_id: accountId!,
       }),
     onSuccess: async () => {

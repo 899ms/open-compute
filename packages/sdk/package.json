@@ -1,0 +1,54 @@
+{
+  "name": "@open-compute/sdk",
+  "version": "0.1.9",
+  "homepage": "https://open-compute.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elliothux/open-compute.git",
+    "directory": "packages/sdk"
+  },
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      },
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "check:generated": "bun scripts/generate.ts --check",
+    "check:package": "bun scripts/inspect-package.ts",
+    "generate": "bun scripts/generate.ts",
+    "test": "bun test tests/*.test.mjs",
+    "typecheck": "bun run check:generated && tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "cloudflare": "catalog:"
+  },
+  "devDependencies": {
+    "rolldown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1",
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

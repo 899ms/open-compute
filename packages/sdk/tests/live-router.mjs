@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
-import { createOpenComputeExtension } from "../src/index.ts";
+import { APIError, createOpenComputeClient } from "../src/index.ts";
 
 const baseURL = process.env.OPEN_COMPUTE_V4_BASE_URL;
 const apiToken = process.env.OPEN_COMPUTE_V4_TOKEN;
@@ -29,7 +29,7 @@ const tracedFetch = async (input, init) => {
   trace.responseContentType = response.headers.get("content-type") ?? "";
   return response;
 };
-const client = new Cloudflare({
+const client = createOpenComputeClient({
   apiToken,
   baseURL,
   maxRetries: 0,
@@ -47,11 +47,12 @@ for (const [name, contract] of [
   ["ai-search", aiSearchContract],
   ["queues", queuesContract],
   ["workflows", workflowsContract],
+  ["trace-equivalence", traceEquivalenceContract],
 ]) {
   try {
     await contract();
   } catch (error) {
-    console.error(`official SDK ${name} contract failed`);
+    console.error(`open-compute SDK ${name} contract failed`);
     throw error;
   }
 }
@@ -92,19 +93,31 @@ async function identityContract() {
   assert.equal(memberships.result.length, 1);
   assert.equal(memberships.result[0].account.id, accountID);
 
-  const extension = createOpenComputeExtension(client);
-  const capabilities = await extension.capabilities.get();
+  const capabilities = await client.openCompute.capabilities.get();
   assert.equal(capabilities.wrangler_version, "4.127.1");
   assert.equal(capabilities.compatibility_date.minimum, "2026-09-08");
   assert.equal(capabilities.compatibility_date.maximum, "2026-09-08");
   assert.ok(Object.keys(capabilities.endpoints).length > 0);
-  const system = await extension.system.status();
+  const system = await client.openCompute.system.status();
   assert.match(system.state, /^[A-Z][A-Z_]*$/);
   assert.ok(
     system.components.some(
       ({ name, state }) => name === "runtime" && state === "healthy",
     ),
   );
+  const upgrade = await client.openCompute.upgrade.check();
+  assert.equal(upgrade.schema_version, 1);
+  assert.match(upgrade.current_version, /^\d+\.\d+\.\d+$/);
+  assert.equal(typeof upgrade.update_available, "boolean");
+  assert.equal(typeof upgrade.upgrade_allowed, "boolean");
+  // Bodyless POST operations reuse the same transport and envelope semantics.
+  const paused = await client.openCompute.scheduler.pause();
+  assert.equal(paused.state, "paused");
+  const resumed = await client.openCompute.scheduler.resume();
+  assert.equal(resumed.state, "running");
+  const collected = await client.openCompute.cache.collectGarbage();
+  assert.ok("entries" in collected);
+  assert.ok("bytes" in collected);
 }
 
 async function workersContract() {
@@ -447,14 +460,9 @@ async function r2Contract() {
     (await client.r2.buckets.list({ account_id: accountID })).buckets.length >=
       1,
   );
-  await expectAPIError(
-    () =>
-      client.r2.buckets.objects.list(bucket.name, {
-        account_id: accountID,
-        per_page: 1,
-      }),
-    [501],
-  );
+  // Bucket object listing is unsupported by the manifest and must be absent
+  // from the capability-scoped surface entirely.
+  assert.equal(client.r2.buckets.objects.list, undefined);
   await expectAPIError(
     () =>
       client.r2.buckets.get("sdk-r2-missing", {
@@ -590,7 +598,7 @@ async function expectAPIError(operation, statuses) {
     await operation();
     assert.fail("expected official SDK APIError");
   } catch (error) {
-    assert.ok(error instanceof Cloudflare.APIError, String(error));
+    assert.ok(error instanceof APIError, String(error));
     assert.ok(
       statuses.includes(error.status),
       `unexpected status ${error.status}: ${error.message}`,
@@ -605,5 +613,97 @@ async function expectAPIError(operation, statuses) {
     );
     assert.equal(typeof error.error.errors[0].code, "number");
     assert.equal(typeof error.error.errors[0].message, "string");
+  }
+}
+
+/**
+ * Representative read-only operations must produce byte-identical request
+ * lines through the closed facade and the full official client.
+ */
+async function traceEquivalenceContract() {
+  const officialRequests = [];
+  const facadeRequests = [];
+  const tracingFetch = (sink) => async (input, init) => {
+    const request = new Request(input, init);
+    sink.push(`${request.method} ${new URL(request.url).pathname}`);
+    return fetch(request);
+  };
+  const official = new Cloudflare({
+    apiToken,
+    baseURL,
+    maxRetries: 0,
+    fetch: tracingFetch(officialRequests),
+  });
+  const facade = createOpenComputeClient({
+    apiToken,
+    baseURL,
+    maxRetries: 0,
+    fetch: tracingFetch(facadeRequests),
+  });
+  const probes = [
+    ["user.get", () => official.user.get(), () => facade.user.get()],
+    [
+      "accounts.list",
+      () => official.accounts.list({ page: 1, per_page: 1 }),
+      () => facade.accounts.list({ page: 1, per_page: 1 }),
+    ],
+    [
+      "workers.scripts.list",
+      () => official.workers.scripts.list({ account_id: accountID }),
+      () => facade.workers.scripts.list({ account_id: accountID }),
+    ],
+    [
+      "kv.namespaces.list",
+      () => official.kv.namespaces.list({ account_id: accountID, per_page: 1 }),
+      () => facade.kv.namespaces.list({ account_id: accountID, per_page: 1 }),
+    ],
+    [
+      "d1.database.list",
+      () => official.d1.database.list({ account_id: accountID }),
+      () => facade.d1.database.list({ account_id: accountID }),
+    ],
+    [
+      "queues.list",
+      () => official.queues.list({ account_id: accountID }),
+      () => facade.queues.list({ account_id: accountID }),
+    ],
+    [
+      "workflows.list",
+      () => official.workflows.list({ account_id: accountID }),
+      () => facade.workflows.list({ account_id: accountID }),
+    ],
+    [
+      "r2.buckets.list",
+      () => official.r2.buckets.list({ account_id: accountID }),
+      () => facade.r2.buckets.list({ account_id: accountID }),
+    ],
+    [
+      "vectorize.indexes.list",
+      () => official.vectorize.indexes.list({ account_id: accountID }),
+      () => facade.vectorize.indexes.list({ account_id: accountID }),
+    ],
+    [
+      "aiSearch.namespaces.list",
+      () => official.aiSearch.namespaces.list({ account_id: accountID }),
+      () => facade.aiSearch.namespaces.list({ account_id: accountID }),
+    ],
+  ];
+  for (const [name, officialProbe, facadeProbe] of probes) {
+    await officialProbe().catch(() => {});
+    await facadeProbe().catch(() => {});
+    if (officialRequests.length !== facadeRequests.length) {
+      assert.fail(
+        `${name}: official trace ${JSON.stringify(officialRequests)} != facade trace ${JSON.stringify(facadeRequests)}`,
+      );
+    }
+    for (const [index, officialTrace] of officialRequests.entries()) {
+      assert.equal(
+        facadeRequests[index],
+        officialTrace,
+        `${name} request trace ${index} diverges`,
+      );
+    }
+    officialRequests.length = 0;
+    facadeRequests.length = 0;
   }
 }

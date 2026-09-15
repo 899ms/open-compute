@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -449,7 +450,26 @@ export async function generateInventory(): Promise<CapabilityInventory> {
 }
 
 export function encodeInventory(inventory: CapabilityInventory): string {
-  return `${JSON.stringify(inventory, null, 2)}\n`;
+  // The committed inventory is the repository-prettier form: the pre-commit
+  // hook reformats staged JSON, so the generator, byte-drift check, and hook
+  // must all canonicalize through it to agree on the exact bytes.
+  const prettier = spawnSync(
+    join(ROOT, "node_modules/.bin/prettier"),
+    ["--stdin-filepath", "cloudflare-capabilities.json"],
+    {
+      input: `${JSON.stringify(inventory, null, 2)}\n`,
+      cwd: ROOT,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  );
+  if (prettier.error !== null && prettier.error !== undefined)
+    throw prettier.error;
+  if (prettier.status !== 0)
+    throw new Error(
+      `prettier failed for the capability inventory: ${prettier.stderr}`,
+    );
+  return prettier.stdout;
 }
 
 export async function generateInventoryTwice(): Promise<InventoryReport> {

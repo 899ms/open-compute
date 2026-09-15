@@ -18,11 +18,7 @@ function R2DetailPage() {
   const bucket = useQuery({
     queryKey: ["cloudflare-v4", "r2", bucketId],
     queryFn: ({ signal }) =>
-      client!.cloudflare.r2.buckets.get(
-        bucketId,
-        { account_id: accountId! },
-        { signal },
-      ),
+      client!.r2.buckets.get(bucketId, { account_id: accountId! }, { signal }),
     enabled: client !== null && accountId !== null,
   });
   return (

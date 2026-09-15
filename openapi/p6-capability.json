@@ -61,9 +61,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Fixed Wrangler 4.127.1 discards this Workflow deploy prerequisite; open-compute returns a stable account-scoped non-DNS label and does not provide workers.dev DNS, routing, registration, update, or deletion",
-        "deviations": [
-          "OC-ACCOUNT-SUBDOMAIN-001"
-        ],
+        "deviations": ["OC-ACCOUNT-SUBDOMAIN-001"],
         "operationSha256": "0b5d484de777f1236fc1d138a70d7c79070f82def0b495e8e052e5f363bd0db5",
         "requestMediaType": "none"
       },
@@ -225,9 +223,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Script Tail sessions are process-local; GET returns the complete active-session array implied by List Tails instead of the pinned OpenAPI single-object type; sessions receive only the selected target Script and do not aggregate nested target logs",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "1e5d1751794ba3bd9ba76b3e18786e6b28e148ffe216daad3d573094f9360251",
         "requestMediaType": "none"
       },
@@ -239,9 +235,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Script Tail sessions are process-local and receive only the selected target Script; they do not aggregate nested target logs",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "c185835822b9a5706951ff06ac8cbb79751c91ccdf1277f034f6896556937945",
         "requestMediaType": "none"
       },
@@ -253,9 +247,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Script Tail sessions are process-local and disappear on daemon restart",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "858ea601951bf55e8e71a750b270562c9a92f70ac3f7cd5d47fccc555b3f5aaf",
         "requestMediaType": "none"
       },
@@ -267,9 +259,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Field discovery reads a bounded single-machine retention index containing target-attributed events only",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "8995c04966d27334de5bfce9caf57d1ef28011591d6bb338f654db03241182da",
         "requestMediaType": "json"
       },
@@ -281,9 +271,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Value discovery reads a bounded single-machine retention index containing target-attributed events only",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "dd6eecbf7196f7372e2b4186a38bad9a760283e84abea03777dbf09b00bc28ef",
         "requestMediaType": "json"
       },
@@ -295,9 +283,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Events and invocations views use a bounded local single-machine index and retention authority; calculations, traces, agents, requests, saved queries, global ordering, and hosted optional metadata are not provided",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "8edb90cc6d3f2c705a4195abf447c7a5dd4bc1d64d880a59a931e474298cead8",
         "requestMediaType": "json"
       },
@@ -309,9 +295,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Live Tail sessions are process-local and receive only the selected target Script; they do not aggregate nested target logs",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "8febbb9abd577cdba4d4b267e45061807ca6acac2a4e4ba3dc6b3615550f0064",
         "requestMediaType": "json"
       },
@@ -323,9 +307,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Heartbeat extends process-local selected-Script sessions only",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ],
+        "deviations": ["OC-OBSERVABILITY-001"],
         "operationSha256": "9da8354733fbf39ff839f27287c2c681aa03485a0a74a96b5a1fa82ac3584b35",
         "requestMediaType": "json"
       },
@@ -687,9 +669,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Single-machine D1 retains at most eight explicit management checkpoints instead of Cloudflare's always-on minute-level 7/30-day PITR; timestamps resolve only retained checkpoints and ordinary Worker mutations do not create full database snapshots",
-        "deviations": [
-          "OC-D1-001"
-        ],
+        "deviations": ["OC-D1-001"],
         "operationSha256": "c4df1ceb1430c555a5007ec4117974454508dae08bcc89140e52e4afe24b06c1",
         "requestMediaType": "none"
       },
@@ -701,9 +681,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Restore accepts only an exact retained explicit management checkpoint; ordinary D1 Session bookmarks are visibility tokens but are not automatically retained restore points",
-        "deviations": [
-          "OC-D1-001"
-        ],
+        "deviations": ["OC-D1-001"],
         "operationSha256": "37289525a6133b7dc8ebeee87835508c82cb809e5b6125304233a73dde6d6c67",
         "requestMediaType": "none"
       },
@@ -935,9 +913,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Fixed Wrangler 4.127.1 requires account token metadata before AI Search creation; open-compute exposes one stable installation-managed metadata record without Cloudflare account credential storage or token mutation",
-        "deviations": [
-          "OC-AI-SEARCH-TOKEN-001"
-        ],
+        "deviations": ["OC-AI-SEARCH-TOKEN-001"],
         "operationSha256": "5325159dd20b495d3374783d44caf0f117b2f8561a59ca2f0d64fbe383c5c7de",
         "requestMediaType": "none"
       },
@@ -1279,6 +1255,16 @@
         "status": "supported",
         "source": "cloudflare-openapi",
         "operationSha256": "bef8bdcb6c846df9febd361d933616642a4bd0731b7d0bf116719e44d9d28674",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/queues/{queue_id}/metrics",
+        "method": "GET",
+        "path": "/accounts/{account_id}/queues/{queue_id}/metrics",
+        "operationId": "queues-get-metrics",
+        "status": "supported",
+        "source": "cloudflare-openapi",
+        "operationSha256": "29dd030224e7c8e46d2d2b27e0d9126bc64531dba0effa02aa56d202a7879091",
         "requestMediaType": "none"
       },
       {
@@ -1731,6 +1717,15 @@
         "requestMediaType": "none"
       },
       {
+        "id": "GET /open-compute/upgrade/check",
+        "method": "GET",
+        "path": "/open-compute/upgrade/check",
+        "operationId": "open-compute-get-open-compute-upgrade-check",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
         "id": "GET /accounts/{account_id}/open-compute/workers/{script_name}/endpoints",
         "method": "GET",
         "path": "/accounts/{account_id}/open-compute/workers/{script_name}/endpoints",
@@ -1878,9 +1873,7 @@
         "status": "supported_with_deviation",
         "source": "wrangler-config-schema",
         "constraint": "Only omitted or empty destinations are accepted; external export is unsupported",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "observability.traces.enabled",
@@ -1907,45 +1900,35 @@
         "status": "supported_with_deviation",
         "source": "open-compute-day1",
         "constraint": "Bounded single-machine SQLite retention and best-effort delivery",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "workers.observability.telemetry.keys",
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Bounded local retention index with target-only attribution",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "workers.observability.telemetry.values",
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Bounded local retention index with target-only attribution",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "workers.observability.telemetry.query",
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Events and invocations views over a bounded local index",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "workers.observability.telemetry.liveTail",
         "status": "supported_with_deviation",
         "source": "cloudflare-dashboard-wire-2026-09-03",
         "constraint": "Process-local selected-Script stream with target-only attribution",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "workers.observability.telemetry.liveTailAccountWide",
@@ -1958,9 +1941,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi+wrangler-4.127.1",
         "constraint": "Process-local selected-Script stream with target-only attribution",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "workers.scripts.tailDebug",
@@ -2005,18 +1986,14 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Bounded local retention index omits unavailable hosted metadata",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "invocations",
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Local invocation groups omit unavailable hosted metadata",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "calculations",
@@ -2065,9 +2042,7 @@
         "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
         "constraint": "Linear-time RE2-compatible subset with bounded patterns",
-        "deviations": [
-          "OC-OBSERVABILITY-001"
-        ]
+        "deviations": ["OC-OBSERVABILITY-001"]
       },
       {
         "id": "exists",
@@ -2131,9 +2106,7 @@
       "observability.ingest_queue_capacity",
       "observability.tail_client_queue_bytes"
     ],
-    "deviations": [
-      "OC-OBSERVABILITY-001"
-    ]
+    "deviations": ["OC-OBSERVABILITY-001"]
   },
   "wrangler": {
     "version": "4.127.1",

@@ -41,8 +41,8 @@ from pathlib import Path
 import sys
 
 allowed = {
-    "@open-compute/dashboard": {"@open-compute/cloudflare-extension"},
-    "@open-compute/cloudflare-extension": set(),
+    "@open-compute/dashboard": {"@open-compute/sdk"},
+    "@open-compute/sdk": set(),
     "@open-compute/runtime": set(),
     "@open-compute/toolchain": set(),
     "@open-compute/workers-types": set(),

@@ -41,17 +41,13 @@ function WorkflowDetailPage() {
   const workflow = useQuery({
     queryKey: ["cloudflare-v4", "workflows", workflowId],
     queryFn: ({ signal }) =>
-      client!.cloudflare.workflows.get(
-        workflowId,
-        { account_id: accountId! },
-        { signal },
-      ),
+      client!.workflows.get(workflowId, { account_id: accountId! }, { signal }),
     enabled,
   });
   const versions = useQuery({
     queryKey: ["cloudflare-v4", "workflows", workflowId, "versions"],
     queryFn: ({ signal }) =>
-      client!.cloudflare.workflows.versions.list(
+      client!.workflows.versions.list(
         workflowId,
         { account_id: accountId! },
         { signal },
@@ -61,7 +57,7 @@ function WorkflowDetailPage() {
   const instances = useQuery({
     queryKey: ["cloudflare-v4", "workflows", workflowId, "instances"],
     queryFn: ({ signal }) =>
-      client!.cloudflare.workflows.instances.list(
+      client!.workflows.instances.list(
         workflowId,
         { account_id: accountId! },
         { signal },
@@ -77,7 +73,7 @@ function WorkflowDetailPage() {
       selectedInstanceId,
     ],
     queryFn: ({ signal }) =>
-      client!.cloudflare.workflows.instances.get(
+      client!.workflows.instances.get(
         selectedInstanceId!,
         {
           account_id: accountId!,
@@ -95,7 +91,7 @@ function WorkflowDetailPage() {
   };
   const definitionMutation = useMutation({
     mutationFn: (input: { scriptName: string; className: string }) =>
-      client!.cloudflare.workflows.update(workflowId, {
+      client!.workflows.update(workflowId, {
         account_id: accountId!,
         script_name: input.scriptName,
         class_name: input.className,
@@ -117,7 +113,7 @@ function WorkflowDetailPage() {
   });
   const actionMutation = useMutation({
     mutationFn: (action: WorkflowAction) =>
-      client!.cloudflare.workflows.instances.status.edit(selectedInstanceId!, {
+      client!.workflows.instances.status.edit(selectedInstanceId!, {
         account_id: accountId!,
         workflow_name: workflowId,
         status: action,
@@ -143,15 +139,12 @@ function WorkflowDetailPage() {
       if (eventBody.trim()) {
         body = JSON.parse(eventBody) as unknown;
       }
-      return client!.cloudflare.workflows.instances.events.create(
-        eventType.trim(),
-        {
-          account_id: accountId!,
-          workflow_name: workflowId,
-          instance_id: selectedInstanceId!,
-          body,
-        },
-      );
+      return client!.workflows.instances.events.create(eventType.trim(), {
+        account_id: accountId!,
+        workflow_name: workflowId,
+        instance_id: selectedInstanceId!,
+        body,
+      });
     },
     onSuccess: async () => {
       setEventBody("");

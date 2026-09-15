@@ -1,6 +1,11 @@
 {
   "schemaVersion": 1,
-  "statusVocabulary": ["supported", "supported_with_deviation", "planned", "unsupported"],
+  "statusVocabulary": [
+    "supported",
+    "supported_with_deviation",
+    "planned",
+    "unsupported"
+  ],
   "operations": [
     "GET /user",
     "GET /user/tokens/verify",
@@ -125,6 +130,7 @@
     "GET /accounts/{account_id}/queues/{queue_id}",
     "PUT /accounts/{account_id}/queues/{queue_id}",
     "DELETE /accounts/{account_id}/queues/{queue_id}",
+    "GET /accounts/{account_id}/queues/{queue_id}/metrics",
     "GET /accounts/{account_id}/queues/{queue_id}/consumers",
     "POST /accounts/{account_id}/queues/{queue_id}/consumers",
     "GET /accounts/{account_id}/queues/{queue_id}/consumers/{consumer_id}",
@@ -149,6 +155,12 @@
       "operation": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
       "status": "unsupported",
       "reason": "P6 Day 1 object surface only qualifies exact object get/put/delete; bucket object listing must fail closed"
+    }
+  ],
+  "sdkExcludedOperations": [
+    {
+      "operation": "PUT /accounts/{account_id}/r2/buckets/{bucket_name}",
+      "reason": "the pinned official cloudflare@7.1.0 SDK does not implement r2-create-bucket-by-name; every SDK method must delegate to an official implementation, so this otherwise supported route stays outside the SDK surface"
     }
   ],
   "supportedWithDeviationOperations": [
@@ -222,23 +234,131 @@
     }
   ],
   "clientObservedOperations": [
-    {"operation":"POST /accounts/{account_id}/artifacts/namespaces","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts REST namespace creation contract","requestMediaType":"json"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces","status":"supported","source":"wrangler-4.127.1-artifacts","note":"Artifacts namespace list contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}","status":"supported","source":"wrangler-4.127.1-artifacts","note":"Artifacts namespace lookup contract","requestMediaType":"none"},
-    {"operation":"POST /accounts/{account_id}/artifacts/namespaces/{namespace}/repos","status":"supported","source":"wrangler-4.127.1-artifacts","note":"Artifacts repository creation contract","requestMediaType":"json"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos","status":"supported","source":"wrangler-4.127.1-artifacts","note":"Artifacts repository list contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}","status":"supported","source":"wrangler-4.127.1-artifacts","note":"Artifacts repository lookup contract","requestMediaType":"none"},
-    {"operation":"DELETE /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}","status":"supported","source":"wrangler-4.127.1-artifacts","note":"Artifacts repository deletion contract","requestMediaType":"none"},
-    {"operation":"POST /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/fork","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts independent fork contract","requestMediaType":"json"},
-    {"operation":"POST /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/import","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts public HTTPS import contract","requestMediaType":"json"},
-    {"operation":"POST /accounts/{account_id}/artifacts/namespaces/{namespace}/tokens","status":"supported","source":"wrangler-4.127.1-artifacts","note":"Artifacts token issue contract","requestMediaType":"json"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tokens","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts token list contract","requestMediaType":"none"},
-    {"operation":"DELETE /accounts/{account_id}/artifacts/namespaces/{namespace}/tokens/{token}","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts token revocation contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/log","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts commit log contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/commit/{oid}","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts commit object contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tree/{oid}","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts tree object contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/blob/{oid}","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts raw blob contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/file","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts file query contract","requestMediaType":"none"},
-    {"operation":"GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/raw/{reference}/{path}","status":"supported","source":"cloudflare-artifacts-rest-2026-08-13","note":"Artifacts raw file contract","requestMediaType":"none"}
+    {
+      "operation": "POST /accounts/{account_id}/artifacts/namespaces",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts REST namespace creation contract",
+      "requestMediaType": "json"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces",
+      "status": "supported",
+      "source": "wrangler-4.127.1-artifacts",
+      "note": "Artifacts namespace list contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}",
+      "status": "supported",
+      "source": "wrangler-4.127.1-artifacts",
+      "note": "Artifacts namespace lookup contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "POST /accounts/{account_id}/artifacts/namespaces/{namespace}/repos",
+      "status": "supported",
+      "source": "wrangler-4.127.1-artifacts",
+      "note": "Artifacts repository creation contract",
+      "requestMediaType": "json"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos",
+      "status": "supported",
+      "source": "wrangler-4.127.1-artifacts",
+      "note": "Artifacts repository list contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}",
+      "status": "supported",
+      "source": "wrangler-4.127.1-artifacts",
+      "note": "Artifacts repository lookup contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "DELETE /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}",
+      "status": "supported",
+      "source": "wrangler-4.127.1-artifacts",
+      "note": "Artifacts repository deletion contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "POST /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/fork",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts independent fork contract",
+      "requestMediaType": "json"
+    },
+    {
+      "operation": "POST /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/import",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts public HTTPS import contract",
+      "requestMediaType": "json"
+    },
+    {
+      "operation": "POST /accounts/{account_id}/artifacts/namespaces/{namespace}/tokens",
+      "status": "supported",
+      "source": "wrangler-4.127.1-artifacts",
+      "note": "Artifacts token issue contract",
+      "requestMediaType": "json"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tokens",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts token list contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "DELETE /accounts/{account_id}/artifacts/namespaces/{namespace}/tokens/{token}",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts token revocation contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/log",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts commit log contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/commit/{oid}",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts commit object contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tree/{oid}",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts tree object contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/blob/{oid}",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts raw blob contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/file",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts file query contract",
+      "requestMediaType": "none"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/raw/{reference}/{path}",
+      "status": "supported",
+      "source": "cloudflare-artifacts-rest-2026-08-13",
+      "note": "Artifacts raw file contract",
+      "requestMediaType": "none"
+    }
   ]
 }

@@ -1,55 +1,12 @@
-import { BaseAccounts } from "cloudflare/resources/accounts/accounts";
-import { BaseDatabase } from "cloudflare/resources/d1/database/database";
-import { BaseKeys } from "cloudflare/resources/kv/namespaces/keys";
-import { BaseNamespaces } from "cloudflare/resources/kv/namespaces/namespaces";
-import { BaseValues } from "cloudflare/resources/kv/namespaces/values";
-import { BaseConsumers } from "cloudflare/resources/queues/consumers";
-import { BaseQueues } from "cloudflare/resources/queues/queues";
-import { BaseBuckets } from "cloudflare/resources/r2/buckets/buckets";
-import { BaseTelemetry } from "cloudflare/resources/workers/observability/telemetry";
-import { BaseDeployments } from "cloudflare/resources/workers/scripts/deployments";
-import { BaseScripts } from "cloudflare/resources/workers/scripts/scripts";
-import { BaseVersions as BaseWorkerVersions } from "cloudflare/resources/workers/scripts/versions";
-import { BaseEvents } from "cloudflare/resources/workflows/instances/events";
-import { BaseInstances } from "cloudflare/resources/workflows/instances/instances";
-import { BaseStatus } from "cloudflare/resources/workflows/instances/status";
-import { BaseVersions as BaseWorkflowVersions } from "cloudflare/resources/workflows/versions";
-import { BaseWorkflows } from "cloudflare/resources/workflows/workflows";
-import { createClient } from "cloudflare/tree-shakable";
-import { createOpenComputeExtension } from "@open-compute/cloudflare-extension";
+import { createOpenComputeClient } from "@open-compute/sdk";
 
-const resources = [
-  BaseAccounts,
-  BaseScripts,
-  BaseDeployments,
-  BaseWorkerVersions,
-  BaseNamespaces,
-  BaseKeys,
-  BaseValues,
-  BaseDatabase,
-  BaseBuckets,
-  BaseQueues,
-  BaseConsumers,
-  BaseWorkflows,
-  BaseInstances,
-  BaseEvents,
-  BaseStatus,
-  BaseWorkflowVersions,
-  BaseTelemetry,
-] as const;
-
-/** Create the browser management client with the official Cloudflare transport. */
+/** Create the browser management client over the capability-scoped SDK. */
 export function createManagementClient(token: string) {
-  const cloudflare = createClient({
+  return createOpenComputeClient({
     apiToken: token,
     baseURL: new URL("/client/v4", window.location.origin).href,
     maxRetries: 0,
-    resources,
   });
-  return {
-    cloudflare,
-    openCompute: createOpenComputeExtension(cloudflare),
-  } as const;
 }
 
 export type ManagementClient = ReturnType<typeof createManagementClient>;

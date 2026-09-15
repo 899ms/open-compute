@@ -2,7 +2,7 @@ import { Button } from "@cloudflare/kumo/components/button";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import type { UpgradeCheckResult } from "@open-compute/cloudflare-extension";
+import type { UpgradeCheck } from "@open-compute/sdk";
 import {
   DataTable,
   ErrorState,
@@ -19,9 +19,7 @@ export const Route = createFileRoute("/_authenticated/platform/")({
 function PlatformPage() {
   const { client } = useAuth();
   const feedback = useMutationFeedback();
-  const [upgradeCheck, setUpgradeCheck] = useState<UpgradeCheckResult | null>(
-    null,
-  );
+  const [upgradeCheck, setUpgradeCheck] = useState<UpgradeCheck | null>(null);
 
   const status = useQuery({
     queryKey: ["cloudflare-v4", "open-compute", "platform"],

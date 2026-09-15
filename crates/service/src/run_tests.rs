@@ -31,9 +31,12 @@ fn do_storage_health_tracks_watermarks_and_component_state() {
     };
 
     // Real disk usage on the test host is nonzero; drive each watermark explicitly so
-    // the assertions do not depend on the host's actual filesystem usage.
+    // the assertions do not depend on the host's actual filesystem usage. The clear
+    // policy must place both watermarks above the clampable used-percent domain;
+    // inheriting the stop-writes default would re-introduce host dependence.
     let clear = open_compute_core::DurableObjectsConfig {
-        disk_high_watermark_percent: 100,
+        disk_high_watermark_percent: 101,
+        disk_stop_writes_percent: 102,
         ..open_compute_core::DurableObjectsConfig::default()
     };
     update_do_storage_health(&storage, &clear, &health, &metrics).unwrap();

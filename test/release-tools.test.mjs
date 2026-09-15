@@ -165,6 +165,10 @@ test("release qualification runs long checks in parallel without a second Linux 
   const workflow = await readFile(releaseWorkflowPath, "utf8");
   assert.match(workflow, /  coverage:\n    needs: validate\n/);
   assert.match(workflow, /  integration:\n    needs: validate\n/);
+  assert.match(
+    workflow,
+    /  sdk-package:\n    # Build the SDK tarball once[\s\S]*?needs: validate\n/,
+  );
   assert.equal(
     workflow.match(/\.\/test\/gate\.py --workspace --jobs 2/g)?.length,
     1,
@@ -172,6 +176,21 @@ test("release qualification runs long checks in parallel without a second Linux 
   assert.match(workflow, /test-p0-2-egress-linux\.sh p0-2 --jobs 2/);
   assert.doesNotMatch(workflow, /test-p0-2-egress-linux\.sh --workspace/);
   assert.doesNotMatch(workflow, /\n  (?:msrv|lint-test):\n/);
+  // npm publication is token-authenticated and never receives the GitHub
+  // token; the tarball is published from the verified artifact only.
+  assert.match(
+    workflow,
+    /NPM_ACCESS_TOKEN: \$\{\{ secrets\.NPM_ACCESS_TOKEN \}\}/,
+  );
+  assert.doesNotMatch(workflow, /NPM_TOKEN/);
+  assert.match(workflow, /npm publish "\$tarball" --access public/);
+  assert.match(
+    workflow,
+    /npm view "@open-compute\/sdk@\$RELEASE_VERSION" dist\.shasum/,
+  );
+  assert.match(workflow, /--draft=false/);
+  assert.doesNotMatch(workflow, /--provenance/);
+  assert.doesNotMatch(workflow, /tolerate-republish/);
 });
 
 test("release assembly requires and describes the exact three native executables", async () => {
@@ -186,6 +205,16 @@ test("release assembly requires and describes the exact three native executables
     revision: "0123456789abcdef0123456789abcdef01234567",
     workerd: "v1.20260830.1",
     workerdLockSha256: "a".repeat(64),
+  };
+  const sdkReport = {
+    schemaVersion: 1,
+    package: "@open-compute/sdk",
+    packageVersion: "1.2.3",
+    tarballShasum: "b".repeat(40),
+    tarballIntegrity: "sha512-cdkovenkZmV2ZGVk",
+    surfaceDigest: "c".repeat(64),
+    openapiRevision: "d".repeat(40),
+    cloudflareSdkVersion: "7.1.0",
   };
   try {
     for (const target of releaseTargets) {
@@ -209,12 +238,12 @@ test("release assembly requires and describes the exact three native executables
     badReport.revision = "f".repeat(40);
     await writeFile(badReportPath, JSON.stringify(badReport));
     await assert.rejects(
-      assembleRelease(root, "v1.2.3", identity),
+      assembleRelease(root, "v1.2.3", identity, sdkReport),
       /does not match/,
     );
     badReport.revision = identity.revision;
     await writeFile(badReportPath, JSON.stringify(badReport));
-    await assembleRelease(root, "v1.2.3", identity);
+    await assembleRelease(root, "v1.2.3", identity, sdkReport);
     assert.deepEqual(
       (await readdir(root)).sort(),
       [
@@ -230,6 +259,15 @@ test("release assembly requires and describes the exact three native executables
     assert.equal(manifest.schemaVersion, 1);
     assert.equal(manifest.tag, "v1.2.3");
     assert.equal(manifest.gitRevision, identity.revision);
+    assert.deepEqual(manifest.sdk, {
+      package: "@open-compute/sdk",
+      packageVersion: "1.2.3",
+      tarballShasum: "b".repeat(40),
+      tarballIntegrity: "sha512-cdkovenkZmV2ZGVk",
+      surfaceDigest: "c".repeat(64),
+      openapiRevision: "d".repeat(40),
+      cloudflareSdkVersion: "7.1.0",
+    });
     assert.deepEqual(
       manifest.artifacts.map((artifact) => artifact.target),
       releaseTargets,
@@ -238,7 +276,7 @@ test("release assembly requires and describes the exact three native executables
     assert.equal(checksums.trim().split("\n").length, 4);
     assert.match(checksums, /  release\.json$/m);
     await assert.rejects(
-      assembleRelease(root, "v1.2.3", identity),
+      assembleRelease(root, "v1.2.3", identity, sdkReport),
       /exact three binaries/,
     );
   } finally {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import Cloudflare from "cloudflare";
+import { createOpenComputeClient } from "../src/index.ts";
 
 const baseURL = process.env.OPEN_COMPUTE_V4_BASE_URL;
 const apiToken = process.env.OPEN_COMPUTE_V4_TOKEN;
@@ -8,7 +8,7 @@ const publicURL = process.env.OPEN_COMPUTE_P7_PUBLIC_URL;
 const secret = process.env.OPEN_COMPUTE_P7_SECRET;
 assert.ok(baseURL && apiToken && accountID && publicURL && secret);
 
-const client = new Cloudflare({ apiToken, baseURL, maxRetries: 0 });
+const client = createOpenComputeClient({ apiToken, baseURL, maxRetries: 0 });
 const prepared = await client.workers.observability.telemetry.liveTail({
   account_id: accountID,
   scriptId: "p6-wrangler-resource-gate",

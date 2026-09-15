@@ -62,8 +62,7 @@ export const setAuthAccountIdAtom = atom(
 );
 
 async function resolveAccountId(token: string): Promise<string> {
-  const accounts =
-    await createManagementClient(token).cloudflare.accounts.list();
+  const accounts = await createManagementClient(token).accounts.list();
   const account = accounts.result[0];
   if (account?.id === undefined)
     throw new Error("No accessible account was returned.");

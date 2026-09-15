@@ -18,6 +18,7 @@
       "GET /open-compute/cache",
       "POST /open-compute/cache/garbage-collection",
       "GET /open-compute/images/capacity",
+      "GET /open-compute/upgrade/check",
       "GET /accounts/{account_id}/open-compute/workers/{script_name}/endpoints",
       "GET /accounts/{account_id}/open-compute/durable-objects",
       "GET /accounts/{account_id}/open-compute/durable-objects/{namespace_id}/objects",
@@ -37,57 +38,206 @@
   },
   "workersObservability": {
     "settingsFields": [
-      {"id": "observability.enabled", "status": "supported", "source": "wrangler-config-schema"},
-      {"id": "observability.head_sampling_rate", "status": "supported", "source": "wrangler-config-schema"},
-      {"id": "observability.logs.enabled", "status": "supported", "source": "wrangler-config-schema"},
-      {"id": "observability.logs.head_sampling_rate", "status": "supported", "source": "wrangler-config-schema"},
-      {"id": "observability.logs.invocation_logs", "status": "supported", "source": "wrangler-config-schema"},
-      {"id": "observability.logs.persist", "status": "supported", "source": "wrangler-config-schema"},
-      {"id": "observability.logs.destinations", "status": "supported_with_deviation", "source": "wrangler-config-schema", "constraint": "Only omitted or empty destinations are accepted; external export is unsupported", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "observability.traces.enabled", "status": "unsupported", "source": "wrangler-config-schema", "constraint": "Only omitted or false is accepted"},
-      {"id": "observability.traces.persist", "status": "unsupported", "source": "wrangler-config-schema", "constraint": "Only omitted or false is accepted"},
-      {"id": "observability.traces.destinations", "status": "unsupported", "source": "wrangler-config-schema", "constraint": "Only omitted or empty is accepted"}
+      {
+        "id": "observability.enabled",
+        "status": "supported",
+        "source": "wrangler-config-schema"
+      },
+      {
+        "id": "observability.head_sampling_rate",
+        "status": "supported",
+        "source": "wrangler-config-schema"
+      },
+      {
+        "id": "observability.logs.enabled",
+        "status": "supported",
+        "source": "wrangler-config-schema"
+      },
+      {
+        "id": "observability.logs.head_sampling_rate",
+        "status": "supported",
+        "source": "wrangler-config-schema"
+      },
+      {
+        "id": "observability.logs.invocation_logs",
+        "status": "supported",
+        "source": "wrangler-config-schema"
+      },
+      {
+        "id": "observability.logs.persist",
+        "status": "supported",
+        "source": "wrangler-config-schema"
+      },
+      {
+        "id": "observability.logs.destinations",
+        "status": "supported_with_deviation",
+        "source": "wrangler-config-schema",
+        "constraint": "Only omitted or empty destinations are accepted; external export is unsupported",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "observability.traces.enabled",
+        "status": "unsupported",
+        "source": "wrangler-config-schema",
+        "constraint": "Only omitted or false is accepted"
+      },
+      {
+        "id": "observability.traces.persist",
+        "status": "unsupported",
+        "source": "wrangler-config-schema",
+        "constraint": "Only omitted or false is accepted"
+      },
+      {
+        "id": "observability.traces.destinations",
+        "status": "unsupported",
+        "source": "wrangler-config-schema",
+        "constraint": "Only omitted or empty is accepted"
+      }
     ],
     "features": [
-      {"id": "workers.observability.logs.persistence", "status": "supported_with_deviation", "source": "open-compute-day1", "constraint": "Bounded single-machine SQLite retention and best-effort delivery", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "workers.observability.telemetry.keys", "status": "supported_with_deviation", "source": "cloudflare-openapi", "constraint": "Bounded local retention index with target-only attribution", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "workers.observability.telemetry.values", "status": "supported_with_deviation", "source": "cloudflare-openapi", "constraint": "Bounded local retention index with target-only attribution", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "workers.observability.telemetry.query", "status": "supported_with_deviation", "source": "cloudflare-openapi", "constraint": "Events and invocations views over a bounded local index", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "workers.observability.telemetry.liveTail", "status": "supported_with_deviation", "source": "cloudflare-dashboard-wire-2026-09-03", "constraint": "Process-local selected-Script stream with target-only attribution", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "workers.observability.telemetry.liveTailAccountWide", "status": "unsupported", "source": "p7-scope", "constraint": "scriptId is required by the Day 1 local authority"},
-      {"id": "workers.scripts.tails", "status": "supported_with_deviation", "source": "cloudflare-openapi+wrangler-4.127.1", "constraint": "Process-local selected-Script stream with target-only attribution", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "workers.scripts.tailDebug", "status": "unsupported", "source": "p7-scope", "constraint": "Only the fixed Wrangler debug=false client flow is supported"},
-      {"id": "workers.tailConsumers", "status": "unsupported", "source": "p7-scope"},
-      {"id": "workers.streamingTailConsumers", "status": "unsupported", "source": "p7-scope"},
-      {"id": "workers.logpush", "status": "unsupported", "source": "p7-scope"},
-      {"id": "workers.traces", "status": "unsupported", "source": "p7-scope"},
-      {"id": "workers.observability.telemetry.calculations", "status": "unsupported", "source": "p7-scope"},
-      {"id": "workers.observability.telemetry.savedQueries", "status": "unsupported", "source": "p7-scope"}
+      {
+        "id": "workers.observability.logs.persistence",
+        "status": "supported_with_deviation",
+        "source": "open-compute-day1",
+        "constraint": "Bounded single-machine SQLite retention and best-effort delivery",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "workers.observability.telemetry.keys",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-openapi",
+        "constraint": "Bounded local retention index with target-only attribution",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "workers.observability.telemetry.values",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-openapi",
+        "constraint": "Bounded local retention index with target-only attribution",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "workers.observability.telemetry.query",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-openapi",
+        "constraint": "Events and invocations views over a bounded local index",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "workers.observability.telemetry.liveTail",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-dashboard-wire-2026-09-03",
+        "constraint": "Process-local selected-Script stream with target-only attribution",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "workers.observability.telemetry.liveTailAccountWide",
+        "status": "unsupported",
+        "source": "p7-scope",
+        "constraint": "scriptId is required by the Day 1 local authority"
+      },
+      {
+        "id": "workers.scripts.tails",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-openapi+wrangler-4.127.1",
+        "constraint": "Process-local selected-Script stream with target-only attribution",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "workers.scripts.tailDebug",
+        "status": "unsupported",
+        "source": "p7-scope",
+        "constraint": "Only the fixed Wrangler debug=false client flow is supported"
+      },
+      {
+        "id": "workers.tailConsumers",
+        "status": "unsupported",
+        "source": "p7-scope"
+      },
+      {
+        "id": "workers.streamingTailConsumers",
+        "status": "unsupported",
+        "source": "p7-scope"
+      },
+      {
+        "id": "workers.logpush",
+        "status": "unsupported",
+        "source": "p7-scope"
+      },
+      { "id": "workers.traces", "status": "unsupported", "source": "p7-scope" },
+      {
+        "id": "workers.observability.telemetry.calculations",
+        "status": "unsupported",
+        "source": "p7-scope"
+      },
+      {
+        "id": "workers.observability.telemetry.savedQueries",
+        "status": "unsupported",
+        "source": "p7-scope"
+      }
     ],
     "queryViews": [
-      {"id": "events", "status": "supported_with_deviation", "source": "cloudflare-openapi", "constraint": "Bounded local retention index omits unavailable hosted metadata", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "invocations", "status": "supported_with_deviation", "source": "cloudflare-openapi", "constraint": "Local invocation groups omit unavailable hosted metadata", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "calculations", "status": "unsupported", "source": "p7-scope"},
-      {"id": "traces", "status": "unsupported", "source": "p7-scope"},
-      {"id": "agents", "status": "unsupported", "source": "p7-scope"},
-      {"id": "requests", "status": "unsupported", "source": "p7-scope"}
+      {
+        "id": "events",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-openapi",
+        "constraint": "Bounded local retention index omits unavailable hosted metadata",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      {
+        "id": "invocations",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-openapi",
+        "constraint": "Local invocation groups omit unavailable hosted metadata",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      { "id": "calculations", "status": "unsupported", "source": "p7-scope" },
+      { "id": "traces", "status": "unsupported", "source": "p7-scope" },
+      { "id": "agents", "status": "unsupported", "source": "p7-scope" },
+      { "id": "requests", "status": "unsupported", "source": "p7-scope" }
     ],
     "queryOperators": [
-      {"id": "includes", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "not_includes", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "starts_with", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "ends_with", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "regex", "status": "supported_with_deviation", "source": "cloudflare-openapi", "constraint": "Linear-time RE2-compatible subset with bounded patterns", "deviations": ["OC-OBSERVABILITY-001"]},
-      {"id": "exists", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "is_null", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "in", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "not_in", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "eq", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "neq", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "gt", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "gte", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "lt", "status": "supported", "source": "cloudflare-openapi"},
-      {"id": "lte", "status": "supported", "source": "cloudflare-openapi"}
+      {
+        "id": "includes",
+        "status": "supported",
+        "source": "cloudflare-openapi"
+      },
+      {
+        "id": "not_includes",
+        "status": "supported",
+        "source": "cloudflare-openapi"
+      },
+      {
+        "id": "starts_with",
+        "status": "supported",
+        "source": "cloudflare-openapi"
+      },
+      {
+        "id": "ends_with",
+        "status": "supported",
+        "source": "cloudflare-openapi"
+      },
+      {
+        "id": "regex",
+        "status": "supported_with_deviation",
+        "source": "cloudflare-openapi",
+        "constraint": "Linear-time RE2-compatible subset with bounded patterns",
+        "deviations": ["OC-OBSERVABILITY-001"]
+      },
+      { "id": "exists", "status": "supported", "source": "cloudflare-openapi" },
+      {
+        "id": "is_null",
+        "status": "supported",
+        "source": "cloudflare-openapi"
+      },
+      { "id": "in", "status": "supported", "source": "cloudflare-openapi" },
+      { "id": "not_in", "status": "supported", "source": "cloudflare-openapi" },
+      { "id": "eq", "status": "supported", "source": "cloudflare-openapi" },
+      { "id": "neq", "status": "supported", "source": "cloudflare-openapi" },
+      { "id": "gt", "status": "supported", "source": "cloudflare-openapi" },
+      { "id": "gte", "status": "supported", "source": "cloudflare-openapi" },
+      { "id": "lt", "status": "supported", "source": "cloudflare-openapi" },
+      { "id": "lte", "status": "supported", "source": "cloudflare-openapi" }
     ],
     "scriptTailProtocol": "trace-v1",
     "limits": [
@@ -104,47 +254,166 @@
   },
   "wrangler": {
     "supportedFields": [
-      "$schema", "env", "name", "account_id", "compatibility_date", "compatibility_flags", "main",
-      "find_additional_modules", "preserve_file_names", "base_dir", "workers_dev", "tsconfig", "jsx_factory",
-      "jsx_fragment", "migrations", "exports", "triggers", "rules", "build", "no_bundle", "minify",
-      "keep_names", "upload_source_maps", "assets", "cache", "define", "vars", "secrets", "durable_objects",
-      "workflows", "kv_namespaces", "queues", "r2_buckets", "d1_databases", "vectorize", "artifacts",
-      "ai_search_namespaces", "ai_search", "services", "ai", "images", "version_metadata", "send_metrics",
-      "dependencies_instrumentation", "dev", "keep_vars", "observability", "worker_loaders"
+      "$schema",
+      "env",
+      "name",
+      "account_id",
+      "compatibility_date",
+      "compatibility_flags",
+      "main",
+      "find_additional_modules",
+      "preserve_file_names",
+      "base_dir",
+      "workers_dev",
+      "tsconfig",
+      "jsx_factory",
+      "jsx_fragment",
+      "migrations",
+      "exports",
+      "triggers",
+      "rules",
+      "build",
+      "no_bundle",
+      "minify",
+      "keep_names",
+      "upload_source_maps",
+      "assets",
+      "cache",
+      "define",
+      "vars",
+      "secrets",
+      "durable_objects",
+      "workflows",
+      "kv_namespaces",
+      "queues",
+      "r2_buckets",
+      "d1_databases",
+      "vectorize",
+      "artifacts",
+      "ai_search_namespaces",
+      "ai_search",
+      "services",
+      "ai",
+      "images",
+      "version_metadata",
+      "send_metrics",
+      "dependencies_instrumentation",
+      "dev",
+      "keep_vars",
+      "observability",
+      "worker_loaders"
     ],
     "deferredFields": {},
     "unsupportedDeferredFields": {
       "limits": "P8"
     },
     "supportedBindings": [
-      "plain_text", "json", "secret_text", "kv_namespace", "r2_bucket", "d1", "vectorize",
-      "ai_search_namespace", "ai_search", "ai", "durable_object_namespace", "queue", "workflow", "service",
-      "images", "version_metadata", "assets", "worker_loader", "artifacts"
+      "plain_text",
+      "json",
+      "secret_text",
+      "kv_namespace",
+      "r2_bucket",
+      "d1",
+      "vectorize",
+      "ai_search_namespace",
+      "ai_search",
+      "ai",
+      "durable_object_namespace",
+      "queue",
+      "workflow",
+      "service",
+      "images",
+      "version_metadata",
+      "assets",
+      "worker_loader",
+      "artifacts"
     ],
     "unsupportedBindings": [
-      "browser", "hyperdrive", "analytics_engine", "dispatch_namespace", "mtls_certificate",
-      "ratelimit", "pipeline", "secrets_store_secret", "send_email", "service_environment", "unsafe"
+      "browser",
+      "hyperdrive",
+      "analytics_engine",
+      "dispatch_namespace",
+      "mtls_certificate",
+      "ratelimit",
+      "pipeline",
+      "secrets_store_secret",
+      "send_email",
+      "service_environment",
+      "unsafe"
     ],
     "supportedCommands": [
-      "whoami", "deploy", "versions upload", "versions list", "versions view", "versions deploy",
-      "deployments list", "deployments status", "rollback", "secret put", "secret list", "secret delete",
-      "secret bulk", "kv namespace create", "kv namespace list", "kv namespace delete", "kv key put",
-      "kv key get", "kv key list", "kv key delete", "d1 create", "d1 list", "d1 info", "d1 execute",
-      "d1 migrations apply", "d1 delete", "r2 bucket create", "r2 bucket list", "r2 bucket delete",
-      "r2 object put", "r2 object get", "r2 object delete", "vectorize create", "vectorize list",
-      "vectorize get", "vectorize delete", "vectorize insert", "vectorize upsert", "vectorize query",
-      "vectorize get-vectors", "vectorize delete-vectors", "vectorize info", "vectorize create-metadata-index",
-      "vectorize list-metadata-index", "vectorize delete-metadata-index", "ai-search namespace create",
-      "ai-search namespace list", "ai-search namespace get", "ai-search namespace update",
-      "ai-search namespace delete", "ai-search create", "ai-search list", "ai-search get", "ai-search update",
-      "ai-search delete", "ai-search stats", "ai-search search", "ai-search jobs", "queues create",
-      "queues list", "queues delete", "workflows", "tail", "artifacts namespaces list",
-      "artifacts namespaces get", "artifacts repos create", "artifacts repos list",
-      "artifacts repos get", "artifacts repos delete", "artifacts repos issue-token"
+      "whoami",
+      "deploy",
+      "versions upload",
+      "versions list",
+      "versions view",
+      "versions deploy",
+      "deployments list",
+      "deployments status",
+      "rollback",
+      "secret put",
+      "secret list",
+      "secret delete",
+      "secret bulk",
+      "kv namespace create",
+      "kv namespace list",
+      "kv namespace delete",
+      "kv key put",
+      "kv key get",
+      "kv key list",
+      "kv key delete",
+      "d1 create",
+      "d1 list",
+      "d1 info",
+      "d1 execute",
+      "d1 migrations apply",
+      "d1 delete",
+      "r2 bucket create",
+      "r2 bucket list",
+      "r2 bucket delete",
+      "r2 object put",
+      "r2 object get",
+      "r2 object delete",
+      "vectorize create",
+      "vectorize list",
+      "vectorize get",
+      "vectorize delete",
+      "vectorize insert",
+      "vectorize upsert",
+      "vectorize query",
+      "vectorize get-vectors",
+      "vectorize delete-vectors",
+      "vectorize info",
+      "vectorize create-metadata-index",
+      "vectorize list-metadata-index",
+      "vectorize delete-metadata-index",
+      "ai-search namespace create",
+      "ai-search namespace list",
+      "ai-search namespace get",
+      "ai-search namespace update",
+      "ai-search namespace delete",
+      "ai-search create",
+      "ai-search list",
+      "ai-search get",
+      "ai-search update",
+      "ai-search delete",
+      "ai-search stats",
+      "ai-search search",
+      "ai-search jobs",
+      "queues create",
+      "queues list",
+      "queues delete",
+      "workflows",
+      "tail",
+      "artifacts namespaces list",
+      "artifacts namespaces get",
+      "artifacts repos create",
+      "artifacts repos list",
+      "artifacts repos get",
+      "artifacts repos delete",
+      "artifacts repos issue-token"
     ],
     "deferredCommands": {},
-    "unsupportedCommands": [
-      "dev --remote"
-    ]
+    "unsupportedCommands": ["dev --remote"]
   }
 }

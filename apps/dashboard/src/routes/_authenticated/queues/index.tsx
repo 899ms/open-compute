@@ -22,7 +22,7 @@ function QueuesPage() {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const create = useMutation({
     mutationFn: async (input: QueueConfigInput) => {
-      const queue = await client!.cloudflare.queues.create({
+      const queue = await client!.queues.create({
         account_id: accountId!,
         queue_name: input.name!,
       });
@@ -31,7 +31,7 @@ function QueuesPage() {
         (input.deliveryDelaySeconds !== undefined ||
           input.retentionSeconds !== undefined)
       ) {
-        await client!.cloudflare.queues.edit(queue.queue_id, {
+        await client!.queues.update(queue.queue_id, {
           account_id: accountId!,
           settings: {
             ...(input.deliveryDelaySeconds === undefined
@@ -65,7 +65,7 @@ function QueuesPage() {
       kind="Queues"
       description="Create and configure Queues through the official Queues API."
       load={async (management, accountID, signal) => {
-        const page = await management.cloudflare.queues.list(
+        const page = await management.queues.list(
           { account_id: accountID },
           { signal },
         );
@@ -79,13 +79,13 @@ function QueuesPage() {
         }));
       }}
       rename={(management, accountID, row, name) =>
-        management.cloudflare.queues.edit(row.id, {
+        management.queues.update(row.id, {
           account_id: accountID,
           queue_name: name,
         })
       }
       remove={(management, accountID, row) =>
-        management.cloudflare.queues.delete(row.id, { account_id: accountID })
+        management.queues.delete(row.id, { account_id: accountID })
       }
       primaryAction={
         <>

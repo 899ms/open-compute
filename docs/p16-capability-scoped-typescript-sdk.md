@@ -1,6 +1,40 @@
 # P16：Capability-scoped Cloudflare-compatible TypeScript SDK
 
-状态：**方案完成（2026-09-14）**；待固定输入复核、实现、npm bootstrap、真实 `ocd` Gate 与首次联合发布。
+状态：**已实现（2026-09-14）**；pending 仅剩需要明确 external-write 授权的首包 npm bootstrap 与
+下一次真实 tag 的首次联合 release（`NPM_ACCESS_TOKEN` 流程已在 release workflow 接线）。
+
+实现说明（2026-09-14）：
+
+- `packages/cloudflare-extension` 已删除，改为 `packages/sdk`（`@open-compute/sdk`，public scoped、
+  `publishConfig.access = "public"`、dual-module `dist/index.mjs` + `dist/index.cjs` + declarations）；
+  旧 `createOpenComputeExtension` 入口已删除，Dashboard 与 Gate 均迁移到 `createOpenComputeClient()`。
+- Offline deterministic generator：`packages/sdk/scripts/generate.ts`（`--check` 逐字节比较）+
+  `scripts/sdk-scan.ts`（TypeScript 7 project API 静态解析官方 `resources/**/*.mjs` 与 `.d.ts`，
+  提取 `_key`、HTTP verb、归一化 path template 与签名类型闭包；不执行 package source）。
+  生成 committed `src/generated.ts`（无继承 facade graph + `openCompute` + 可达类型
+  re-export/别名 + `Delegate["method"]` 显式 surface 接口）、`surface.json`（140 standard +
+  19 vendor operations、digest、delegate 身份）与 `openapi/open-compute-sdk.json`（combined，
+  vendor component 使用 `OpenCompute` 前缀，冲突 fail closed）。
+- 权威缺口修复：`GET /open-compute/upgrade/check` 与 `GET /accounts/{account_id}/queues/{queue_id}/metrics`
+  由 ocd 实现但未在 manifest 选中，已补选并再生成 subset/capability/extension/inventory；
+  manifest 新增 `sdkExcludedOperations`（首例：`r2-create-bucket-by-name`，官方 SDK 7.1.0
+  未实现该 route，SDK facade 不得本地伪造）。
+- Client options 收紧：`apiToken`/`baseURL` 必填、canonical path 以 `/client/v4` 结尾、
+  HTTP 仅回环、拒绝 `Authorization`/`x-open-compute-*` 覆盖、不读隐式凭据环境变量。
+- 检查：runtime property walk 与 generated surface graph 一致（test）、negative compile fixtures
+  （unsupported top-level/sibling/leaf/generic request，独立 tsc invocation）、`scripts/inspect-package.ts`
+  （pack 后 tarball allowlist/dependency exact/无 secret + Node ESM/CJS/Bun/TypeScript 隔离
+  consumer 冒烟）。
+- Release：`sdk-package` job（clean checkout、固定 Bun/Node 24/npm>=11.5.1、generator drift、
+  dual-module build、pack inspection）产出 tarball+report artifact；`assemble-release.ts` 校验并把
+  SDK identity 写入 `release.json`（GitHub 仍只发布五个 assets）；`publish` job 顺序为 GitHub
+  Draft → `npm publish`（`NPM_ACCESS_TOKEN`）→ npm read-back（shasum/integrity）→ 公开 Draft。
+  用户指示采用 `NPM_ACCESS_TOKEN` 而非 Trusted Publishing；provenance 在 token 流程下不可用，
+  已在 `docs/references/releasing.md` 记录为接受的限制。
+- Upstream refresh：scanner（`test/upstream-review/scanner.ts`）+ 分类 fixtures +
+  `.github/workflows/cloudflare-upstream-review.yml`（周一 06:23 UTC）+ ready 候选的
+  `apply-candidate.ts` 机械再生。首次实际扫描判定 `blocked`（schema HEAD 前进但 SDK 7.1.0
+  未发布 `use_ocr`/`jurisdiction`；wrangler 4.131.2 需协调评审），pin 未移动。
 
 本文落实 [GitHub issue #68](https://github.com/elliothux/open-compute/issues/68)：发布一个
 `@open-compute/sdk`，只暴露 `ocd` 已实现并取得资格的 Cloudflare 管理面资源，同时把 open-compute 专有操作放在
@@ -32,13 +66,13 @@ closed operation set，同时实际请求仍由官方 method implementation 和�
 
 2026-09-14 的仓库固定输入为：
 
-| 输入 | 当前固定值 | 当日上游事实 | P16 决策 |
-| --- | --- | --- | --- |
-| OpenAPI dialect | `3.0.3` | `api-schemas` HEAD 仍为 `3.0.3` | **不升级 dialect** |
-| Cloudflare API version | `4.0.0` | HEAD 仍为 `4.0.0` | **不改版本号** |
-| schema revision | `b8687f42e28fbfcb296a350f7dbf16349ea900af`（2026-09-02） | HEAD 为 `461ea58b4394fbbb2a861e6da962e193ad07a3a9`（2026-09-14） | 实施开始时做协调升级评审，不直接追 moving HEAD |
-| Cloudflare TypeScript SDK | `7.1.0` | npm `latest` 仍为 `7.1.0` | **当前无需升级** |
-| Wrangler | `4.127.1` | npm `latest` 为 `4.131.2` | 不因 SDK 发布单独升级；按 Wrangler/product Gate 独立评审 |
+| 输入                      | 当前固定值                                               | 当日上游事实                                                     | P16 决策                                                 |
+| ------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
+| OpenAPI dialect           | `3.0.3`                                                  | `api-schemas` HEAD 仍为 `3.0.3`                                  | **不升级 dialect**                                       |
+| Cloudflare API version    | `4.0.0`                                                  | HEAD 仍为 `4.0.0`                                                | **不改版本号**                                           |
+| schema revision           | `b8687f42e28fbfcb296a350f7dbf16349ea900af`（2026-09-02） | HEAD 为 `461ea58b4394fbbb2a861e6da962e193ad07a3a9`（2026-09-14） | 实施开始时做协调升级评审，不直接追 moving HEAD           |
+| Cloudflare TypeScript SDK | `7.1.0`                                                  | npm `latest` 仍为 `7.1.0`                                        | **当前无需升级**                                         |
+| Wrangler                  | `4.127.1`                                                | npm `latest` 为 `4.131.2`                                        | 不因 SDK 发布单独升级；按 Wrangler/product Gate 独立评审 |
 
 从当前 schema pin 到当日 HEAD 相差 150 个 upstream commits；HEAD 保持相同 dialect/API version，但在 subset 的 141 个
 selected operations 中有 13 个 operation definitions 变化：3 个 Worker secret、9 个 AI Search 和 1 个 Queue create。
@@ -71,14 +105,14 @@ closure checks。定时发现新版本不自动移动正式 pin；只有固定 i
 
 保持现有 authority，不增加手写的第二份 endpoint inventory：
 
-| 内容 | 权威输入 |
-| --- | --- |
-| upstream identities | `openapi/upstream/cloudflare-openapi.lock.json` |
-| Cloudflare selected operations 与状态 | `openapi/cloudflare-subset-manifest.json` |
-| Cloudflare wire schema | `openapi/cloudflare-v4-subset.json`（由固定 upstream schema 机械生成） |
-| vendor routes/schema | `openapi/open-compute-extension.json` |
-| product capability projection | `openapi/p6-capability.json` 与 `share/cloudflare-capabilities.json` |
-| official method implementation/type | lock 精确固定的 `cloudflare` npm tarball |
+| 内容                                  | 权威输入                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| upstream identities                   | `openapi/upstream/cloudflare-openapi.lock.json`                        |
+| Cloudflare selected operations 与状态 | `openapi/cloudflare-subset-manifest.json`                              |
+| Cloudflare wire schema                | `openapi/cloudflare-v4-subset.json`（由固定 upstream schema 机械生成） |
+| vendor routes/schema                  | `openapi/open-compute-extension.json`                                  |
+| product capability projection         | `openapi/p6-capability.json` 与 `share/cloudflare-capabilities.json`   |
+| official method implementation/type   | lock 精确固定的 `cloudflare` npm tarball                               |
 
 新增文件只能是以下派生物：
 

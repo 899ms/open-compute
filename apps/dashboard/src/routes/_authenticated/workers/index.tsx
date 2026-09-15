@@ -11,7 +11,7 @@ function WorkersPage() {
       kind="Workers"
       description="Scripts returned by the official Workers API."
       load={async (client, accountID, signal) => {
-        const page = await client.cloudflare.workers.scripts.list(
+        const page = await client.workers.scripts.list(
           { account_id: accountID },
           { signal },
         );
@@ -23,7 +23,7 @@ function WorkersPage() {
         }));
       }}
       remove={(client, accountID, row) =>
-        client.cloudflare.workers.scripts.delete(row.id, {
+        client.workers.scripts.delete(row.id, {
           account_id: accountID,
         })
       }

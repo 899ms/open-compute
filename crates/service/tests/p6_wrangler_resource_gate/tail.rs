@@ -11,7 +11,7 @@ pub(super) async fn exercise_live_tail(
         Duration::from_secs(20),
         tokio::process::Command::new("bun")
             .arg("tests/live-tail-dashboard.mjs")
-            .current_dir(root.join("packages/cloudflare-extension"))
+            .current_dir(root.join("packages/sdk"))
             .env(
                 "OPEN_COMPUTE_V4_BASE_URL",
                 format!("http://{admin_addr}/client/v4"),
