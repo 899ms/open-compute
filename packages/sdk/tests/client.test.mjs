@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 import { APIError } from "cloudflare";
 import { createOpenComputeClient } from "../src/index.ts";
@@ -296,7 +297,8 @@ test(
   { timeout: 300_000 },
   () => {
     const tsc =
-      process.env.OPEN_COMPUTE_SDK_TSC ?? "../../node_modules/.bin/tsc";
+      process.env.OPEN_COMPUTE_SDK_TSC ??
+      join(repoRoot, "node_modules", ".bin", "tsc");
     const fixtures = [
       { file: "unsupported-top-level.ts", symbol: "aiGateway" },
       { file: "unsupported-sibling.ts", symbol: "search" },
@@ -307,6 +309,7 @@ test(
       const result = spawnSync(
         tsc,
         [
+          "--ignoreConfig",
           "--noEmit",
           "--strict",
           "--target",
@@ -321,6 +324,11 @@ test(
           `${repoRoot}packages/sdk/tests/negative/${file}`,
         ],
         { cwd: repoRoot, encoding: "utf8" },
+      );
+      assert.equal(
+        result.error,
+        undefined,
+        `failed to spawn tsc for ${file}: ${result.error?.message ?? result.error}`,
       );
       assert.notEqual(
         result.status,
