@@ -85,10 +85,14 @@ jobs:
             \( -name "ocd-$RELEASE_TAG-*" -o -name SHA256SUMS -o -name release.json \) \
             -print | sort)
           test "${#files[@]}" -eq 5
-          gh release create "$RELEASE_TAG" "${files[@]}" \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
-            --notes-file "$GITHUB_WORKSPACE/docs/releases/${RELEASE_TAG#v}.md" \
-            --title "open-compute ${RELEASE_TAG#v}"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$RELEASE_TAG" "${files[@]}" \
+              --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --notes-file "$GITHUB_WORKSPACE/docs/releases/${RELEASE_TAG#v}.md" \
+              --title "open-compute ${RELEASE_TAG#v}"
+          fi
           verify="$RUNNER_TEMP/release-download"
           mkdir "$verify"
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$verify"

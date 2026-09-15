@@ -279,10 +279,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .temp/sccache
-          key: compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json', 'crates/storage/refinery-migrations/**/*.sql') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: compiler-v2-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json', 'crates/storage/refinery-migrations/**/*.sql') }}
           restore-keys: |
-            compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json', 'crates/storage/refinery-migrations/**/*.sql') }}-${{ github.sha }}-
-            compiler-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'packages/runtime/workerd.lock.json', 'crates/storage/refinery-migrations/**/*.sql') }}-
+            compiler-v2-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-
       - name: Enable local compiler cache without per-crate remote cache requests
         shell: bash
         run: |
@@ -355,7 +354,8 @@ jobs:
         if: always()
         run: sccache --show-stats
       - name: Save compiler cache including failed builds
-        if: ${{ always() && !cancelled() }}
+        if: ${{ always() && !cancelled() && steps.compiler-cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
         uses: actions/cache/save@v6
         with:
           path: .temp/sccache
@@ -509,12 +509,16 @@ jobs:
             echo "expected three executables, SHA256SUMS, and release.json" >&2
             exit 1
           fi
-          gh release create "$RELEASE_TAG" "${files[@]}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --draft \
-            --notes-file "$GITHUB_WORKSPACE/$RELEASE_NOTES" \
-            --title "open-compute $RELEASE_VERSION"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$RELEASE_TAG" "${files[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --notes-file "$GITHUB_WORKSPACE/$RELEASE_NOTES" \
+              --title "open-compute $RELEASE_VERSION"
+          fi
           verify="$RUNNER_TEMP/release-download"
           mkdir "$verify"
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$verify"

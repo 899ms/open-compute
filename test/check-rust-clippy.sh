@@ -16,26 +16,16 @@ production_clippy() {
         -D clippy::unimplemented
 }
 
-# Lint each production library independently so workspace dev-dependency feature
-# unification cannot pull test-support modules into the production pass.
+# Lint production libraries together without enabling test-support features.
 production_status=0
-for package in \
-    open-compute-core \
-    open-compute-storage \
-    open-compute-search \
-    open-compute-artifacts \
-    open-compute-runtime \
-    open-compute-images \
-    open-compute-document-parser \
-    open-compute-workers \
-    open-compute-service
-do
-    production_clippy -p "$package" --lib || production_status=1
-done
+# All workspace libraries use the same production feature set. One Cargo
+# invocation shares dependency compilation; --no-deps keeps Clippy from
+# traversing third-party sources while still compiling them as inputs.
+production_clippy --workspace --lib --no-deps || production_status=1
 
 # The benchmark and daemon are the maintained non-test executable targets.
-production_clippy -p open-compute-search --example exact_search_benchmark || production_status=1
-production_clippy -p open-compute-service --bin ocd || production_status=1
+production_clippy -p open-compute-search --example exact_search_benchmark --no-deps || production_status=1
+production_clippy -p open-compute-service --bin ocd --no-deps || production_status=1
 
 if [ "$production_status" -ne 0 ]; then
     exit "$production_status"
@@ -43,7 +33,7 @@ fi
 
 # Crate-local and integration tests use the dedicated 800-line function budget.
 CLIPPY_CONF_DIR="$root/test/clippy" \
-    cargo clippy --workspace --tests --all-features --keep-going -- -D warnings
+    cargo clippy --workspace --tests --all-features --no-deps --keep-going -- -D warnings
 
 # Test-support fixture and fuzz binaries are not selected by `--tests`.
 CLIPPY_CONF_DIR="$root/test/clippy" \
@@ -51,5 +41,5 @@ CLIPPY_CONF_DIR="$root/test/clippy" \
         -p open-compute-artifacts \
         -p open-compute-runtime \
         -p open-compute-p1-fuzz \
-        --bins \
+        --bins --no-deps \
         --all-features --keep-going -- -D warnings

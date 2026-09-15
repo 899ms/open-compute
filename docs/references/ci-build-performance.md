@@ -1,8 +1,19 @@
 # CI 与 Rust 构建性能
 
-2026-09-06。配置已调整，本轮托管命中率和净耗时尚待实测；不把理论收益写成已经达到的加速倍数。
+2026-09-16。按 GitHub Actions 实际 run 记录复盘；以下数字是墙钟，不是 runner 分钟。
 
 ## 已观察到的成本
+
+`main` 的旧轻量检查（`34015774164`）耗时 2 分 46 秒；加入生产 Clippy、no-default-features
+和 production hygiene 后，健康缓存的 `34974064143` 耗时 8 分 04 秒，半成品缓存下的
+`35006658887` 和 `35017803309` 分别耗时 18 分 37 秒和 19 分 39 秒。慢点不是 GitHub runner
+本身：慢 run 的 `clippy` 为 519–539 秒、production hygiene 为 362–367 秒；健康缓存时分别为
+131 秒和 81 秒。之前每个生产库单独调用 Cargo，还会在不同调用中重复依赖检查。
+
+本轮把生产库 lint 合并为一次 `cargo clippy --workspace --lib --no-default-features --no-deps`，
+所有生产目标禁止 lint 第三方依赖；本机同一源码的 canonical Clippy 从冷依赖到通过为 28 秒。
+Rust target cache 不再保存失败的半成品，package 的 sccache 改为每个平台/锁定输入一个稳定 key，
+不再把 commit、run 和 attempt 写进 key。第一次 v2 key 会冷启动，之后相同平台和锁图可复用。
 
 `33977849336` 已完成 coverage 和 Linux/macOS 最终 workspace Gate，但 Linux x64/arm64 的
 package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 package 步骤分别消耗约
@@ -32,8 +43,12 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 - Cargo registry/index/git 下载使用独立、仅由 OS 与 `Cargo.lock` 定位的缓存，避免 profile-specific
   target cache 未命中时重新下载全部 Rust 依赖。
 - package 使用固定 sccache 0.16.0，512 MiB 本地缓存位于 `.temp/sccache`，整目录通过 Actions
-  cache restore/save 复用；主 key 包含源码/run/attempt，fallback 保持相同 OS/CPU、工具链和锁文件。
-  成功和失败均保存。它是编译加速缓存，不是测试通过证据或可信发行物。
+  cache restore/save 复用；主 key 只包含 OS/CPU、Rust/sccache 版本和锁定输入，fallback 可跨源码
+  commit 复用内容寻址的编译结果。精确命中不再重复保存，竞争保存失败也不影响构建。它是编译
+  加速缓存，不是测试通过证据或可信发行物。
+- 2026-09-16 inventory 有 22 个条目、约 9.57 GiB，已经贴近 GitHub 每仓库 10 GiB 上限；其中
+  8 个旧 package compiler key 含 run/attempt，约 3.9 GiB，几乎没有跨发布复用价值。v2 key
+  目标是三个平台各 512 MiB，稳定占用约 1.5 GiB；旧条目由 GitHub 的 LRU 淘汰，不手工删除失败证据。
 - 不启用逐 crate 的 GHA sccache backend：并行矩阵会增加缓存 API 请求，已存在上游限流与延迟报告。
   最终链接、bin/proc-macro 编译等仍有不可缓存部分；不承诺完全免编译。
 - 保存 Cargo `--timings` 报告、cache statistics、失败时的未验收原生 binary 和现有失败 Gate evidence。
@@ -43,16 +58,45 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 
 ## 研究取舍
 
-| 候选 | 当前决定与依据 |
-| --- | --- |
-| 同一 runner / 合并重复步骤 | 普通 CI 使用一台 runner、一轮 build，避免重复安装与 fresh-checkout 编译 |
-| package 与 qualification 并行 | 已配置；publish 保留所有依赖，提前暴露打包问题 |
-| Cargo target cache | 保留按 profile/平台区分的依赖缓存；不盲目上传整个几十 GiB workspace target 导致缓存驱逐 |
-| sccache | 仅 native package 启用，限制容量并收集命中数据；coverage 保持现有插桩路径 |
-| 容器 / cargo-chef | 当前三个正式平台原生 runner 不增加一套容器构建；Linux 容器不能证明 macOS 原生行为，镜像不能直接复用所有架构的机器码 |
-| Fat LTO → ThinLTO / 更多 codegen units | 尚未改 release profile；先用 timings 定位实际链接成本，避免未测量的大小/性能变化 |
-| nightly 编译参数 / 替换 linker | 不引入 nightly 或未验证 linker；保持正式 Rust 1.98 和原生链接契约 |
-| 增大 Gate 并发 | 保持审计后的 `--jobs 2` 和独占目标，不拿资源争抢换取新的时序失败 |
+| 候选                                   | 当前决定与依据                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 同一 runner / 合并重复步骤             | 普通 CI 使用一台 runner、一轮 build，避免重复安装与 fresh-checkout 编译                                             |
+| package 与 qualification 并行          | 已配置；publish 保留所有依赖，提前暴露打包问题                                                                      |
+| Cargo target cache                     | 保留按 profile/平台区分的依赖缓存；不盲目上传整个几十 GiB workspace target 导致缓存驱逐                             |
+| sccache                                | 仅 native package 启用，限制容量并收集命中数据；coverage 保持现有插桩路径                                           |
+| 容器 / cargo-chef                      | 当前三个正式平台原生 runner 不增加一套容器构建；Linux 容器不能证明 macOS 原生行为，镜像不能直接复用所有架构的机器码 |
+| Fat LTO → ThinLTO / 更多 codegen units | 尚未改 release profile；先用 timings 定位实际链接成本，避免未测量的大小/性能变化                                    |
+| nightly 编译参数 / 替换 linker         | 不引入 nightly 或未验证 linker；保持正式 Rust 1.98 和原生链接契约                                                   |
+| 增大 Gate 并发                         | 保持审计后的 `--jobs 2` 和独占目标，不拿资源争抢换取新的时序失败                                                    |
+
+## 测试与复用边界
+
+- `main` 的静态资格只跑 build/typecheck、JS/Python tooling、fmt、Clippy、no-default-features、
+  MSRV target check、production hygiene、metadata 和边界检查。tag 的 `validate` 只读取对应 main
+  source commit 的成功 run；release 不重复 Clippy 或 MSRV。
+- release 仍必须保留不同职责的 coverage、macOS 未插桩 workspace Gate、Linux `p0-2` 受控 egress、
+  三平台单文件 package、SDK tarball 和最终 bytes/checksum 回读。coverage 与 Gate 使用不同编译
+  插桩和宿主，不能拿一个替代另一个；package 的 native binary 也不能由 main 的 `cargo check` 代替。
+- 固定输入变化的最小选择：只改 docs/notes 只做文档检查；只改 SDK 做 SDK typecheck/test/pack；
+  只改 Rust 代码做受影响 crate/Gate，源码冻结前再做一次完整 workspace；修改 `workerd.lock.json`、
+  `share/workerd/**`、runtime loader、Cap'n Proto 或 compatibility baseline 时，至少重跑
+  `bun run build`、`p3-contract`、所有依赖真实 workerd 的 P0/P1/P2/Workflow/P3 targets、coverage
+  和三平台 package。发布 tag 仍按 release workflow 的完整矩阵执行，不以窄选集冒充正式资格。
+- Gate registry 统计当前 49 个 ONCE cases、55 个 TIMING cases；同一物理 target 的重叠选择只调度一次，
+  `p2-3` 复用 `p0-2`，Linux egress 不再附带第二个 workspace round。确定性 case 不做重复轮次，
+  取消、崩溃、重启和并发断言仍在所属 case 内执行。
+
+## 失败后的选择性重跑
+
+1. 源码或正式 pin 失败：修复后生成新的 release commit/tag；旧 run 的测试和 artifact 只证明旧输入，
+   不复用到新 tag。
+2. runner、网络或 GitHub 服务瞬时失败：在同一 tag 上只 rerun failed jobs，保留已成功 jobs/artifacts。
+   `publish` 创建 Draft 已幂等，已有完整 Draft 可直接重跑 publish。
+3. qualification 全部成功但 assemble/publish 失败：使用 `release-recovery` 的 `tag + source_run_id`，
+   它重新验证 8 个成功 job，下载原 artifact，只重建 manifest、校验 Draft、npm 和公开 release，
+   不重跑 coverage/Gate/package。
+4. Draft asset 缺失、内容不一致或 source run 不完整：recovery fail closed；不得覆盖 asset，保留
+   失败证据并生成新的候选或人工处理 Draft。
 
 主要资料：
 
