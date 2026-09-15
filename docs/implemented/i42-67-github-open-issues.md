@@ -21,8 +21,8 @@ recovery、runtime liveness probe、workerd supervisor 或 limits API。
 ## 1. GitHub inventory 与范围
 
 2026-09-13 读取 `elliothux/open-compute` 的全部 30 个 issues，当时为 23 closed、7 open。2026-09-14 完成
-`#51` 和 `#67` 后，本批次剩余 5 项。2026-09-15 实现冻结时，新增 `#68` 已明确排除；本文列出的五项仍保持
-open，因为关闭和证据评论属于未获授权的外部写入。
+`#51` 和 `#67` 后，本批次剩余 5 项。2026-09-15 实现冻结时，新增 `#68` 已明确排除；本文列出的五项在
+实现与验收完成后，于 2026-09-16 写入提交和验收证据并以 completed 关闭。
 
 已关闭的是 `#1–#4`、`#17–#20`、`#36`、`#37`、`#41`、`#44–#48`、`#52–#54`、`#56`、`#57`、
 `#59` 和 `#60`。它们不重新进入实现范围，不保留旧方案或兼容分支；最终 workspace Gate 继续覆盖其当前
@@ -409,8 +409,8 @@ cross-cutting checklist 检查最终 diff，结论为 **无 Cloudflare 合同回
 现有 runtime/product Gates。未执行需要外部 Cloudflare account 和写入权限的 hosted differential；这不影响本地已声明
 合同的检查结论，也不把 hosted global topology 纳入 single-machine support scope。
 
-外部GitHub issue的关闭和comment属于单独的external write：只有实现及上述证据完成后执行，不以本文计划本身
-改变issue状态。
+GitHub issues `#42`、`#58`、`#61`、`#62` 和 `#66` 已在实现及上述证据完成后分别写入提交、行为和验收证据，
+并以 completed 关闭；`#68` 仍由 P16 单独承接。
 
 ## 13. 最终验收证据
 
