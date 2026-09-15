@@ -8,6 +8,10 @@ use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
+    println!(
+        "cargo:rerun-if-changed={}",
+        manifest_dir.join("refinery-migrations").display()
+    );
     let migrations = [
         ("migrations", "001_init", "MIGRATION_001_SHA256"),
         ("migrations", "002_workers_runtime", "MIGRATION_002_SHA256"),

@@ -27,7 +27,7 @@ jobs:
           lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
-          rust-cache-key: default
+          rust-cache-key: default-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
           rust-components: rustfmt, clippy
       - name: Build and typecheck current runtime and tooling assets
         run: bun run build
