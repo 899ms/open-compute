@@ -1,7 +1,10 @@
 # P17：宿主子进程管理基础设施
 
-状态：**planned（2026-09-16）**。本文冻结 workerd、Extension Provider、Browser Runtime 与文档解析 child
+状态：**planned（2026-09-16）**。本文冻结 workerd、Gateway、Extension Provider、Browser Runtime 与文档解析 child
 共享的进程所有权边界；实现和产品 Gate 尚未完成。
+
+P17 先实现并验收通用宿主进程 ownership；完成后解除 [R0 / GitHub #90](r0-localhost-worker-origins.md) 的实施阻塞。P17
+不重新定义 [Host authority](references/host-authority.md)，R0 后续建立该路由 authority，P18 再消费两者。
 
 ## 1. 结论
 
@@ -34,6 +37,7 @@ ocd composition root
 │
 └── Domain Managers                      owning product modules
     ├── WorkerdSupervisor
+    ├── GatewayManager
     ├── ProviderManager
     ├── BrowserManager
     └── DocumentParserRunner
@@ -50,9 +54,9 @@ Xberg self-derived child 已证明这两件事可以同时成立，见[单二进
 文档解析 child 当前在 `open-compute-service` 中单独实现 `env_clear()`、process guard、deadline、bounded pipe 和强制回收。这些重复说明
 底层 ownership 可以抽取，但 Xberg 的“一次一帧、一次一进程”不能成为长期 runtime 的状态机。
 
-[W3 Extension](workerd/w3-user-extensible-native-bindings.md) 与 [P19 Browser Run](p19-browser-run.md) 都需要相同的安全启动和回收原语，
-但前者按 package/version 复用 Provider，后者由 BR-G0 选定引擎后确定 session/pool 模型。因此现在应固定底层合同，不预先统一它们的
-产品状态机。
+[W3 Extension](workerd/w3-user-extensible-native-bindings.md)、[P18 Gateway](p18-single-domain-public-gateway.md) 与
+[P19 Browser Run](p19-browser-run.md) 都需要相同的安全启动和回收原语，但 Provider 按 package/version 复用、Gateway 是单例长期
+child，Browser 由 BR-G0 选定 session/pool 模型。因此现在应固定底层合同，不预先统一它们的产品状态机。
 
 ## 3. 第一层：Host Process Runtime
 
@@ -81,12 +85,13 @@ fn spawn(spec: SpawnSpec) -> Result<OwnedProcess, PlatformError>;
 
 进程层不负责下载、选择版本或验证产品 package。对应 authority 先完成验证，再交付一个保持 executable identity 的 launch image：
 
-| Child | 验证来源 |
-| --- | --- |
-| workerd | formal workerd lock、embedded archive、binary digest 与版本输出 |
-| Xberg | 当前正式 `ocd` executable 的隐藏内部模式 |
-| Browser | BR-G0 后唯一正式 browser lock、archive、文件集与 executable digest |
-| Provider | operator 安装后的 immutable Extension Package 与目标平台 binary digest |
+| Child    | 验证来源                                                                               |
+| -------- | -------------------------------------------------------------------------------------- |
+| workerd  | formal workerd lock、embedded archive、binary digest 与版本输出                        |
+| Xberg    | 当前正式 `ocd` executable 的隐藏内部模式                                               |
+| Gateway  | P18 formal Caddy lock、embedded payload、binary digest、build info 与 module inventory |
+| Browser  | BR-G0 后唯一正式 browser lock、archive、文件集与 executable digest                     |
+| Provider | operator 安装后的 immutable Extension Package 与目标平台 binary digest                 |
 
 Linux 优先执行已经打开并验证的 fd；macOS signed bundle、多文件 Browser runtime 和 executable staging 使用各自已资格化的 launch
 contract。通用层不把所有产物强行降成单文件，也不搜索 PATH、读取 tenant path 或运行时下载。
@@ -120,7 +125,7 @@ Coordinator 位于 `open-compute-service` composition root。它不持有所有 
 Coordinator 只负责：
 
 1. 发放全局 `ChildPermit`，限制同时存在的 supervised root process 和平台 fd 总预算；
-2. 汇总低基数 `ChildKind`：`workerd`、`document_parser`、`extension_provider`、`browser`；
+2. 汇总低基数 `ChildKind`：`workerd`、`gateway`、`document_parser`、`extension_provider`、`browser`；
 3. 发布脱敏 inventory：opaque key、kind、state、PID/PGID、launch digest、started-at 和最后退出分类；
 4. 汇总 running、spawn failure、crash、forced kill、reap failure、stdio overflow 指标；
 5. 在 `ocd` shutdown 时按静态依赖顺序调用 Domain Manager 的 drain/stop；
@@ -134,19 +139,22 @@ authority；持久 package、session、grant 与 deployment 仍由 SQLite/immuta
 
 ## 5. 第三层：Domain Managers
 
-| Manager | 生命周期 | Readiness | Crash/restart |
-| --- | --- | --- | --- |
-| `WorkerdSupervisor` | 单例、平台启动时拉起、generation-scoped | control-fd listen + authenticated HTTP probe | bounded restart；决定 runtime admission/readiness |
-| `ProviderManager` | 按精确 package/version/target 懒启动并复用 | Host ABI/package/schema handshake | 全部 session 失效；有 pin 才 bounded restart |
-| `BrowserManager` | BR-G0 后确定的 session/pool 模型 | browser/CDP 与 profile contract | 受影响 session 标记 lost；按产品容量恢复 |
-| `DocumentParserRunner` | 每次转换一个短命 self-derived child | 无独立 readiness | 不重启；只使当前转换稳定失败 |
+| Manager                | 生命周期                                   | Readiness                                           | Crash/restart                                                    |
+| ---------------------- | ------------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------------- |
+| `WorkerdSupervisor`    | 单例、平台启动时拉起、generation-scoped    | control-fd listen + authenticated HTTP probe        | bounded restart；决定 runtime admission/readiness                |
+| `GatewayManager`       | 配置公网 Gateway 后单例长期运行            | validated config + TLS handshake/certificate health | bounded restart；只降级公网入口，不拖垮本机 deploy/control plane |
+| `ProviderManager`      | 按精确 package/version/target 懒启动并复用 | Host ABI/package/schema handshake                   | 全部 session 失效；有 pin 才 bounded restart                     |
+| `BrowserManager`       | BR-G0 后确定的 session/pool 模型           | browser/CDP 与 profile contract                     | 受影响 session 标记 lost；按产品容量恢复                         |
+| `DocumentParserRunner` | 每次转换一个短命 self-derived child        | 无独立 readiness                                    | 不重启；只使当前转换稳定失败                                     |
 
 Domain Manager 负责自己的 protocol task、readiness deadline、session/refcount、backoff、stable error mapping 和 health projection。不要把
-`ProviderManager` 或 `BrowserManager` 塞进 `WorkerdSupervisor`，也不要为这四类 child 建立一个 `Supervisor<Policy>`。
+`GatewayManager`、`ProviderManager` 或 `BrowserManager` 塞进 `WorkerdSupervisor`，也不要为这些 child 建立一个
+`Supervisor<Policy>`。
 
 IPC 保持产品所有权：
 
 - workerd：control fd、内部 listener 与功能性 probe；
+- Gateway：Caddy JSON、private ocd upstream、TLS/ACME readiness 与 DNS-provider socket；
 - Xberg：单个 OCDP stdin/stdout frame；
 - Browser：选定 engine 的 CDP/WebSocket；
 - Extension Provider：Cap'n Proto control plane，以及由 Broker 授权的 workerd-to-Provider direct session channel。
@@ -166,19 +174,21 @@ launch-contract digest
 恢复时必须同时验证 lease ownership、PID/PGID、group leader、start identity、binary/package digest 和 launch contract。完整匹配才允许
 fence/reap；未知、歧义或不匹配的进程绝不 signal，并使对应 capability fail closed。
 
-重启后 IPC 与 in-memory capability 已丢失，Day 1 不重新接管旧 workerd、Provider 或 Browser session。Manager 只清理已验证 orphan，
-再按当前 authority 启动新 generation。短命 Xberg 不采用可恢复 session lease。
+重启后 IPC 与 in-memory capability 已丢失，Day 1 不重新接管旧 workerd、Gateway、Provider 或 Browser session。Manager 只清理已验证
+orphan，再按当前 authority 启动新 generation。Caddy ACME/certificate storage 由 P18 持久化并复用，但旧 process 不被接管。短命
+Xberg 不采用可恢复 session lease。
 
 ## 7. Shutdown
 
 composition root 使用固定依赖顺序，不把它变成数据驱动 DAG：
 
 1. 关闭公开 admission、Worker upload 与新的 Browser/Provider/parser acquire；
-2. workerd、Browser 和 Provider 开始 bounded drain，Provider/Browser 在 workerd 仍可能完成在途调用时保持可用；
-3. deadline 后停止并 reap workerd，旧 generation capability 全部失效；
-4. 停止并 reap Browser 与 Provider process groups；
-5. 取消剩余 Xberg task；
-6. Coordinator 断言 inventory、process group、fd permit、reader 和 lease 均已收敛。
+2. Gateway 停止接受公网连接并 bounded drain，使新的公网请求不能进入 ocd；
+3. workerd、Browser 和 Provider 开始 bounded drain，Provider/Browser 在 workerd 仍可能完成在途调用时保持可用；
+4. deadline 后停止并 reap workerd，旧 generation capability 全部失效；
+5. 停止并 reap Gateway、Browser 与 Provider process groups；
+6. 取消剩余 Xberg task；
+7. Coordinator 断言 inventory、process group、fd permit、reader 和 lease 均已收敛。
 
 任何 Manager 的 stop failure 都不能跳过后续 KILL/reap；错误被聚合成脱敏 shutdown diagnostics。
 
@@ -187,9 +197,10 @@ composition root 使用固定依赖顺序，不把它变成数据驱动 DAG：
 1. 从现有 `runtime::process`/workerd owner 抽取产品无关的 verified spawn、`OwnedProcess`、stdio 和 signal/reap 原语；
 2. 迁移 Xberg 使用该层，保持 OCDP、limits、错误与一次一进程行为不变；
 3. 增加 composition-root permit/inventory/shutdown Coordinator；
-4. W3 `ProviderManager` 使用同一 owner，实现自己的 lazy start、handshake、session 与 restart；
-5. BR-G0 选定 Browser engine 后复用该 owner，不预先抽象未知 pool 模型；
-6. 只有实现中出现相同的第三份 restart/backoff 代码时，才抽取小型 helper。
+4. P18 `GatewayManager` 使用同一 owner，但保留自己的 config/TLS/ACME readiness 与 restart 状态机；
+5. W3 `ProviderManager` 使用同一 owner，实现自己的 lazy start、handshake、session 与 restart；
+6. BR-G0 选定 Browser engine 后复用该 owner，不预先抽象未知 pool 模型；
+7. 只有实现中出现相同的第三份 restart/backoff 代码时，才抽取小型 helper。
 
 ## 9. 验收
 
@@ -199,6 +210,7 @@ composition root 使用固定依赖顺序，不把它变成数据驱动 DAG：
 - 全局和产品 capacity 同时生效，一个产品耗尽预算不会绕过硬上限；
 - inventory、logs、metrics、status、support bundle 和公开错误不泄漏 secret、payload、路径、argv 或内部 endpoint；
 - `ocd` crash/restart 与正常 shutdown 后不存在已登记 orphan、fd、reader task、permit 或私有临时目录泄漏；
-- Xberg、Provider、Browser 和 workerd 的 readiness/restart/session 行为仍由各自 Gate 覆盖，不以通用 fixture 代替真实 runtime Gate。
+- Xberg、Gateway、Provider、Browser 和 workerd 的 readiness/restart/session 行为仍由各自 Gate 覆盖，不以通用 fixture 代替真实
+  runtime Gate。
 
 返回[文档索引](README.md)。

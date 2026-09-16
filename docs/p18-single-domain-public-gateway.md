@@ -8,6 +8,11 @@ P18 为一个 self-hosted open-compute 实例接入一个 operator 控制的专�
 公网访问的产品生成稳定 HTTPS URL。设计聚焦单个专用 `base_domain` 和固定产品 namespace。operator 一次性手工配置业务
 wildcard DNS 和 ACME challenge DNS；之后创建、删除资源和证书续期均由 open-compute 自动完成。
 
+P18 遵循 [Host authority](references/host-authority.md)，复用先行的
+[R0 Worker `.localhost` Origin 重构](r0-localhost-worker-origins.md)建立的 Host-first ingress、hostname claim、typed product route
+和 origin endpoint API；Caddy lifecycle 复用 [P17 宿主子进程管理基础设施](p17-host-process-infrastructure.md)。R0 本机 origin
+不依赖 P18；P18 只增加可选的公网 DNS、HTTPS 与 public-name 生命周期。
+
 ## 1. 范围与结论
 
 P18 Day 1 固定以下合同：
@@ -258,9 +263,10 @@ ocd（唯一分发文件）
        └─ challenge DNS UDP/TCP
 ```
 
-`ocd` 负责 Caddy process group、固定 executable identity、readiness、bounded stdout/stderr、graceful stop、forced reap、restart
-backoff 和 secret-free orphan recovery。Caddy admin API 默认禁用；`ocd` 独占配置 authority，生成完整 typed JSON，先用正式
-pinned binary validate，再原子发布并启动/受控重启。
+P17 Host Process Runtime 负责 Caddy 的 verified launch、process group、bounded stdout/stderr、TERM/KILL/reap 与 orphan
+primitives；P17 Coordinator 负责 permit、inventory 和 shutdown coordination。P18 `GatewayManager` 独占 typed Caddy JSON、配置验证、
+TLS readiness、ACME storage、restart/backoff 和 gateway health。Caddy admin API 默认禁用；完整配置先用正式 pinned binary
+validate，再原子发布并启动或受控重启。
 
 Caddy 和自有 module 的许可证及 notices 必须进入 `ocd licenses`。P18 实现完成时同步更新
 [`single-binary.md`](references/single-binary.md) 的内嵌内容、物化布局、构建输入和正式单文件测试。
@@ -303,6 +309,10 @@ hostname authorization 始终使用 SNI、Host 和 SQLite binding。
 
 ## 8. Caddy projection 与 `ocd` Host authority
 
+hostname claim、typed product route、可信 ingress context 和 endpoint projection 的共享合同由
+[Host authority](references/host-authority.md)拥有，并由 R0 先行实现。P18 不建立第二套 hostname registry；本节只定义 Caddy
+projection 和公网 binding 的附加状态。
+
 Caddy JSON 是从 SQLite/config authority 生成的可重建 projection，只包含：
 
 - 固定 HTTPS listener 和关闭 HTTP/3 的 protocol 设置；
@@ -316,13 +326,12 @@ Caddy JSON 是从 SQLite/config authority 生成的可重建 projection，只包
 projection 不包含 resource/account/deployment ID、DNS provider credential、ACME token、自由模板或 tenant input。resource binding
 变化不重载 Caddy；只有 domain onboarding 或固定 product namespace enable/disable 才重新生成完整配置。
 
-完整 canonical hostname 是实例级全局 namespace。authority 必须保证：
+公网 hostname 使用 R0 建立的实例级 claim authority。P18 必须保证：
 
-- 一个 active hostname 只指向一个 product target；
-- binding 保存 `hostname_ascii`、`account_id`、`product_kind`、target identity、state、generation 和 timestamps；
-- product repository 在同一 SQLite transaction 中验证 target 存在、属于 account 且允许 public access；
-- 数据库唯一约束覆盖 Worker、R2/KV 等全部产品表；
-- hostname claim 与 product relation 都有数据库约束和 restart coverage，不依赖进程内 map。
+- public-name claim 和 product-owned typed binding 在同一 SQLite transaction 中创建或切换；
+- product repository 验证 target 存在、属于 account 且允许 public access；
+- Worker、R2/KV 等产品通过各自带外键的 binding/route 引用共享 claim，不使用通用 dangling target ID；
+- resource binding 变化只修改 SQLite authority，不进入 Caddy config，也不依赖进程内 map。
 
 P18 tenant hostname 的所有 path 都进入对应 product ingress。`/health/*`、Artifacts 和控制面 path 只在明确的平台 listener/host
 可达；tenant 可以合法拥有这些 path。unknown、保留但未激活、disabled 或 tombstoned hostname 返回稳定 404。
@@ -375,8 +384,9 @@ degraded
 disabling
 ```
 
-`control.sqlite` 保存 base domain、enabled namespace、workflow generation/阶段、global hostname claims、projection digest 和最近成功
-TLS qualification metadata。ACME account、certificate 和 private key 由 Caddy storage 独占。
+`control.sqlite` 保存 base domain、enabled namespace、workflow generation/阶段、公网 claim 的附加状态、projection digest 和最近成功
+TLS qualification metadata；hostname ownership 和 typed target relation 复用 R0 authority。ACME account、certificate 和 private key
+由 Caddy storage 独占。
 
 Caddy storage 是 certificate/ACME secret authority；Caddy JSON 是可重建 projection；内存 challenge TXT 是短期状态；用户 DNS zone
 是手工配置的外部 authority。每项状态都有唯一 owner。
@@ -446,9 +456,10 @@ API/CLI/dashboard 必须提供：
 1. **Caddy supply chain**：冻结 Caddy/Go/module pin，构建三平台定制 binary，建立 lock、LFS bytes、licenses 与离线物化验证。
 2. **Open Compute provider**：实现最小 `dns.providers.opencompute` libdns adapter 和私有 Unix-socket protocol。
 3. **Challenge DNS**：实现固定 zone 的 UDP/TCP SOA/NS/TXT authoritative responder、无 recursion 和边界测试。
-4. **Caddy supervisor**：复用现有 child lifecycle/integrity 模式，增加 typed JSON、storage、readiness 和 restart recovery。
-5. **Domain authority**：追加 migration，建立 singleton domain、namespace workflow 和实例级 global hostname claim。
-6. **Host ingress**：实现 Host-first dispatch、Caddy header boundary、Worker URL 与 passthrough PROXY protocol allowlist。
+4. **GatewayManager**：复用 P17 Host Process Runtime 与 Coordinator，增加 typed JSON、storage、readiness 和 restart recovery。
+5. **Domain authority**：追加 migration，建立 singleton domain、namespace workflow，并复用 R0 hostname claim/typed binding authority。
+6. **Host ingress**：复用 R0 Host-first resolver，实现 Caddy trusted-ingress boundary、public Worker URL 与 passthrough PROXY protocol
+   allowlist。
 7. **R2 public bucket**：R2 HTTP/access contract 冻结后启用 `r2` namespace。
 8. **Operator surface**：DNS plan/verify、gateway doctor、Nginx/Traefik snippet 和真实 onboarding qualification。
 
