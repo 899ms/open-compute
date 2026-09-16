@@ -54,6 +54,22 @@ sccache 是 0 hits / 2,641 misses，保存又因 configured budget read-only 失
 release profile 冷编译 27 分 09 秒；`single-binary` 整体准备从约 7 分 34 秒降到 98.96 秒，实际 case 仍为
 7.56 秒。该优化已验收，剩余关键路径是 release 冷编译，不再把 Gate harness 误判为主要瓶颈。
 
+本地完整构建明显更快并不矛盾：当前开发机是 12 核、32 GiB 的 Apple M2 Max，GitHub 标准 Linux
+runner 是 4 vCPU、16 GiB；冷 release 又要处理 1,552 个 sccache 可缓存请求，而本地通常保留 Cargo
+产物。当时正式 profile 还启用 fat LTO 和单 codegen unit，最后的全程序优化不能按 12:4 的核数比例完全
+并行。因此应分别比较 CI 冷缓存、CI 暖缓存和本地已有 target 的重编译，不能拿后一种判断 runner 异常。
+
+依赖审计还发现 `aws-sdk-s3` 默认启用了 SDK 自带 TLS/HTTP client 与 SigV4a，但生产路径始终注入
+平台校验过的 Smithy HTTP client，并且声明的 S3-compatible 范围使用 SigV4。关闭未使用的默认 feature、
+只保留 Tokio 后，lock graph 删除 30 个 package，包括整套 Hyper 0.14/Rustls 0.21 与旧 P-256 栈；不会
+再为没有生产调用者的第二套网络栈付冷编译和 LTO 成本。
+
+`35073942314` 首次保留的 Cargo timing 显示 952 个 dirty unit、4 个 CPU job、26 分 45 秒总编译时间；
+最终 `ocd` binary 单元独占 524.74 秒。此前关键链还有 xberg-tesseract build 315.33 秒、xberg 261.60 秒、
+service library 166.30 秒。最终单元已占全程约三分之一，fat LTO 是缓存无法消除的确定瓶颈；正式 profile
+因此改用 Cargo 文档所述“显著更快且性能收益接近 fat”的 ThinLTO。`codegen-units=1` 暂时保留，避免在
+没有应用 benchmark 时同时引入第二个运行时性能变量。
+
 ## 当前执行分工
 
 - `main` 和普通 PR：`failfast` 同时完成变更分类与 source/release-tool contract；full scope 的 core、
@@ -106,6 +122,11 @@ release profile 冷编译 27 分 09 秒；`single-binary` 整体准备从约 7 �
 SKU，单独增加 SKU 预算不能覆盖它。要允许 cache 写入，Actions 产品预算也必须非零（可同样设为 $2 并
 保留 stop-usage 总上限），或删除该产品预算。该 run 的 492 MiB sccache 因此仍未保存，不能宣称 warm-cache
 效果；日志中的通用 `another job may be creating this cache` 不是根因，前一行 budget warning 才是根因。
+- Actions 产品与 Cache Storage SKU 都设为 $2 后，`35073942314` 首次成功保存 535,767,092-byte
+  `compiler-v2-*` cache 和 824,260,351-byte `v3-release-*` dependency cache；两次上传合计约 16 秒。
+  该 run 仍是 0 fresh / 952 dirty units 的冷编译，不能当暖缓存结果。独立 stats 步骤在 package 后移除
+  wrapper、执行 Gate 后读到 0 request，与已保存的 535 MB cache 不一致；后续是否复用以 cache restore、
+  Cargo fresh units 和墙钟共同判定，不以该步骤的单个 hit 计数下结论。
 - 不启用逐 crate 的 GHA sccache backend：并行矩阵会增加缓存 API 请求，已存在上游限流与延迟报告。
   最终链接、bin/proc-macro 编译等仍有不可缓存部分；不承诺完全免编译。
 - 保存 Cargo `--timings` 报告、cache statistics、失败时的未验收原生 binary 和现有失败 Gate evidence。
@@ -117,16 +138,17 @@ SKU，单独增加 SKU 预算不能覆盖它。要允许 cache 写入，Actions 
 
 ## 研究取舍
 
-| 候选                                   | 当前决定与依据                                                                                                      |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| full CI 并行职责                       | 三个 runner 把 89 秒 Clippy 与 80 秒 production link/scan 移出 core 关键路径；不再细拆，控制总 runner 成本          |
-| package 与 qualification 并行          | 已配置；publish 保留所有依赖，提前暴露打包问题                                                                      |
-| Cargo target cache                     | 保留按 profile/平台区分的依赖缓存；不盲目上传整个几十 GiB workspace target 导致缓存驱逐                             |
-| sccache                                | 仅 native package 启用，限制容量并收集命中数据；coverage 保持现有插桩路径                                           |
-| 容器 / cargo-chef                      | 当前三个正式平台原生 runner 不增加一套容器构建；Linux 容器不能证明 macOS 原生行为，镜像不能直接复用所有架构的机器码 |
-| Fat LTO → ThinLTO / 更多 codegen units | 尚未改 release profile；先用 timings 定位实际链接成本，避免未测量的大小/性能变化                                    |
-| nightly 编译参数 / 替换 linker         | 不引入 nightly 或未验证 linker；保持正式 Rust 1.98 和原生链接契约                                                   |
-| 增大 Gate 并发                         | 保持审计后的 `--jobs 2` 和独占目标，不拿资源争抢换取新的时序失败                                                    |
+| 候选                           | 当前决定与依据                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| full CI 并行职责               | 三个 runner 把 89 秒 Clippy 与 80 秒 production link/scan 移出 core 关键路径；不再细拆，控制总 runner 成本          |
+| package 与 qualification 并行  | 已配置；publish 保留所有依赖，提前暴露打包问题                                                                      |
+| Cargo target cache             | 保留按 profile/平台区分的依赖缓存；不盲目上传整个几十 GiB workspace target 导致缓存驱逐                             |
+| sccache                        | 仅 native package 启用，限制容量并收集命中数据；coverage 保持现有插桩路径                                           |
+| S3 SDK 默认 feature            | 生产注入自有 verified HTTP client；只保留 `rt-tokio`，删除未使用的默认 TLS client 与 SigV4a 依赖                    |
+| 容器 / cargo-chef              | 当前三个正式平台原生 runner 不增加一套容器构建；Linux 容器不能证明 macOS 原生行为，镜像不能直接复用所有架构的机器码 |
+| Fat LTO → ThinLTO              | timing 证实最终 binary 单元占 524.74 秒；改 ThinLTO，保留单 codegen unit，暂不叠加未测的运行时权衡                  |
+| nightly 编译参数 / 替换 linker | 不引入 nightly 或未验证 linker；保持正式 Rust 1.98 和原生链接契约                                                   |
+| 增大 Gate 并发                 | 保持审计后的 `--jobs 2` 和独占目标，不拿资源争抢换取新的时序失败                                                    |
 
 ## 测试与复用边界
 
@@ -177,6 +199,7 @@ gh workflow run release-dry-run.yml --ref main -f ref=main -f target=all
 - [Cargo build cache](https://doc.rust-lang.org/cargo/reference/build-cache.html)：profile/target 布局与共享缓存。
 - [Cargo timings](https://doc.rust-lang.org/cargo/reference/timings.html)：编译单元、并发与关键路径报告。
 - [Cargo profiles](https://doc.rust-lang.org/cargo/reference/profiles.html)：LTO、codegen units 和 incremental 的权衡。
+- [GitHub-hosted runner reference](https://docs.github.com/actions/reference/runners/github-hosted-runners)：标准 runner 的 CPU、内存与磁盘规格。
 - [rust-cache inputs](https://github.com/Swatinem/rust-cache)：save-if、cache-on-failure 与 workspace crate 缓存行为。
 - [GitHub cache scope](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)：分支/tag 可见性与不可覆盖条目。
 - [GitHub artifacts](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts)：job 结束后的构建输出保留。
