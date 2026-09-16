@@ -73,10 +73,18 @@ jobs:
           lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
-          # Reuse main's debug/test target for the single-binary harness. The
-          # release build remains owned by the separate bounded sccache.
+          # Reuse main's debug/test target for the single-binary harness.
           rust-cache-key: default-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
           rust-cache-save: "false"
+      - name: Cache release dependency artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: false
+          save-if: "true"
+          add-job-id-key: false
+          shared-key: v3-release-${{ matrix.target }}-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
+          workspaces: ". -> .temp/release-target"
+          cache-all-crates: false
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
           version: v0.16.0
@@ -110,6 +118,7 @@ jobs:
           destination="$RUNNER_TEMP/ocd-v$version-$RELEASE_TARGET"
           report="$GITHUB_WORKSPACE/.temp/release-report-$RELEASE_TARGET.json"
           mkdir -p .temp/dry-run-assets
+          export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/.temp/release-target"
           ./scripts/package-release.sh \
             --dest "$destination" \
             --archive "$OPEN_COMPUTE_BUILD_WORKERD_ARCHIVE" | tee "$report"
@@ -120,6 +129,7 @@ jobs:
                   || report.revision !== process.env.REVISION || report.target !== process.env.TARGET)
                 throw new Error("dry-run package identity mismatch");
             '
+          unset CARGO_TARGET_DIR RUSTC_WRAPPER SCCACHE_DIR SCCACHE_CACHE_SIZE
           OPEN_COMPUTE_TEST_OCD="$destination" ./test/gate.py single-binary --jobs 1
           cp "$destination" ".temp/dry-run-assets/ocd-v$version-$RELEASE_TARGET"
           cp "$report" ".temp/dry-run-assets/release-report-$RELEASE_TARGET.json"
@@ -133,6 +143,14 @@ jobs:
         with:
           path: .temp/sccache
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+      - name: Retain compiler timings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dry-run-build-timings-${{ matrix.target }}
+          path: .temp/release-target/cargo-timings/
+          if-no-files-found: ignore
+          retention-days: 3
       - uses: actions/upload-artifact@v7
         with:
           name: dry-run-${{ matrix.target }}

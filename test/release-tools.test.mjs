@@ -24,6 +24,7 @@ import {
 import { verifyReleaseExecutable } from "../scripts/verify-release-executable.ts";
 import {
   absoluteDestination,
+  cargoTargetDirectory,
   hostTarget,
   loadPin,
   prepareWorkerd,
@@ -135,6 +136,16 @@ test("destinations reject overwrite, traversal, and symlink ancestors", async ()
   }
 });
 
+test("release Cargo targets default locally and require an absolute non-root override", () => {
+  assert.match(cargoTargetDirectory(undefined), /\/open-compute\/target\/?$/);
+  assert.equal(
+    cargoTargetDirectory("/tmp/release-target"),
+    "/tmp/release-target",
+  );
+  for (const path of ["relative", "/"])
+    assert.throws(() => cargoTargetDirectory(path));
+});
+
 test("wrong archives fail without download, execution, or publication", async () => {
   const root = await mkdtemp(join(tmpdir(), "oc-release-hash-test-"));
   try {
@@ -213,6 +224,18 @@ test("release qualification runs long checks in parallel without a second Linux 
     dryRun,
     /rust-cache-key: default-\$\{\{ hashFiles\('crates\/storage\/refinery-migrations\/\*\*\/\*\.sql'\) \}\}/,
   );
+  for (const source of [workflow, dryRun]) {
+    assert.match(
+      source,
+      /shared-key: v3-release-\$\{\{ matrix\.target \}\}-\$\{\{ hashFiles\('crates\/storage\/refinery-migrations\/\*\*\/\*\.sql'\) \}\}/,
+    );
+    assert.match(source, /workspaces: "\. -> \.temp\/release-target"/);
+    assert.match(
+      source,
+      /unset CARGO_TARGET_DIR RUSTC_WRAPPER SCCACHE_DIR SCCACHE_CACHE_SIZE[\s\S]*?\.\/test\/gate\.py single-binary --jobs 1/,
+    );
+    assert.match(source, /path: \.temp\/release-target\/cargo-timings\//);
+  }
   assert.doesNotMatch(dryRun, /Skip unselected target/);
   assert.equal(
     workflow.match(/\.\/test\/gate\.py --workspace --jobs 2/g)?.length,
