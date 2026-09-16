@@ -32,10 +32,14 @@ interface PackageReport extends ReleaseIdentity {
 }
 
 export interface SdkPackageReport {
+  /** Report schema consumed by release assembly and publication. */
+  schemaVersion: 1;
   /** Published npm package name; must be the one scoped SDK package. */
   package: string;
   /** SDK package version; must equal the workspace release version. */
   packageVersion: string;
+  /** Basename of the verified npm tarball. */
+  tarball: string;
   /** npm shasum (SHA-1, hex) of the packed tarball. */
   tarballShasum: string;
   /** npm SRI integrity of the packed tarball. */
@@ -46,6 +50,8 @@ export interface SdkPackageReport {
   openapiRevision: string;
   /** Pinned official `cloudflare` npm version. */
   cloudflareSdkVersion: string;
+  /** Exact files admitted to the npm tarball. */
+  files: string[];
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -132,10 +138,14 @@ function packageReport(value: unknown): PackageReport {
   };
 }
 
-function sdkPackageReport(value: unknown): SdkPackageReport {
+/** Validate the single SDK report contract shared by packaging and assembly. */
+export function parseSdkPackageReport(value: unknown): SdkPackageReport {
   const raw = record(value, "SDK package report");
   if (raw.schemaVersion !== 1)
     throw new Error("invalid SDK package report schema");
+  const tarball = string(raw.tarball, "SDK tarball");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.tgz$/.test(tarball))
+    throw new Error("invalid SDK tarball name");
   const shasum = string(raw.tarballShasum, "SDK tarball shasum");
   if (!/^[a-f0-9]{40}$/.test(shasum))
     throw new Error("invalid SDK tarball shasum");
@@ -148,9 +158,24 @@ function sdkPackageReport(value: unknown): SdkPackageReport {
   const openapiRevision = string(raw.openapiRevision, "SDK OpenAPI revision");
   if (!/^[0-9a-f]{40}$/.test(openapiRevision))
     throw new Error("invalid SDK OpenAPI revision");
+  if (
+    !Array.isArray(raw.files) ||
+    raw.files.length === 0 ||
+    raw.files.some(
+      (file) =>
+        typeof file !== "string" ||
+        !file.startsWith("package/") ||
+        file.includes(".."),
+    ) ||
+    new Set(raw.files).size !== raw.files.length
+  ) {
+    throw new Error("invalid SDK package file inventory");
+  }
   return {
+    schemaVersion: 1,
     package: string(raw.package, "SDK package name"),
     packageVersion: string(raw.packageVersion, "SDK package version"),
+    tarball,
     tarballShasum: shasum,
     tarballIntegrity: integrity,
     surfaceDigest,
@@ -159,6 +184,7 @@ function sdkPackageReport(value: unknown): SdkPackageReport {
       raw.cloudflareSdkVersion,
       "SDK official Cloudflare version",
     ),
+    files: raw.files,
   };
 }
 
@@ -195,7 +221,7 @@ export async function assembleRelease(
   const version = stableVersionFromTag(tag);
   if (version !== identity.version)
     throw new Error("release tag does not match the workspace version");
-  const checkedSdk = sdkPackageReport(sdk);
+  const checkedSdk = parseSdkPackageReport(sdk);
   if (checkedSdk.package !== "@open-compute/sdk")
     throw new Error("release manifest requires the @open-compute/sdk package");
   if (checkedSdk.packageVersion !== identity.version)

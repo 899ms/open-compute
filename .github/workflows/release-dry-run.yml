@@ -27,41 +27,61 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  failfast:
+    runs-on: ubuntu-24.04
+    outputs:
+      package_matrix: ${{ steps.package_matrix.outputs.value }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Select the exact package matrix
+        id: package_matrix
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          case "$TARGET" in
+            all) value='{"include":[{"target":"darwin-arm64","os":"macos-15"},{"target":"linux-arm64","os":"ubuntu-24.04-arm"},{"target":"linux-x64","os":"ubuntu-24.04"}]}' ;;
+            darwin-arm64) value='{"include":[{"target":"darwin-arm64","os":"macos-15"}]}' ;;
+            linux-arm64) value='{"include":[{"target":"linux-arm64","os":"ubuntu-24.04-arm"}]}' ;;
+            linux-x64) value='{"include":[{"target":"linux-x64","os":"ubuntu-24.04"}]}' ;;
+            *) echo "unsupported package target: $TARGET" >&2; exit 1 ;;
+          esac
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+      - name: Validate source identity and release-tool contracts
+        run: |
+          bun test/conformance/check.ts --case baseline-identity
+          node --test test/release-tools.test.mjs
+
   package:
+    needs: failfast
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: darwin-arm64
-            os: macos-15
-          - target: linux-arm64
-            os: ubuntu-24.04-arm
-          - target: linux-x64
-            os: ubuntu-24.04
+      matrix: ${{ fromJSON(needs.failfast.outputs.package_matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Skip unselected target
-        if: inputs.target != 'all' && inputs.target != matrix.target
-        run: echo "Skipping ${{ matrix.target }}; requested ${{ inputs.target }}"
       - uses: actions/checkout@v7
-        if: inputs.target == 'all' || inputs.target == matrix.target
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
           lfs: true
       - uses: ./.github/actions/setup-open-compute
-        if: inputs.target == 'all' || inputs.target == matrix.target
         with:
-          rust-cache-key: dry-run-${{ matrix.target }}-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
+          # Reuse main's debug/test target for the single-binary harness. The
+          # release build remains owned by the separate bounded sccache.
+          rust-cache-key: default-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
           rust-cache-save: "false"
-          rust-cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.11
-        if: inputs.target == 'all' || inputs.target == matrix.target
         with:
           version: v0.16.0
       - name: Restore bounded compiler cache
         id: compiler-cache
-        if: inputs.target == 'all' || inputs.target == matrix.target
         uses: actions/cache/restore@v6
         with:
           path: .temp/sccache
@@ -69,14 +89,12 @@ jobs:
           restore-keys: |
             compiler-v2-${{ runner.os }}-${{ runner.arch }}-rust1.98-sccache0.16-
       - name: Enable bounded compiler cache
-        if: inputs.target == 'all' || inputs.target == matrix.target
         shell: bash
         run: |
           echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
           echo "SCCACHE_DIR=$GITHUB_WORKSPACE/.temp/sccache" >> "$GITHUB_ENV"
           echo "SCCACHE_CACHE_SIZE=512M" >> "$GITHUB_ENV"
       - name: Package and verify native executable without publishing
-        if: inputs.target == 'all' || inputs.target == matrix.target
         shell: bash
         env:
           RELEASE_TARGET: ${{ matrix.target }}
@@ -106,17 +124,16 @@ jobs:
           cp "$destination" ".temp/dry-run-assets/ocd-v$version-$RELEASE_TARGET"
           cp "$report" ".temp/dry-run-assets/release-report-$RELEASE_TARGET.json"
       - name: Compiler cache statistics
-        if: ${{ always() && (inputs.target == 'all' || inputs.target == matrix.target) }}
+        if: always()
         run: sccache --show-stats
       - name: Save compiler cache
-        if: ${{ always() && !cancelled() && (inputs.target == 'all' || inputs.target == matrix.target) && steps.compiler-cache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && !cancelled() && steps.compiler-cache.outputs.cache-hit != 'true' }}
         continue-on-error: true
         uses: actions/cache/save@v6
         with:
           path: .temp/sccache
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v7
-        if: inputs.target == 'all' || inputs.target == matrix.target
         with:
           name: dry-run-${{ matrix.target }}
           path: .temp/dry-run-assets
@@ -125,6 +142,7 @@ jobs:
           compression-level: 0
 
   sdk:
+    needs: failfast
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

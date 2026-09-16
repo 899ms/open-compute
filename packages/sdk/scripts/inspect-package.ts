@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseSdkPackageReport } from "../../../scripts/assemble-release.ts";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "../..");
@@ -235,7 +236,7 @@ requireRun(
   { cwd: consumer, capture: true },
 );
 
-const report = {
+const report = parseSdkPackageReport({
   schemaVersion: 1,
   package: packedPackageJson.name,
   packageVersion: packedPackageJson.version,
@@ -246,7 +247,7 @@ const report = {
   openapiRevision: lock.revision,
   cloudflareSdkVersion: lock.cloudflareSdk.version,
   files,
-};
+});
 console.log(`${JSON.stringify(report, null, 2)}\n`);
 writeFileSync(
   resolve(work, "sdk-package-report.json"),

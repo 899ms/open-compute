@@ -31,6 +31,15 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Validate release environment and npm authentication
+        env:
+          NPM_ACCESS_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$NPM_ACCESS_TOKEN"
+          printf '//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}\n' > "$RUNNER_TEMP/.npmrc"
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc"
+          npm whoami --registry https://registry.npmjs.org
       - name: Require successful release evidence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           state="$(gh run view "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs --jq '
-            [.jobs[] | select(.name == "validate" or .name == "coverage" or .name == "sdk-package"
+            [.jobs[] | select(.name == "failfast" or .name == "coverage" or .name == "sdk-package"
               or (.name | startswith("integration (")) or (.name | startswith("package (")))]
             | group_by(.name) | map(max_by(.databaseId))
             | if length == 8 and all(.conclusion == "success") then "success" else "failed" end')"
@@ -111,24 +120,14 @@ jobs:
           expected_integrity="$(node -p "require('$report').tarballIntegrity")"
           printf '//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}\n' > "$RUNNER_TEMP/.npmrc"
           export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc"
-          npm whoami --registry https://registry.npmjs.org
-          publish_status=0
-          npm publish "$tarball" --access public --registry https://registry.npmjs.org || publish_status=$?
-          for attempt in $(seq 1 12); do
+          if ! npm publish "$tarball" --access public --registry https://registry.npmjs.org; then
             read_shasum="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.shasum --registry https://registry.npmjs.org 2>/dev/null || true)"
             read_integrity="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.integrity --registry https://registry.npmjs.org 2>/dev/null || true)"
-            if [ "$read_shasum" = "$expected_shasum" ] && [ "$read_integrity" = "$expected_integrity" ]; then
-              publish_status=0
-              break
+            if [ "$read_shasum" != "$expected_shasum" ] || [ "$read_integrity" != "$expected_integrity" ]; then
+              echo "npm publish failed and no identical published package was readable" >&2
+              exit 1
             fi
-            [ "$attempt" -eq 12 ] || sleep 5
-          done
-          if [ "$publish_status" -ne 0 ]; then
-            echo "npm publish failed and the expected version was not readable" >&2
-            exit "$publish_status"
           fi
-          test "$read_shasum" = "$expected_shasum"
-          test "$read_integrity" = "$expected_integrity"
       - name: Publish verified draft
         env:
           GH_TOKEN: ${{ github.token }}

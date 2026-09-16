@@ -18,8 +18,9 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
-  validate:
+  failfast:
     runs-on: ubuntu-24.04
+    environment: release
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
@@ -29,6 +30,13 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
       - name: Validate immutable stable release identity
         id: release
         shell: bash
@@ -114,6 +122,31 @@ jobs:
             echo "notes=$notes"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Validate source identity and release-tool contracts
+        run: |
+          bun test/conformance/check.ts --case baseline-identity
+          node --test test/release-tools.test.mjs
+
+      - name: Validate release environment and npm destination
+        env:
+          NPM_ACCESS_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          test -n "$NPM_ACCESS_TOKEN"
+          printf '//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}\n' > "$RUNNER_TEMP/.npmrc"
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc"
+          npm whoami --registry https://registry.npmjs.org
+          if npm view "@open-compute/sdk@$RELEASE_VERSION" version \
+            --registry https://registry.npmjs.org >"$RUNNER_TEMP/npm-version" 2>"$RUNNER_TEMP/npm-version-error"; then
+            echo "@open-compute/sdk@$RELEASE_VERSION is already published; use release-recovery for a partial release" >&2
+            exit 1
+          fi
+          if ! grep -F 'E404' "$RUNNER_TEMP/npm-version-error" >/dev/null; then
+            cat "$RUNNER_TEMP/npm-version-error" >&2
+            exit 1
+          fi
+
       - name: Require workerd submodule notes and thanks to external reporters
         env:
           GH_TOKEN: ${{ github.token }}
@@ -188,7 +221,7 @@ jobs:
           test "$count" -gt 0
 
   coverage:
-    needs: validate
+    needs: failfast
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -216,7 +249,7 @@ jobs:
             target/llvm-cov/lcov.info
 
   integration:
-    needs: validate
+    needs: failfast
     strategy:
       fail-fast: false
       matrix:
@@ -250,7 +283,7 @@ jobs:
 
   package:
     # Build in parallel with qualification; publication still requires every Gate.
-    needs: validate
+    needs: failfast
     strategy:
       fail-fast: false
       matrix:
@@ -268,9 +301,10 @@ jobs:
           lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
-          rust-cache-key: release-${{ matrix.target }}-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
+          # Reuse main's debug/test target for the single-binary harness. The
+          # release build remains owned by the separate bounded sccache.
+          rust-cache-key: default-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
           rust-cache-save: "false"
-          rust-cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
           version: v0.16.0
@@ -293,7 +327,7 @@ jobs:
       - name: Package and verify the native single executable
         shell: bash
         env:
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_TAG: ${{ needs.failfast.outputs.tag }}
           RELEASE_TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
@@ -316,7 +350,7 @@ jobs:
         if: matrix.target == 'linux-arm64'
         shell: bash
         env:
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_TAG: ${{ needs.failfast.outputs.tag }}
           OPEN_COMPUTE_ADMIN_TOKEN: dev-admin-token
           OPEN_COMPUTE_DEPLOYER_TOKEN: dev-deployer-token
           OPEN_COMPUTE_READ_ONLY_TOKEN: dev-read-only-token
@@ -345,7 +379,7 @@ jobs:
         with:
           name: release-${{ matrix.target }}
           path: |
-            ${{ runner.temp }}/ocd-${{ needs.validate.outputs.tag }}-${{ matrix.target }}
+            ${{ runner.temp }}/ocd-${{ needs.failfast.outputs.tag }}-${{ matrix.target }}
             ${{ runner.temp }}/release-report-${{ matrix.target }}.json
           if-no-files-found: error
           retention-days: 14
@@ -392,7 +426,7 @@ jobs:
   sdk-package:
     # Build the SDK tarball once from a clean checkout while qualification
     # runs; publication still requires every Gate to pass first.
-    needs: validate
+    needs: failfast
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -430,7 +464,7 @@ jobs:
           compression-level: 0
 
   assemble:
-    needs: [validate, package, sdk-package]
+    needs: [failfast, package, sdk-package]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -448,7 +482,7 @@ jobs:
           path: .temp/sdk-package
       - name: Assemble the immutable release manifest
         env:
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_TAG: ${{ needs.failfast.outputs.tag }}
         run: |
           set -euo pipefail
           bun scripts/assemble-release.ts \
@@ -472,7 +506,7 @@ jobs:
           compression-level: 0
 
   publish:
-    needs: [validate, assemble, coverage, integration, sdk-package]
+    needs: [failfast, assemble, coverage, integration, sdk-package]
     runs-on: ubuntu-24.04
     environment: release
     permissions:
@@ -496,9 +530,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-          RELEASE_NOTES: ${{ needs.validate.outputs.notes }}
+          RELEASE_TAG: ${{ needs.failfast.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.failfast.outputs.version }}
+          RELEASE_NOTES: ${{ needs.failfast.outputs.notes }}
         run: |
           set -euo pipefail
           assets="$GITHUB_WORKSPACE/.temp/release-assets"
@@ -530,11 +564,11 @@ jobs:
             cmp "$source" "$verify/$(basename "$source")"
           done
           (cd "$verify" && sha256sum --check SHA256SUMS)
-      - name: Publish the verified SDK tarball to npm and read it back
+      - name: Publish the verified SDK tarball to npm
         shell: bash
         env:
           NPM_ACCESS_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_VERSION: ${{ needs.failfast.outputs.version }}
         run: |
           set -euo pipefail
           report=".temp/sdk-package/sdk-package-report.json"
@@ -544,33 +578,19 @@ jobs:
           expected_integrity="$(node -p "require('$GITHUB_WORKSPACE/.temp/sdk-package/sdk-package-report.json').tarballIntegrity")"
           printf '//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}\n' > "$RUNNER_TEMP/.npmrc"
           export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc"
-          npm whoami --registry https://registry.npmjs.org
-          publish_status=0
-          npm publish "$tarball" --access public --registry https://registry.npmjs.org || publish_status=$?
-          # npm publication and registry reads are eventually consistent. Resolve
-          # an unknown publish result by bounded read-back; never republish bytes.
-          for attempt in $(seq 1 12); do
+          if ! npm publish "$tarball" --access public --registry https://registry.npmjs.org; then
             read_shasum="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.shasum --registry https://registry.npmjs.org 2>/dev/null || true)"
             read_integrity="$(npm view "@open-compute/sdk@$RELEASE_VERSION" dist.integrity --registry https://registry.npmjs.org 2>/dev/null || true)"
-            if [ "$read_shasum" = "$expected_shasum" ] && [ "$read_integrity" = "$expected_integrity" ]; then
-              publish_status=0
-              break
+            if [ "$read_shasum" != "$expected_shasum" ] || [ "$read_integrity" != "$expected_integrity" ]; then
+              echo "npm publish failed and no identical published package was readable" >&2
+              exit 1
             fi
-            [ "$attempt" -eq 12 ] || sleep 5
-          done
-          if [ "$publish_status" -ne 0 ]; then
-            echo "npm publish failed and the expected version was not readable" >&2
-            exit "$publish_status"
-          fi
-          if [ "$read_shasum" != "$expected_shasum" ] || [ "$read_integrity" != "$expected_integrity" ]; then
-            echo "npm registry identity mismatch: shasum=$read_shasum integrity=$read_integrity" >&2
-            exit 1
           fi
       - name: Publish the verified draft release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_TAG: ${{ needs.failfast.outputs.tag }}
         run: |
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \

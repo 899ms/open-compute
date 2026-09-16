@@ -25,16 +25,46 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 原 composite action 虽然设置 `cache-on-failure: true`，却以 `save-if: main` 排除了 tag 运行。
 旧失败任务没有上传原生二进制，结束后的托管 VM 不能再取回；不能宣称能复用没有保存的 build。
 
+确定性发布错误也曾被发现得过晚：`34939860032` 与 `35001991046` 在 macOS workspace/coverage 跑到末尾后
+才由 `p3-contract` 报 source digest drift；`35001991046` 与 `35008672807` 又在三平台 package 完成后才由
+assemble 报 SDK package report schema 不匹配。`35020012666` 到 publish 才发现 npm 认证缺失；后续 run 的
+`npm publish` 已成功，但紧接着的 registry read-back 因传播延迟返回 E404，继续轮询没有增加发布正确性。
+现在 main CI 与 tag release 都先执行秒级 `failfast`：source identity、release-tool/SDK report contract、
+release environment、npm 认证与目标版本状态任一失败，都不会启动 Rust coverage、Gate 或三平台 package。
+
+`35025974065` 是最近一次 7 分 06 秒的 full main CI，但输入只修改 CI/release workflow 与其分类器。
+其中 setup 78 秒、Clippy 89 秒、production hygiene 80 秒；后两项以及 no-default-features/MSRV 都没有
+读取这次改动的生产 Rust。main 现在把 change classification 与 source/release-tool fail-fast 合并为一个
+job，并为 release workflow、release assembler/test 与随附文档设置 `release-tooling` scope；该 scope 只跑
+TypeScript、format、文档和 release contract 检查。修改 `ci.yml`、共享 setup action、Rust/runtime 或未知路径
+仍跑 full checks，避免改了检查本身却从未执行它。
+full scope 保留全部命令，但拆成三个并行 matrix leg：core 负责 JS/Python、format、no-default-features、
+MSRV、metadata 与 boundaries，Clippy 和 production executable hygiene 各自独立。按 `35025974065` 的实测
+step 时间，关键路径预计从 7 分 06 秒降到约 4 分钟；这是未 push 前的估算。full run 的总 runner 时间预计
+从约 6.7 分钟增至约 11 分钟，因此不继续拆成更多 runner；路径分类负责让这种成本只发生在真正需要 full
+资格的改动上。
+
+`35026079295` 的单目标 dry-run 共 35 分 56 秒：正式 release profile 编译 26 分 25 秒，随后
+`single-binary` Gate 的测试 harness 准备又耗时约 7 分 34 秒，而两个测试本身只有 7.25 秒。该 run 的
+sccache 是 0 hits / 2,641 misses，保存又因 configured budget read-only 失败。dry-run 与正式 package
+现在额外只读恢复可用的 main default Rust target cache，复用 debug/test 依赖；release profile 仍由独立
+512 MiB sccache 加速，不把开发产物当发行物。单目标 dispatch 也只创建所选 runner，不再启动另外两个
+立即 skip 的矩阵 job。7 分 34 秒是可优化上限，不是尚未实测的承诺；下一次 live dry-run 以实际 cache hit
+和 Gate prepare 时间验收。
+
 ## 当前执行分工
 
-- `main` 和普通 PR：同一 runner 完成 build/typecheck、快速工具测试、format、clippy、
-  no-default-features、Rust 1.98 compile check、production hygiene、metadata 和边界检查。release tag
-  校验精确 source commit 已通过该静态资格，不再重跑。
+- `main` 和普通 PR：`failfast` 同时完成变更分类与 source/release-tool contract；full scope 的 core、
+  Clippy、production hygiene 三个职责并行执行，完整覆盖 build/typecheck、快速工具测试、format、
+  no-default-features、Rust 1.98 compile check、metadata 和边界检查；这些任务统一依赖
+  秒级 `failfast`。release-only tooling scope 不启动 Rust。release tag 校验精确 source commit 已通过该静态资格，不再重跑。
 - CI 先按变更路径分类：纯 `docs/**`、README 和 release notes 只执行文档检查；纯 SDK、dashboard、
-  website 或 toolchain 变更只执行对应 JavaScript 检查；Rust、runtime、workerd、测试、脚本、workflow
-  或混合变更仍执行完整静态资格。汇总 job `ci` 保留不变，避免分支保护因跳过具体 job 失效。
-- tag qualification：coverage、一个 macOS 完整最终 workspace Gate 和 Linux `p0-2` 受控 egress
-  在身份校验后并行启动；Linux egress 不再重复 `--workspace`。
+  website 或 toolchain 变更只执行对应 JavaScript 检查；release workflow/assembler/test 使用独立
+  release-tooling 检查；Rust、runtime、workerd、`ci.yml`、共享 setup、未知路径或混合变更仍执行完整静态资格。
+  汇总 job `ci` 保留不变，避免分支保护因跳过具体 job 失效。
+- tag qualification：`failfast` 先验证 release environment、source/release identity、notes、SDK report
+  contract、npm credential 和目标版本；随后 coverage、一个 macOS 完整最终 workspace Gate 和 Linux
+  `p0-2` 受控 egress 并行启动；Linux egress 不再重复 `--workspace`。
 - 三个正式平台 package：身份验证后即并行构建，和全部 qualification 重叠；publish 等待所有路径成功。macOS Intel 不再进入 package 矩阵。
 - package 与普通 production hygiene 使用同一 executable verifier，生成 mode 0600 临时配置再查询
   capabilities，同时核对 release identity、版本、licenses 和嵌入 docs；不初始化平台数据目录。
@@ -59,6 +89,12 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
   read-only；Actions API 当时仍列出 23 个条目、11,866,896,013 bytes，且 storage-limit API 为 20 GB，
   所以这次没有产生可复用的 v2 compiler key。保存步骤是非阻断的，不能把这次成功误报为 warm-cache
   效果；待配额实际可写后再用下一次 package run 测量命中率。
+- 2026-09-16 再查 API：repository storage limit 已显示 20 GB，但 23 个 cache 共 11,866,896,013 bytes，
+  仍没有任何 `compiler-v2-*` key；因此不能把配额页面变化当作 cache 已可写的证据。GitHub 的仓库 cache
+  limit 与 `Actions Cache Storage`（`actions_cache_storage`）预算是两个独立开关：预算为零或已触顶时，超过
+  免费 10 GB 后 cache 会保持 read-only。20 GB 上限全部用满时只有额外 10 GB 计费，按当前 $0.07/GB-month
+  最多约 $0.70/月；账户预算应至少设为 $1/月，或先删到 10 GB 以下。repo workflow 的 `cache-mode` 不能绕过
+  这个 billing 限制。
 - 不启用逐 crate 的 GHA sccache backend：并行矩阵会增加缓存 API 请求，已存在上游限流与延迟报告。
   最终链接、bin/proc-macro 编译等仍有不可缓存部分；不承诺完全免编译。
 - 保存 Cargo `--timings` 报告、cache statistics、失败时的未验收原生 binary 和现有失败 Gate evidence。
@@ -70,7 +106,7 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 
 | 候选                                   | 当前决定与依据                                                                                                      |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 同一 runner / 合并重复步骤             | 普通 CI 使用一台 runner、一轮 build，避免重复安装与 fresh-checkout 编译                                             |
+| full CI 并行职责                       | 三个 runner 把 89 秒 Clippy 与 80 秒 production link/scan 移出 core 关键路径；不再细拆，控制总 runner 成本          |
 | package 与 qualification 并行          | 已配置；publish 保留所有依赖，提前暴露打包问题                                                                      |
 | Cargo target cache                     | 保留按 profile/平台区分的依赖缓存；不盲目上传整个几十 GiB workspace target 导致缓存驱逐                             |
 | sccache                                | 仅 native package 启用，限制容量并收集命中数据；coverage 保持现有插桩路径                                           |
@@ -81,9 +117,10 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 
 ## 测试与复用边界
 
-- `main` 的静态资格只跑 build/typecheck、JS/Python tooling、fmt、Clippy、no-default-features、
-  MSRV target check、production hygiene、metadata 和边界检查。tag 的 `validate` 只读取对应 main
-  source commit 的成功 run；release 不重复 Clippy 或 MSRV。
+- `main` 的静态资格先跑 source/release-tool `failfast`，再按变更范围执行 build/typecheck、JS/Python
+  tooling、fmt、Clippy、no-default-features、MSRV target check、production hygiene、metadata 和边界检查。
+  tag 的 `failfast` 读取对应 main source commit 的成功 run，并额外验证 release-only environment/notes/npm
+  contracts；release 不重复 Clippy 或 MSRV。
 - release 仍必须保留不同职责的 coverage、macOS 未插桩 workspace Gate、Linux `p0-2` 受控 egress、
   三平台单文件 package、SDK tarball 和最终 bytes/checksum 回读。coverage 与 Gate 使用不同编译
   插桩和宿主，不能拿一个替代另一个；package 的 native binary 也不能由 main 的 `cargo check` 代替。

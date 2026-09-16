@@ -12,6 +12,17 @@ FRONTEND_ROOTS = {
     "toolchain": "packages/toolchain/",
 }
 
+RELEASE_TOOLING = {
+    ".github/workflows/release.yml",
+    ".github/workflows/release-recovery.yml",
+    ".github/workflows/release-dry-run.yml",
+    "scripts/assemble-release.ts",
+    "test/release-tools.test.mjs",
+}
+
+# The digest baseline follows the owning change and must not widen its CI scope.
+NEUTRAL_PATHS = {"test/conformance/baseline.json"}
+
 
 def changed_files(base: str, head: str) -> list[str]:
     if not base or set(base) == {"0"}:
@@ -25,6 +36,7 @@ def changed_files(base: str, head: str) -> list[str]:
 
 
 def classify(paths: list[str]) -> tuple[str, str]:
+    paths = [path for path in paths if path not in NEUTRAL_PATHS]
     if not paths:
         return "full", ""
     if all(
@@ -32,6 +44,14 @@ def classify(paths: list[str]) -> tuple[str, str]:
         for path in paths
     ):
         return "docs", ""
+
+    if all(
+        path in RELEASE_TOOLING
+        or path.startswith("docs/")
+        or path in {"README.md", "README.zh.md"}
+        for path in paths
+    ):
+        return "release-tooling", ""
 
     components: set[str] = set()
     for path in paths:
