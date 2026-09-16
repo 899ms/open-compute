@@ -39,18 +39,20 @@ job，并为 release workflow、release assembler/test 与随附文档设置 `re
 TypeScript、format、文档和 release contract 检查。修改 `ci.yml`、共享 setup action、Rust/runtime 或未知路径
 仍跑 full checks，避免改了检查本身却从未执行它。
 full scope 保留全部命令，但拆成三个并行 matrix leg：core 负责 JS/Python、format、no-default-features、
-MSRV、metadata 与 boundaries，Clippy 和 production executable hygiene 各自独立。按 `35025974065` 的实测
-step 时间，关键路径预计从 7 分 06 秒降到约 4 分钟；这是未 push 前的估算。full run 的总 runner 时间预计
-从约 6.7 分钟增至约 11 分钟，因此不继续拆成更多 runner；路径分类负责让这种成本只发生在真正需要 full
-资格的改动上。
+MSRV、metadata 与 boundaries，Clippy 和 production executable hygiene 各自独立。首次成功实测
+`35065714191` 总墙钟为 4 分 14 秒，较 `35025974065` 的 7 分 06 秒缩短 40%；failfast 13 秒，production、
+Clippy、core 分别为 3 分 09 秒、3 分 27 秒、3 分 53 秒。此前两个 source identity 错误也都在 11 秒内停止，
+没有启动 Rust legs。full run 的三个并行 leg 会增加总 runner 时间，因此不继续拆成更多 runner；路径分类
+负责让这种成本只发生在真正需要 full 资格的改动上。
 
 `35026079295` 的单目标 dry-run 共 35 分 56 秒：正式 release profile 编译 26 分 25 秒，随后
 `single-binary` Gate 的测试 harness 准备又耗时约 7 分 34 秒，而两个测试本身只有 7.25 秒。该 run 的
 sccache 是 0 hits / 2,641 misses，保存又因 configured budget read-only 失败。dry-run 与正式 package
 现在额外只读恢复可用的 main default Rust target cache，复用 debug/test 依赖；release profile 仍由独立
 512 MiB sccache 加速，不把开发产物当发行物。单目标 dispatch 也只创建所选 runner，不再启动另外两个
-立即 skip 的矩阵 job。7 分 34 秒是可优化上限，不是尚未实测的承诺；下一次 live dry-run 以实际 cache hit
-和 Gate prepare 时间验收。
+立即 skip 的矩阵 job。后续实测 `35066106199` 总墙钟 31 分 14 秒，其中 SDK 50 秒、package 30 分 50 秒、
+release profile 冷编译 27 分 09 秒；`single-binary` 整体准备从约 7 分 34 秒降到 98.96 秒，实际 case 仍为
+7.56 秒。该优化已验收，剩余关键路径是 release 冷编译，不再把 Gate harness 误判为主要瓶颈。
 
 ## 当前执行分工
 
@@ -95,6 +97,11 @@ sccache 是 0 hits / 2,641 misses，保存又因 configured budget read-only 失
   免费 10 GB 后 cache 会保持 read-only。20 GB 上限全部用满时只有额外 10 GB 计费，按当前 $0.07/GB-month
   最多约 $0.70/月；账户预算应至少设为 $1/月，或先删到 10 GB 以下。repo workflow 的 `cache-mode` 不能绕过
   这个 billing 限制。
+- `35066106199` 在新增账户级 `Actions Cache Storage` $2/月预算后仍收到 configured budget read-only。
+  预算页面同时存在更宽的账户级 `Actions` 产品预算 `$0`且`Stop usage: Yes`；产品预算会先阻断其下的 cache
+SKU，单独增加 SKU 预算不能覆盖它。要允许 cache 写入，Actions 产品预算也必须非零（可同样设为 $2 并
+保留 stop-usage 总上限），或删除该产品预算。该 run 的 492 MiB sccache 因此仍未保存，不能宣称 warm-cache
+效果；日志中的通用 `another job may be creating this cache` 不是根因，前一行 budget warning 才是根因。
 - 不启用逐 crate 的 GHA sccache backend：并行矩阵会增加缓存 API 请求，已存在上游限流与延迟报告。
   最终链接、bin/proc-macro 编译等仍有不可缓存部分；不承诺完全免编译。
 - 保存 Cargo `--timings` 报告、cache statistics、失败时的未验收原生 binary 和现有失败 Gate evidence。
