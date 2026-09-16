@@ -54,6 +54,34 @@ pub(super) struct ComposedPlatform {
     pub(super) state: HttpState,
 }
 
+fn recover_force_delete_intents(
+    storage: &PlatformStorage,
+    response_cache_manager: &CacheManager,
+) -> Result<(), PlatformError> {
+    let repository = WorkerRepository::new(storage.db());
+    for intent in repository.force_delete_intents()? {
+        response_cache_manager.purge_worker(
+            intent.account_id,
+            intent.worker_id,
+            open_compute_core::wall_time_ms(),
+        )?;
+        let versions = repository
+            .list_versions(intent.account_id, intent.worker_id)?
+            .into_iter()
+            .filter(|version| version.deleted_at_ms.is_none())
+            .map(|version| version.id)
+            .collect::<Vec<_>>();
+        repository.finish_force_delete(
+            intent.account_id,
+            intent.worker_id,
+            &versions,
+            intent.request_id,
+            open_compute_core::wall_time_ms(),
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatform, PlatformError> {
     open_compute_core::OperatorProxyPolicy::from_process_env()?;
     let PreparedPlatform {
@@ -212,6 +240,7 @@ pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatfo
         .with_r2_source_backing(r2_objects.clone(), loaded.config.r2.clone())
         .with_metrics(metrics.clone()),
     );
+    recover_force_delete_intents(&storage, &response_cache_manager)?;
     let worker_api = WorkerApiState::new(
         storage.clone(),
         store.clone(),

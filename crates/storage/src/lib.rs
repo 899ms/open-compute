@@ -208,8 +208,8 @@ pub use workers::{
     NewVersionProducts, ObservabilityAudit, RetentionCandidate, RouteKind, RouteRecord,
     RouteSnapshot, SYSTEM_DASHBOARD_WORKER_NAME, StoredVersionSecret, SystemOwnedVersionKind,
     SystemOwnedVersionRecord, UpdateWorkerObservabilitySettings, VersionContentKind, VersionRecord,
-    VersionReferrer, VersionSnapshot, VersionState, WorkerObservabilitySettings, WorkerOwnership,
-    WorkerRecord, WorkerRepository,
+    VersionReferrer, VersionSnapshot, VersionState, WorkerDeleteIntent, WorkerObservabilityPatch,
+    WorkerObservabilitySettings, WorkerOwnership, WorkerRecord, WorkerRepository,
 };
 pub use workflows::{
     WorkflowAppliedOperation, WorkflowBindingDescriptor, WorkflowBindingRecord, WorkflowDefinition,

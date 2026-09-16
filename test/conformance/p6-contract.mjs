@@ -249,7 +249,7 @@ export function buildCapability(
       operationId: EXTENSION_OPERATIONS[id][0],
       status: "supported",
       source: "open-compute-extension",
-      requestMediaType: RESTORE_OPERATIONS.has(id) ? "json" : "none",
+      requestMediaType: REQUEST_SCHEMAS.has(id) ? "json" : "none",
     });
   }
   const declaredDeviations = new Set(source.managementApi.deviations);
@@ -395,6 +395,7 @@ export function buildCapability(
       })),
     },
     workersObservability: source.workersObservability,
+    workerLoader: source.workerLoader,
     wrangler: {
       version: "4.127.1",
       configSchemaSha256,
@@ -528,11 +529,35 @@ const EXTENSION_OPERATIONS = {
     ["200", "201"],
     "backups.d1.restore",
   ],
+  "GET /accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations":
+    [
+      "open-compute-get-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+      "D1MigrationsResponse",
+      ["200"],
+      "d1.migrations.list",
+    ],
+  "PUT /accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations":
+    [
+      "open-compute-put-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+      "D1MigrationsResponse",
+      ["200"],
+      "d1.migrations.apply",
+    ],
 };
 
-const RESTORE_OPERATIONS = new Set([
-  "POST /accounts/{account_id}/open-compute/kv/backups/{backup_id}/restore",
-  "POST /accounts/{account_id}/open-compute/d1/backups/{backup_id}/restore",
+const REQUEST_SCHEMAS = new Map([
+  [
+    "POST /accounts/{account_id}/open-compute/kv/backups/{backup_id}/restore",
+    "RestoreRequest",
+  ],
+  [
+    "POST /accounts/{account_id}/open-compute/d1/backups/{backup_id}/restore",
+    "RestoreRequest",
+  ],
+  [
+    "PUT /accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations",
+    "D1MigrationRequest",
+  ],
 ]);
 
 function successEnvelope(result) {
@@ -698,6 +723,23 @@ function extensionSchemas() {
         pattern: "^[^\\u0000-\\u001F\\u007F]+$",
       },
     }),
+    D1Migration: objectSchema(["id", "name", "sha256", "applied_at_ms"], {
+      id: { type: "integer", minimum: 1 },
+      name: { type: "string", minLength: 1, maxLength: 255 },
+      sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+      applied_at_ms: { type: "integer", minimum: 0 },
+    }),
+    D1MigrationInput: objectSchema(["id", "name", "sha256", "sql"], {
+      id: { type: "integer", minimum: 1 },
+      name: { type: "string", minLength: 1, maxLength: 255 },
+      sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+      sql: { type: "string", minLength: 1 },
+    }),
+    D1MigrationRequest: {
+      type: "array",
+      minItems: 1,
+      items: { $ref: "#/components/schemas/D1MigrationInput" },
+    },
     RestoredResource: objectSchema(["id", "name", "kind", "created_on"], {
       id: string,
       name: { type: "string", minLength: 1, maxLength: 128 },
@@ -761,6 +803,10 @@ function extensionSchemas() {
       items: { $ref: "#/components/schemas/Backup" },
     },
     RestoredResourceResponse: { $ref: "#/components/schemas/RestoredResource" },
+    D1MigrationsResponse: {
+      type: "array",
+      items: { $ref: "#/components/schemas/D1Migration" },
+    },
     UpgradeCheckResponse: { $ref: "#/components/schemas/UpgradeCheck" },
   }))
     schemas[name] = successEnvelope(result);
@@ -797,20 +843,21 @@ export function buildExtension(source) {
       schema: { $ref: "#/components/schemas/PathSegment" },
     }));
     paths[path] ??= {};
-    const restore = RESTORE_OPERATIONS.has(id);
+    const requestSchema = REQUEST_SCHEMAS.get(id);
     paths[path][method] = {
       operationId,
       "x-open-compute-capability-status": "supported",
       "x-open-compute-sdk-method": sdkMethod,
       parameters,
-      "x-open-compute-request-body": restore ? "json" : "none",
-      ...(restore
+      "x-open-compute-request-body":
+        requestSchema === undefined ? "none" : "json",
+      ...(requestSchema !== undefined
         ? {
             requestBody: {
               required: true,
               content: {
                 "application/json": {
-                  schema: { $ref: "#/components/schemas/RestoreRequest" },
+                  schema: { $ref: `#/components/schemas/${requestSchema}` },
                 },
               },
             },
@@ -938,11 +985,15 @@ export function validateCommitted({ openapiPath, wranglerRoot, sdkRoot } = {}) {
   ) {
     throw new Error("vendor extension schema route inventory drift");
   }
-  const extensionOperations = Object.values(extension.paths).flatMap((path) =>
-    Object.values(path),
+  const extensionOperations = Object.entries(extension.paths).flatMap(
+    ([path, methods]) =>
+      Object.entries(methods).map(([method, operation]) => ({
+        key: `${method.toUpperCase()} ${path}`,
+        operation,
+      })),
   );
   const operationIds = extensionOperations.map(
-    (operation) => operation.operationId,
+    ({ operation }) => operation.operationId,
   );
   if (
     extensionOperations.length !==
@@ -953,15 +1004,15 @@ export function validateCommitted({ openapiPath, wranglerRoot, sdkRoot } = {}) {
       "vendor extension operation IDs are incomplete or duplicated",
     );
   }
-  for (const operation of extensionOperations) {
-    const restore = operation.operationId.endsWith("-restore");
+  for (const { key, operation } of extensionOperations) {
+    const requestSchema = REQUEST_SCHEMAS.get(key);
     if (
       operation["x-open-compute-capability-status"] !== "supported" ||
       operation["x-open-compute-request-body"] !==
-        (restore ? "json" : "none") ||
-      (restore
+        (requestSchema === undefined ? "none" : "json") ||
+      (requestSchema !== undefined
         ? operation.requestBody?.content?.["application/json"]?.schema?.$ref !==
-          "#/components/schemas/RestoreRequest"
+          `#/components/schemas/${requestSchema}`
         : operation.requestBody !== undefined)
     ) {
       throw new Error(

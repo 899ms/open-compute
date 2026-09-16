@@ -39,6 +39,7 @@ pub(super) async fn create_from_upload(
     upload: ParsedWorkerUpload,
     strict_inheritance: bool,
     deployment_source: Option<DeploymentSource>,
+    observability: Option<open_compute_storage::WorkerObservabilityPatch>,
     request_id: RequestId,
     now_ms: i64,
 ) -> Result<CreateVersionOutcome, PlatformError> {
@@ -58,6 +59,7 @@ pub(super) async fn create_from_upload(
         upload,
         strict_inheritance,
         deployment_source,
+        observability,
         request_id,
         now_ms,
         migration.as_ref(),
@@ -86,6 +88,7 @@ async fn create_from_prepared_upload(
     upload: ParsedWorkerUpload,
     strict_inheritance: bool,
     deployment_source: Option<DeploymentSource>,
+    observability: Option<open_compute_storage::WorkerObservabilityPatch>,
     request_id: RequestId,
     now_ms: i64,
     migration: Option<&super::do_lifecycle::PreparedDoMigration>,
@@ -167,6 +170,7 @@ async fn create_from_prepared_upload(
             queue_consumers: Vec::new(),
             crons: input.crons,
             deployment_source,
+            observability,
             request_id,
             now_ms,
         })

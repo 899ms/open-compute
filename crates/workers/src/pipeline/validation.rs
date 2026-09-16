@@ -157,6 +157,10 @@ pub(super) fn request_fingerprint(
     )?;
     frame(
         &mut canonical,
+        &serde_json::to_vec(&request.observability).map_err(|_| invariant())?,
+    )?;
+    frame(
+        &mut canonical,
         durable_object_migration
             .map(DurableObjectMigrationPlan::fingerprint)
             .transpose()?

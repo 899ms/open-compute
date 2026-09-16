@@ -592,6 +592,7 @@ impl<'a> VersionController<'a> {
                         version_id: version.id,
                         source,
                         annotations: BTreeMap::new(),
+                        observability: request.observability.clone(),
                         request_id: request.request_id,
                         now_ms: request.now_ms,
                     })
@@ -614,6 +615,7 @@ impl<'a> VersionController<'a> {
                     Some(worker.route_generation),
                     source,
                     &BTreeMap::new(),
+                    request.observability.as_ref(),
                     request.request_id,
                     request.now_ms,
                     admitted_generation,

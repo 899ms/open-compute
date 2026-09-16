@@ -228,6 +228,7 @@ mod tests {
             queue_consumers: Vec::new(),
             crons: Vec::new(),
             deployment_source: Some(DeploymentSource::ScriptUpload),
+            observability: None,
             request_id: RequestId::generate(),
             now_ms: 10,
         })
@@ -298,6 +299,7 @@ mod tests {
             queue_consumers: Vec::new(),
             crons: Vec::new(),
             deployment_source: Some(DeploymentSource::ScriptUpload),
+            observability: None,
             request_id: RequestId::generate(),
             now_ms: 20,
         })

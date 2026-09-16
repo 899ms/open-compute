@@ -460,9 +460,12 @@ async function r2Contract() {
     (await client.r2.buckets.list({ account_id: accountID })).buckets.length >=
       1,
   );
-  // Bucket object listing is unsupported by the manifest and must be absent
-  // from the capability-scoped surface entirely.
-  assert.equal(client.r2.buckets.objects.list, undefined);
+  const objects = await client.r2.buckets.objects.list(bucket.name, {
+    account_id: accountID,
+    per_page: 1,
+  });
+  assert.equal(objects.result.length, 1);
+  assert.equal(objects.result[0].key, "raw.bin");
   await expectAPIError(
     () =>
       client.r2.buckets.get("sdk-r2-missing", {

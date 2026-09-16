@@ -81,6 +81,7 @@ async fn cron_remove_all_restart_and_reenable_preserves_generation_and_retry_ide
             queue_consumers: Vec::new(),
             crons: vec!["*/5 * * * *".into()],
             deployment_source: Some(open_compute_storage::DeploymentSource::VersionsApi),
+            observability: None,
             request_id: open_compute_core::RequestId::generate(),
             now_ms: 60_000,
         };
@@ -132,6 +133,7 @@ async fn cron_remove_all_restart_and_reenable_preserves_generation_and_retry_ide
         version_id: version,
         source: open_compute_storage::DeploymentSource::Rollback,
         annotations: Default::default(),
+        observability: None,
         request_id: open_compute_core::RequestId::generate(),
         now_ms: 60_002,
     };

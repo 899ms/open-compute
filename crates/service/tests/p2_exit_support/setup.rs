@@ -191,6 +191,7 @@ pub(super) async fn prepare() -> Fixture {
                 vec![]
             },
             crons: Vec::new(),
+            observability: None,
             deployment_source: (index != 2)
                 .then_some(open_compute_storage::DeploymentSource::VersionsApi),
             request_id: RequestId::generate(),

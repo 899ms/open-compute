@@ -98,8 +98,10 @@
       "method": "DELETE",
       "path": "/accounts/{account_id}/workers/scripts/{script_name}",
       "operationId": "worker-script-delete-worker",
-      "status": "supported",
+      "status": "supported_with_deviation",
       "source": "cloudflare-openapi",
+      "constraint": "force=true bypasses retained Version and inbound Service references and may rotate the single workerd generation, but external D1, KV, R2, Queue, Workflow, and Durable Object resources remain independent authorities rather than being cascade-deleted with the Script",
+      "deviations": ["OC-DEPLOY-001"],
       "operationSha256": "8b1a92fddc4539c0640d07653ca6d2d295ce2c66bdd80c1ba7b5753bddeb83ca"
     },
     {
@@ -697,6 +699,15 @@
       "status": "supported",
       "source": "cloudflare-openapi",
       "operationSha256": "a7e45ae55a7020c194be8907419930c92e8f3c838af39b19db3eb7dedf7624db"
+    },
+    {
+      "id": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
+      "method": "GET",
+      "path": "/accounts/{account_id}/r2/buckets/{bucket_name}/objects",
+      "operationId": "r2-list-objects",
+      "status": "supported",
+      "source": "cloudflare-openapi",
+      "operationSha256": "66bd9d8366e8a419a534dd084f03c49a6cb56924b1da88e2b53209563979fbb4"
     },
     {
       "id": "GET /accounts/{account_id}/vectorize/v2/indexes",
@@ -1302,15 +1313,6 @@
       "status": "supported",
       "source": "cloudflare-openapi",
       "operationSha256": "26afa53cf88d87e9ced524a2a018c150e1424b9b116472c8724a63fb22fb95a1"
-    },
-    {
-      "id": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
-      "method": "GET",
-      "path": "/accounts/{account_id}/r2/buckets/{bucket_name}/objects",
-      "operationId": "r2-list-objects",
-      "status": "unsupported",
-      "source": "cloudflare-openapi",
-      "operationSha256": "66bd9d8366e8a419a534dd084f03c49a6cb56924b1da88e2b53209563979fbb4"
     }
   ],
   "paths": {
@@ -10535,6 +10537,139 @@
         "x-fern-availability": "generally-available",
         "x-fern-sdk-group-name": "r2.buckets.objects",
         "x-fern-sdk-method-name": "delete",
+        "x-forge-hidden": true
+      }
+    },
+    "/accounts/{account_id}/r2/buckets/{bucket_name}/objects": {
+      "get": {
+        "operationId": "r2-list-objects",
+        "summary": "List Objects",
+        "description": "Lists objects in an R2 bucket. Returns object metadata including key, size, etag, last modified date, HTTP metadata, and custom metadata.\n\nFor most workloads, we recommend using R2's [S3-compatible API](https://developers.cloudflare.com/r2/api/s3/api/) or a [Worker with an R2 binding](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/) instead.\n",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/r2_account_identifier"
+            }
+          },
+          {
+            "name": "bucket_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/r2_bucket_name"
+            }
+          },
+          {
+            "name": "cf-r2-jurisdiction",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/r2_jurisdiction"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "description": "Maximum number of objects to return per page.",
+              "type": "integer",
+              "default": 20,
+              "maximum": 1000,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "prefix",
+            "in": "query",
+            "schema": {
+              "description": "Restricts results to only those objects whose keys begin with the specified prefix.",
+              "type": "string"
+            }
+          },
+          {
+            "name": "delimiter",
+            "in": "query",
+            "schema": {
+              "description": "A single character used to group keys. All keys that contain the delimiter between the prefix and the first occurrence of the delimiter after the prefix are grouped under a single result element.",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "description": "Pagination cursor received from a previous List Objects call. Used to retrieve the next page of results.",
+              "type": "string"
+            }
+          },
+          {
+            "name": "start_after",
+            "in": "query",
+            "schema": {
+              "description": "Returns objects with keys that come after the specified key in lexicographic order.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List Objects response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "$ref": "#/components/schemas/r2_errors"
+                    },
+                    "messages": {
+                      "$ref": "#/components/schemas/r2_messages"
+                    },
+                    "result": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/r2_r2_object"
+                      }
+                    },
+                    "result_info": {
+                      "$ref": "#/components/schemas/r2_r2_list_objects_result_info"
+                    },
+                    "success": {
+                      "description": "Whether the API call was successful.",
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["success", "errors", "messages", "result"]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "List Objects response failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/r2_v4_response_failure"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_token": []
+          }
+        ],
+        "tags": ["R2 Object"],
+        "x-cfPermissionsRequired": {
+          "enum": ["com.cloudflare.edge.r2.bucket.read"]
+        },
+        "x-fern-availability": "generally-available",
+        "x-fern-sdk-group-name": "r2.buckets.objects",
+        "x-fern-sdk-method-name": "list",
         "x-forge-hidden": true
       }
     },
@@ -30291,139 +30426,6 @@
         "x-fern-sdk-group-name": "workflows.instances.events",
         "x-fern-sdk-method-name": "send"
       }
-    },
-    "/accounts/{account_id}/r2/buckets/{bucket_name}/objects": {
-      "get": {
-        "operationId": "r2-list-objects",
-        "summary": "List Objects",
-        "description": "Lists objects in an R2 bucket. Returns object metadata including key, size, etag, last modified date, HTTP metadata, and custom metadata.\n\nFor most workloads, we recommend using R2's [S3-compatible API](https://developers.cloudflare.com/r2/api/s3/api/) or a [Worker with an R2 binding](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/) instead.\n",
-        "parameters": [
-          {
-            "name": "account_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/r2_account_identifier"
-            }
-          },
-          {
-            "name": "bucket_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/r2_bucket_name"
-            }
-          },
-          {
-            "name": "cf-r2-jurisdiction",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/r2_jurisdiction"
-            }
-          },
-          {
-            "name": "per_page",
-            "in": "query",
-            "schema": {
-              "description": "Maximum number of objects to return per page.",
-              "type": "integer",
-              "default": 20,
-              "maximum": 1000,
-              "minimum": 1
-            }
-          },
-          {
-            "name": "prefix",
-            "in": "query",
-            "schema": {
-              "description": "Restricts results to only those objects whose keys begin with the specified prefix.",
-              "type": "string"
-            }
-          },
-          {
-            "name": "delimiter",
-            "in": "query",
-            "schema": {
-              "description": "A single character used to group keys. All keys that contain the delimiter between the prefix and the first occurrence of the delimiter after the prefix are grouped under a single result element.",
-              "type": "string"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "schema": {
-              "description": "Pagination cursor received from a previous List Objects call. Used to retrieve the next page of results.",
-              "type": "string"
-            }
-          },
-          {
-            "name": "start_after",
-            "in": "query",
-            "schema": {
-              "description": "Returns objects with keys that come after the specified key in lexicographic order.",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List Objects response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "errors": {
-                      "$ref": "#/components/schemas/r2_errors"
-                    },
-                    "messages": {
-                      "$ref": "#/components/schemas/r2_messages"
-                    },
-                    "result": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/r2_r2_object"
-                      }
-                    },
-                    "result_info": {
-                      "$ref": "#/components/schemas/r2_r2_list_objects_result_info"
-                    },
-                    "success": {
-                      "description": "Whether the API call was successful.",
-                      "type": "boolean",
-                      "enum": [true]
-                    }
-                  },
-                  "required": ["success", "errors", "messages", "result"]
-                }
-              }
-            }
-          },
-          "4XX": {
-            "description": "List Objects response failure.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/r2_v4_response_failure"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "api_token": []
-          }
-        ],
-        "tags": ["R2 Object"],
-        "x-cfPermissionsRequired": {
-          "enum": ["com.cloudflare.edge.r2.bucket.read"]
-        },
-        "x-fern-availability": "generally-available",
-        "x-fern-sdk-group-name": "r2.buckets.objects",
-        "x-fern-sdk-method-name": "list",
-        "x-forge-hidden": true
-      }
     }
   },
   "components": {
@@ -33078,6 +33080,104 @@
           }
         }
       },
+      "r2_errors": {
+        "type": "array",
+        "items": {
+          "properties": {
+            "code": {
+              "type": "integer",
+              "minimum": 1000
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": ["code", "message"],
+          "type": "object",
+          "uniqueItems": true
+        }
+      },
+      "r2_messages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "r2_r2_object": {
+        "description": "Metadata for an R2 object.",
+        "type": "object",
+        "properties": {
+          "custom_metadata": {
+            "description": "Custom metadata key-value pairs associated with the object.",
+            "type": "object",
+            "example": {},
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "etag": {
+            "description": "The entity tag for the object. In JSON list/get responses this is the raw\nhex digest (without surrounding quotes). The HTTP `ETag` response header on\nGet Object follows RFC 7232 and IS wrapped in surrounding double-quotes.\n",
+            "type": "string",
+            "example": "d41d8cd98f00b204e9800998ecf8427e"
+          },
+          "http_metadata": {
+            "$ref": "#/components/schemas/r2_r2_object_http_metadata"
+          },
+          "key": {
+            "description": "The object key (name).",
+            "type": "string",
+            "example": "path/to/my-object.txt"
+          },
+          "last_modified": {
+            "description": "The date and time the object was last modified.",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "size": {
+            "description": "The size of the object in bytes.",
+            "type": "integer",
+            "example": 1048576
+          },
+          "ssec": {
+            "description": "Whether the object is encrypted with a customer-supplied encryption key.",
+            "type": "boolean",
+            "example": false
+          },
+          "storage_class": {
+            "$ref": "#/components/schemas/r2_storage_class"
+          }
+        }
+      },
+      "r2_r2_list_objects_result_info": {
+        "description": "Pagination information for list objects responses.",
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "description": "Pagination cursor to use in the next List Objects call to retrieve the next page of results.",
+            "type": "string",
+            "example": "eyJrZXkiOiJwYXRoL3RvL215LW9iamVjdC50eHQifQ=="
+          },
+          "delimited": {
+            "description": "Common prefixes found when a delimiter is specified. Each entry represents a group\nof keys sharing a common prefix up to the delimiter. Equivalent to S3's `CommonPrefixes`\nin `ListObjectsV2`; the field name differs because of the existing R2 API wire format.\n",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": ["path/to/", "another/path/"]
+          },
+          "is_truncated": {
+            "description": "Whether the result was truncated. If true, use the cursor to retrieve the next page.",
+            "type": "boolean",
+            "example": true
+          },
+          "per_page": {
+            "description": "The maximum number of objects returned per page.",
+            "type": "integer",
+            "example": 20
+          }
+        }
+      },
       "vectorize_identifier": {
         "description": "Identifier",
         "type": "string",
@@ -33735,104 +33835,6 @@
             "$ref": "#/components/schemas/mq_http-consumer-request"
           }
         ]
-      },
-      "r2_errors": {
-        "type": "array",
-        "items": {
-          "properties": {
-            "code": {
-              "type": "integer",
-              "minimum": 1000
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": ["code", "message"],
-          "type": "object",
-          "uniqueItems": true
-        }
-      },
-      "r2_messages": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "r2_r2_object": {
-        "description": "Metadata for an R2 object.",
-        "type": "object",
-        "properties": {
-          "custom_metadata": {
-            "description": "Custom metadata key-value pairs associated with the object.",
-            "type": "object",
-            "example": {},
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "etag": {
-            "description": "The entity tag for the object. In JSON list/get responses this is the raw\nhex digest (without surrounding quotes). The HTTP `ETag` response header on\nGet Object follows RFC 7232 and IS wrapped in surrounding double-quotes.\n",
-            "type": "string",
-            "example": "d41d8cd98f00b204e9800998ecf8427e"
-          },
-          "http_metadata": {
-            "$ref": "#/components/schemas/r2_r2_object_http_metadata"
-          },
-          "key": {
-            "description": "The object key (name).",
-            "type": "string",
-            "example": "path/to/my-object.txt"
-          },
-          "last_modified": {
-            "description": "The date and time the object was last modified.",
-            "type": "string",
-            "format": "date-time",
-            "example": "2024-01-15T10:30:00Z"
-          },
-          "size": {
-            "description": "The size of the object in bytes.",
-            "type": "integer",
-            "example": 1048576
-          },
-          "ssec": {
-            "description": "Whether the object is encrypted with a customer-supplied encryption key.",
-            "type": "boolean",
-            "example": false
-          },
-          "storage_class": {
-            "$ref": "#/components/schemas/r2_storage_class"
-          }
-        }
-      },
-      "r2_r2_list_objects_result_info": {
-        "description": "Pagination information for list objects responses.",
-        "type": "object",
-        "properties": {
-          "cursor": {
-            "description": "Pagination cursor to use in the next List Objects call to retrieve the next page of results.",
-            "type": "string",
-            "example": "eyJrZXkiOiJwYXRoL3RvL215LW9iamVjdC50eHQifQ=="
-          },
-          "delimited": {
-            "description": "Common prefixes found when a delimiter is specified. Each entry represents a group\nof keys sharing a common prefix up to the delimiter. Equivalent to S3's `CommonPrefixes`\nin `ListObjectsV2`; the field name differs because of the existing R2 API wire format.\n",
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "example": ["path/to/", "another/path/"]
-          },
-          "is_truncated": {
-            "description": "Whether the result was truncated. If true, use the cursor to retrieve the next page.",
-            "type": "boolean",
-            "example": true
-          },
-          "per_page": {
-            "description": "The maximum number of objects returned per page.",
-            "type": "integer",
-            "example": 20
-          }
-        }
       },
       "iam_api-response-single": {
         "type": "object",
@@ -36401,6 +36403,43 @@
           }
         }
       },
+      "r2_r2_object_http_metadata": {
+        "description": "HTTP metadata associated with an R2 object.",
+        "type": "object",
+        "properties": {
+          "cacheControl": {
+            "description": "Specifies caching behavior for the object.",
+            "type": "string",
+            "example": "max-age=3600"
+          },
+          "cacheExpiry": {
+            "description": "The date and time at which the object's cache entry expires.",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-12-31T23:59:59Z"
+          },
+          "contentDisposition": {
+            "description": "Specifies presentational information for the object.",
+            "type": "string",
+            "example": "attachment; filename=\"example.jpg\""
+          },
+          "contentEncoding": {
+            "description": "Specifies the content encoding applied to the object.",
+            "type": "string",
+            "example": "gzip"
+          },
+          "contentLanguage": {
+            "description": "The language of the object content.",
+            "type": "string",
+            "example": "en-US"
+          },
+          "contentType": {
+            "description": "The MIME type of the object.",
+            "type": "string",
+            "example": "image/jpeg"
+          }
+        }
+      },
       "vectorize_messages": {
         "type": "array",
         "items": {
@@ -36705,43 +36744,6 @@
           }
         },
         "required": ["type"]
-      },
-      "r2_r2_object_http_metadata": {
-        "description": "HTTP metadata associated with an R2 object.",
-        "type": "object",
-        "properties": {
-          "cacheControl": {
-            "description": "Specifies caching behavior for the object.",
-            "type": "string",
-            "example": "max-age=3600"
-          },
-          "cacheExpiry": {
-            "description": "The date and time at which the object's cache entry expires.",
-            "type": "string",
-            "format": "date-time",
-            "example": "2024-12-31T23:59:59Z"
-          },
-          "contentDisposition": {
-            "description": "Specifies presentational information for the object.",
-            "type": "string",
-            "example": "attachment; filename=\"example.jpg\""
-          },
-          "contentEncoding": {
-            "description": "Specifies the content encoding applied to the object.",
-            "type": "string",
-            "example": "gzip"
-          },
-          "contentLanguage": {
-            "description": "The language of the object content.",
-            "type": "string",
-            "example": "en-US"
-          },
-          "contentType": {
-            "description": "The MIME type of the object.",
-            "type": "string",
-            "example": "image/jpeg"
-          }
-        }
       },
       "iam_api-response-common": {
         "type": "object",

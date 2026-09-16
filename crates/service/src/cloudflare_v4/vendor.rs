@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 const WRANGLER_VERSION: &str = "4.127.1";
 
 mod backups;
+mod migrations;
 
 pub(super) fn router() -> Router<HttpState> {
     Router::new()
@@ -49,6 +50,7 @@ pub(super) fn router() -> Router<HttpState> {
             get(durable_object_records),
         )
         .merge(backups::router())
+        .merge(migrations::router())
 }
 
 async fn capabilities(State(_state): State<HttpState>, request: Request) -> Response {
@@ -545,7 +547,7 @@ fn resolve_account(state: &HttpState, public: &str) -> Result<AccountId, V4Error
         .resolve(public)
 }
 
-fn resolve_resource(
+pub(super) fn resolve_resource(
     state: &HttpState,
     public_account: &str,
     public_resource: &str,

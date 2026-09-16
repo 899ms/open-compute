@@ -113,14 +113,33 @@ fn service_declarations_follow_active_targets_and_protect_worker_identity() {
             .code(),
         ErrorCode::ServiceBindingDenied
     );
+    workers
+        .begin_force_delete(account, target.id, request, 12)
+        .unwrap();
+    assert_eq!(workers.force_delete_intents().unwrap().len(), 1);
+    assert!(
+        workers
+            .delete_worker(account, target.id, &[target_v1, target_v2], request, 13)
+            .is_err()
+    );
+    assert!(insert_ready_result(workers, account, target.id, [5; 32], request, 13).is_err());
+    workers
+        .finish_force_delete(account, target.id, &[target_v1, target_v2], request, 14)
+        .unwrap();
+    assert!(workers.force_delete_intents().unwrap().is_empty());
+    assert!(
+        services
+            .resolve(caller_version, "CATALOG", &descriptor)
+            .is_err()
+    );
     assert_eq!(
         workers
-            .delete_worker(account, caller.id, &[], request, 13)
+            .delete_worker(account, caller.id, &[], request, 15)
             .unwrap_err()
             .code(),
         ErrorCode::VersionReferenced
     );
     workers
-        .delete_worker(account, caller.id, &[caller_version], request, 14)
+        .delete_worker(account, caller.id, &[caller_version], request, 16)
         .unwrap();
 }

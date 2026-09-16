@@ -47,6 +47,7 @@ fn assets_only_request(assets: &VersionAssets) -> CreateVersionRequest {
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: None,
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 1,
     }
@@ -83,6 +84,7 @@ fn worker_request(
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: None,
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 1,
     }

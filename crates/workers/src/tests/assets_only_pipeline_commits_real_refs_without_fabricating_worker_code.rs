@@ -65,6 +65,7 @@ async fn assets_only_pipeline_commits_real_refs_without_fabricating_worker_code(
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: Some(open_compute_storage::DeploymentSource::VersionsApi),
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 10,
     };

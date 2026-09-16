@@ -364,6 +364,7 @@ impl P23PromotionCoordinator {
             Some(worker.route_generation),
             request.source,
             &request.annotations,
+            request.observability.as_ref(),
             request.request_id,
             request.now_ms,
             admitted_generation,

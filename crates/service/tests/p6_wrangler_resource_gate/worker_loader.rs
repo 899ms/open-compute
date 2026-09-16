@@ -127,6 +127,34 @@ export default {
 };
 "#;
 
+const TRANSFER_SOURCE: &str = r#"
+function code() {
+  return {
+    compatibilityDate: "2026-09-08",
+    mainModule: "child.js",
+    globalOutbound: null,
+    modules: { "child.js": `export default { fetch() { return new Response("ok"); } };` },
+  };
+}
+export default {
+  fetch(_request, env) {
+    const transferError = value => {
+      try { env.LOADER.load({ ...code(), env: { VALUE: value } }); return null; }
+      catch (error) { return error?.name ?? "Error"; }
+    };
+    return Response.json({
+      transferErrors: {
+        d1: transferError(env.DB),
+        kv: transferError(env.KV),
+        queue: transferError(env.QUEUE),
+        r2: transferError(env.BUCKET),
+      },
+      keys: Object.keys(env).sort(),
+    });
+  },
+};
+"#;
+
 pub(super) async fn resource_limits_settings_clone_and_restart() {
     let mut fixture = Fixture::new().await;
     let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
@@ -240,6 +268,8 @@ async fn worker_loader_native_binding_versions_delete_and_restart() {
         json!({ "cpu_ms": 30_000, "subrequests": 10_000 })
     );
     config["worker_loaders"] = json!([{ "binding": "LOADER" }, { "binding": "OTHER" }]);
+    let mut transfer_config = config.clone();
+    transfer_config["name"] = json!("dynamic-transfer");
     config["durable_objects"] = json!({
         "bindings": [{ "name": "OBJECTS", "class_name": "LoaderParent" }]
     });
@@ -254,12 +284,20 @@ async fn worker_loader_native_binding_versions_delete_and_restart() {
     deploy_source(&command, "one").await;
     let first = active_version(&client, fixture.admin_addr, &fixture.public_account).await;
     assert_state(&client, &fixture, "one", 1, "shared", 1).await;
+    config.as_object_mut().unwrap().remove("observability");
+    fs::write(
+        fixture.project.join("wrangler.jsonc"),
+        serde_json::to_vec_pretty(&config).unwrap(),
+    )
+    .unwrap();
     let (status, invalid) = invoke(&client, &fixture, SCRIPT, "/invalid").await;
     assert_eq!(status, 200);
     assert_eq!(
         invalid,
         json!({
-            "limitsRejected": true, "delegationRejected": true, "keys": ["LOADER", "OBJECTS", "OTHER"]
+            "limitsRejected": true,
+            "delegationRejected": true,
+            "keys": ["LOADER", "OBJECTS", "OTHER"]
         })
     );
     let (status, rpc) = invoke(&client, &fixture, SCRIPT, "/rpc").await;
@@ -339,22 +377,46 @@ async fn worker_loader_native_binding_versions_delete_and_restart() {
     .await;
     assert_state(&client, &fixture, "one", 1, "shared", 1).await;
     assert_facet(&client, &fixture, 4).await;
+    let transfer_command = WranglerCommand {
+        executable: fixed_wrangler(),
+        project: &fixture.project,
+        api_base_url: format!("http://{}/client/v4", fixture.admin_addr),
+        account_id: &fixture.public_account,
+    };
+    let kv_id = configure_nontransferable_bindings(&transfer_command, &mut transfer_config).await;
+    fs::write(
+        fixture.project.join("transfer.jsonc"),
+        serde_json::to_vec_pretty(&transfer_config).unwrap(),
+    )
+    .unwrap();
+    fs::write(fixture.project.join("index.ts"), TRANSFER_SOURCE).unwrap();
+    assert_success(
+        &transfer_command
+            .run(&["deploy", "--config", "transfer.jsonc"])
+            .await,
+    );
+    let (status, invalid) = invoke(&client, &fixture, "dynamic-transfer", "/invalid").await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        invalid,
+        json!({
+            "transferErrors": {
+                "d1": "DataCloneError",
+                "kv": "DataCloneError",
+                "queue": "DataCloneError",
+                "r2": "DataCloneError",
+            },
+            "keys": ["BUCKET", "DB", "KV", "LOADER", "OTHER", "QUEUE"]
+        })
+    );
+    drop(transfer_command);
     // Existing admission retains executed Versions until the supervised generation exits:
     // an HTTP response alone cannot prove that background tenant work has drained.
     assert_eq!(
         api(&client, &fixture, SCRIPT, "", "DELETE", None).await.0,
         409
     );
-    wait_ready(
-        &client,
-        fixture.admin_addr,
-        &mut fixture.process,
-        &fixture.log,
-    )
-    .await;
-    assert_state(&client, &fixture, "one", 2, "shared", 2).await;
-    restart(&client, &mut fixture).await;
-    let (status, deleted) = api(&client, &fixture, SCRIPT, "", "DELETE", None).await;
+    let (status, deleted) = api(&client, &fixture, SCRIPT, "?force=true", "DELETE", None).await;
     assert_eq!(status, 200, "{deleted}");
     assert_eq!(invoke(&client, &fixture, SCRIPT, "").await.0, 404);
     let (status, _) = api(&client, &fixture, SCRIPT, "", "DELETE", None).await;
@@ -374,10 +436,37 @@ async fn worker_loader_native_binding_versions_delete_and_restart() {
     deploy_source(&command, "replacement").await;
     assert_state(&client, &fixture, "replacement", 1, "shared", 1).await;
     drop(command);
-    restart(&client, &mut fixture).await;
+    fixture.process.stop().await;
+    let storage = PlatformStorage::bootstrap(&storage_config(&fixture.data), &SystemClock).unwrap();
+    let account = storage.identity().default_account_id;
+    let repository = WorkerRepository::new(storage.db());
+    let worker = repository
+        .list_workers(account)
+        .unwrap()
+        .into_iter()
+        .find(|worker| worker.name == SCRIPT)
+        .unwrap();
+    repository
+        .begin_force_delete(
+            account,
+            worker.id,
+            RequestId::generate(),
+            open_compute_core::wall_time_ms(),
+        )
+        .unwrap();
+    drop(storage);
+    fixture.process.restart(&fixture.config, &fixture.log);
+    wait_ready(
+        &client,
+        fixture.admin_addr,
+        &mut fixture.process,
+        &fixture.log,
+    )
+    .await;
     assert_eq!(
-        api(&client, &fixture, SCRIPT, "", "DELETE", None).await.0,
-        200
+        invoke(&client, &fixture, SCRIPT, "").await.0,
+        404,
+        "startup must finish a persisted force-delete intent before admission"
     );
     assert_eq!(
         api(&client, &fixture, "dynamic-independent", "", "DELETE", None)
@@ -385,10 +474,134 @@ async fn worker_loader_native_binding_versions_delete_and_restart() {
             .0,
         200
     );
+    assert_eq!(
+        api(
+            &client,
+            &fixture,
+            "dynamic-transfer",
+            "?force=true",
+            "DELETE",
+            None
+        )
+        .await
+        .0,
+        200
+    );
+    let command = WranglerCommand {
+        executable: fixed_wrangler(),
+        project: &fixture.project,
+        api_base_url: format!("http://{}/client/v4", fixture.admin_addr),
+        account_id: &fixture.public_account,
+    };
+    delete_nontransferable_bindings(&command, &kv_id).await;
     fixture.process.stop().await;
     assert_clean_output(&fs::read(&fixture.log).unwrap_or_default());
     for address in [fixture.public_addr, fixture.admin_addr] {
         assert!(tokio::net::TcpStream::connect(address).await.is_err());
+    }
+}
+
+async fn configure_nontransferable_bindings(
+    command: &WranglerCommand<'_>,
+    config: &mut Value,
+) -> String {
+    assert_success(
+        &command
+            .run(&[
+                "kv",
+                "namespace",
+                "create",
+                KV_NAME,
+                "--config",
+                "wrangler.jsonc",
+            ])
+            .await,
+    );
+    let listed = command
+        .run(&["kv", "namespace", "list", "--config", "wrangler.jsonc"])
+        .await;
+    assert_success(&listed);
+    let kv_id = json_stdout(&listed)
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["title"] == KV_NAME)
+        .and_then(|item| item["id"].as_str())
+        .unwrap()
+        .to_owned();
+    assert_success(
+        &command
+            .run(&["d1", "create", D1_NAME, "--config", "wrangler.jsonc"])
+            .await,
+    );
+    let listed = command
+        .run(&["d1", "list", "--json", "--config", "wrangler.jsonc"])
+        .await;
+    assert_success(&listed);
+    let d1_id = json_stdout(&listed)
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["name"] == D1_NAME)
+        .and_then(|item| item["uuid"].as_str())
+        .unwrap()
+        .to_owned();
+    assert_success(
+        &command
+            .run(&[
+                "r2",
+                "bucket",
+                "create",
+                R2_NAME,
+                "--config",
+                "wrangler.jsonc",
+            ])
+            .await,
+    );
+    assert_success(
+        &command
+            .run(&["queues", "create", QUEUE_NAME, "--config", "wrangler.jsonc"])
+            .await,
+    );
+    config["kv_namespaces"] = json!([{ "binding": "KV", "id": &kv_id }]);
+    config["d1_databases"] =
+        json!([{ "binding": "DB", "database_name": D1_NAME, "database_id": d1_id }]);
+    config["r2_buckets"] = json!([{ "binding": "BUCKET", "bucket_name": R2_NAME }]);
+    config["queues"] = json!({ "producers": [{ "binding": "QUEUE", "queue": QUEUE_NAME }] });
+    kv_id
+}
+
+async fn delete_nontransferable_bindings(command: &WranglerCommand<'_>, kv_id: &str) {
+    for args in [
+        vec![
+            "kv",
+            "namespace",
+            "delete",
+            "--namespace-id",
+            kv_id,
+            "--skip-confirmation",
+            "--config",
+            "wrangler.jsonc",
+        ],
+        vec![
+            "d1",
+            "delete",
+            D1_NAME,
+            "--skip-confirmation",
+            "--config",
+            "transfer.jsonc",
+        ],
+        vec![
+            "r2",
+            "bucket",
+            "delete",
+            R2_NAME,
+            "--config",
+            "wrangler.jsonc",
+        ],
+        vec!["queues", "delete", QUEUE_NAME, "--config", "wrangler.jsonc"],
+    ] {
+        assert_success(&command.run(&args).await);
     }
 }
 

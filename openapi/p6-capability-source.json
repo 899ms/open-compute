@@ -4,6 +4,7 @@
     "root": "/client/v4",
     "deviations": [
       "OC-ACCOUNT-SUBDOMAIN-001",
+      "OC-DEPLOY-001",
       "OC-D1-001",
       "OC-AI-SEARCH-TOKEN-001",
       "OC-OBSERVABILITY-001"
@@ -27,7 +28,9 @@
       "POST /accounts/{account_id}/open-compute/kv/backups/{backup_id}/restore",
       "POST /accounts/{account_id}/open-compute/d1/databases/{database_id}/backups",
       "GET /accounts/{account_id}/open-compute/d1/databases/{database_id}/backups",
-      "POST /accounts/{account_id}/open-compute/d1/backups/{backup_id}/restore"
+      "POST /accounts/{account_id}/open-compute/d1/backups/{backup_id}/restore",
+      "GET /accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations",
+      "PUT /accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations"
     ],
     "legacyRoutes": [
       "/operator/api/**",
@@ -251,6 +254,14 @@
       "observability.tail_client_queue_bytes"
     ],
     "deviations": ["OC-OBSERVABILITY-001"]
+  },
+  "workerLoader": {
+    "envTransfer": {
+      "supported": ["structured_clone", "service_binding"],
+      "unsupported": ["d1", "kv_namespace", "r2_bucket", "queue"],
+      "failure": "DataCloneError",
+      "serviceBindingEvidence": "p6-wrangler-resources::worker_loader::worker_loader_native_binding_versions_delete_and_restart"
+    }
   },
   "wrangler": {
     "supportedFields": [

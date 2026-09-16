@@ -51,6 +51,7 @@ pub(super) fn build(
         }],
         crons: vec![cron.to_owned()],
         deployment_source: promote.then_some(open_compute_storage::DeploymentSource::VersionsApi),
+        observability: None,
         request_id: open_compute_core::RequestId::generate(),
         now_ms: 60_000,
     }

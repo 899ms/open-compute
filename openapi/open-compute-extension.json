@@ -990,6 +990,130 @@
           }
         }
       }
+    },
+    "/accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations": {
+      "get": {
+        "operationId": "open-compute-get-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+        "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "d1.migrations.list",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PathSegment"
+            }
+          },
+          {
+            "name": "database_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PathSegment"
+            }
+          }
+        ],
+        "x-open-compute-request-body": "none",
+        "responses": {
+          "200": {
+            "description": "Successful vendor extension response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/D1MigrationsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "open-compute-put-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+        "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "d1.migrations.apply",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PathSegment"
+            }
+          },
+          {
+            "name": "database_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PathSegment"
+            }
+          }
+        ],
+        "x-open-compute-request-body": "json",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/D1MigrationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful vendor extension response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/D1MigrationsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1350,6 +1474,61 @@
             "maxLength": 128,
             "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
           }
+        }
+      },
+      "D1Migration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "sha256", "applied_at_ms"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "applied_at_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "D1MigrationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "sha256", "sql"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "D1MigrationRequest": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "#/components/schemas/D1MigrationInput"
         }
       },
       "RestoredResource": {
@@ -1728,6 +1907,36 @@
           },
           "result": {
             "$ref": "#/components/schemas/RestoredResource"
+          },
+          "errors": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "$ref": "#/components/schemas/Error"
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          }
+        }
+      },
+      "D1MigrationsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["success", "result", "errors", "messages"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/D1Migration"
+            }
           },
           "errors": {
             "type": "array",

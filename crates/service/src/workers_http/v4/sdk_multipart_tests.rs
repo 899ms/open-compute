@@ -128,6 +128,12 @@ fn rebuilds_nested_sdk_metadata_and_typed_binding_fields() {
         ("metadata[assets][config][run_worker_first][]", "/api/*"),
         ("metadata[assets][config][run_worker_first][]", "/admin/*"),
         ("metadata[observability][enabled]", "true"),
+        ("metadata[observability][head_sampling_rate]", "0.25"),
+        ("metadata[observability][logs][enabled]", "true"),
+        ("metadata[observability][logs][head_sampling_rate]", "0.5"),
+        ("metadata[observability][logs][invocation_logs]", "true"),
+        ("metadata[observability][logs][persist]", "false"),
+        ("metadata[observability][traces][enabled]", "false"),
         ("metadata[cache_options][enabled]", "true"),
         ("metadata[cache_options][cross_version_cache]", "false"),
         ("metadata[exports][Counter][type]", "DurableObject"),
@@ -162,6 +168,12 @@ fn rebuilds_nested_sdk_metadata_and_typed_binding_fields() {
         "/admin/*"
     );
     assert_eq!(metadata["observability"]["enabled"], true);
+    assert_eq!(metadata["observability"]["head_sampling_rate"], 0.25);
+    assert_eq!(metadata["observability"]["logs"]["enabled"], true);
+    assert_eq!(metadata["observability"]["logs"]["head_sampling_rate"], 0.5);
+    assert_eq!(metadata["observability"]["logs"]["invocation_logs"], true);
+    assert_eq!(metadata["observability"]["logs"]["persist"], false);
+    assert_eq!(metadata["observability"]["traces"]["enabled"], false);
     assert_eq!(metadata["exports"]["Counter"]["cache"]["enabled"], true);
     assert_eq!(metadata["bindings"][0]["json"]["items"][1], "second");
     assert_eq!(metadata["bindings"][1]["props"]["region"], "local");
@@ -170,6 +182,9 @@ fn rebuilds_nested_sdk_metadata_and_typed_binding_fields() {
         vec![("metadata[assets][config][run_worker_first]", "maybe")],
         vec![("metadata[exports][][type]", "DurableObject")],
         vec![("metadata[exports][Counter][cache][enabled]", "maybe")],
+        vec![("metadata[observability][head_sampling_rate]", "nan")],
+        vec![("metadata[observability][logs][persist]", "maybe")],
+        vec![("metadata[observability][logs][destinations][]", "sink")],
         vec![
             ("metadata[bindings][][name]", "X"),
             ("metadata[bindings][][type]", "json"),

@@ -11,8 +11,8 @@ use axum::extract::{DefaultBodyLimit, FromRequest, Multipart, Path, Request, Sta
 use axum::routing::{get, patch};
 use open_compute_core::{DeploymentId, PlatformError, RequestId, VersionId};
 use open_compute_storage::{
-    DeploymentRecord, DeploymentSource, UpdateWorkerObservabilitySettings, VersionRecord,
-    VersionSnapshot, WorkerRecord, WorkerRepository,
+    DeploymentRecord, DeploymentSource, VersionRecord, VersionSnapshot, WorkerRecord,
+    WorkerRepository,
 };
 use open_compute_workers::{CreateVersionOutcome, ProductPromotionRequest};
 use serde::{Deserialize, Serialize};
@@ -383,9 +383,72 @@ pub(super) fn platform_error(
     request_id: RequestId,
     error: &PlatformError,
 ) -> axum::response::Response {
+    tracing::error!(
+        request_id = %request_id,
+        platform_error_code = error.code().as_str(),
+        platform_error_message = error.message(),
+        "Worker management request failed"
+    );
     error_response(V4Error::from(error), request_id)
 }
 
 pub(super) fn now_ms() -> i64 {
     open_compute_core::wall_time_ms()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use open_compute_core::ErrorCode;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct LogBuffer(Arc<Mutex<Vec<u8>>>);
+
+    struct LogWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for LogWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogBuffer {
+        type Writer = LogWriter;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            LogWriter(self.0.clone())
+        }
+    }
+
+    #[tokio::test]
+    async fn platform_errors_log_stable_operator_cause_without_changing_wire_error() {
+        let buffer = LogBuffer::default();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .without_time()
+            .with_writer(buffer.clone())
+            .finish();
+        let request_id = RequestId::generate();
+        let error = PlatformError::new(ErrorCode::BundleInvalid, "safe operator cause");
+        let response =
+            tracing::subscriber::with_default(subscriber, || platform_error(request_id, &error));
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("9100003"));
+        assert!(!body.contains("safe operator cause"));
+
+        let log = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        assert!(log.contains(&request_id.to_string()));
+        assert!(log.contains(ErrorCode::BundleInvalid.as_str()));
+        assert!(log.contains("safe operator cause"));
+    }
 }

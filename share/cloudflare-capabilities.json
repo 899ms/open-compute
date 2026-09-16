@@ -107,8 +107,10 @@
         "method": "DELETE",
         "path": "/accounts/{account_id}/workers/scripts/{script_name}",
         "operationId": "worker-script-delete-worker",
-        "status": "supported",
+        "status": "supported_with_deviation",
         "source": "cloudflare-openapi",
+        "constraint": "force=true bypasses retained Version and inbound Service references and may rotate the single workerd generation, but external D1, KV, R2, Queue, Workflow, and Durable Object resources remain independent authorities rather than being cascade-deleted with the Script",
+        "deviations": ["OC-DEPLOY-001"],
         "operationSha256": "8b1a92fddc4539c0640d07653ca6d2d295ce2c66bdd80c1ba7b5753bddeb83ca",
         "requestMediaType": "none"
       },
@@ -770,6 +772,16 @@
         "status": "supported",
         "source": "cloudflare-openapi",
         "operationSha256": "a7e45ae55a7020c194be8907419930c92e8f3c838af39b19db3eb7dedf7624db",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
+        "method": "GET",
+        "path": "/accounts/{account_id}/r2/buckets/{bucket_name}/objects",
+        "operationId": "r2-list-objects",
+        "status": "supported",
+        "source": "cloudflare-openapi",
+        "operationSha256": "66bd9d8366e8a419a534dd084f03c49a6cb56924b1da88e2b53209563979fbb4",
         "requestMediaType": "none"
       },
       {
@@ -1445,15 +1457,6 @@
         "requestMediaType": "json"
       },
       {
-        "id": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
-        "method": "GET",
-        "path": "/accounts/{account_id}/r2/buckets/{bucket_name}/objects",
-        "status": "unsupported",
-        "source": "cloudflare-openapi",
-        "constraint": "P6 Day 1 object surface only qualifies exact object get/put/delete; bucket object listing must fail closed",
-        "requestMediaType": "none"
-      },
-      {
         "id": "POST /accounts/{account_id}/workers/assets/upload/{manifest_hash}",
         "method": "POST",
         "path": "/accounts/{account_id}/workers/assets/upload/{manifest_hash}",
@@ -1812,10 +1815,29 @@
         "status": "supported",
         "source": "open-compute-extension",
         "requestMediaType": "json"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "PUT /accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations",
+        "method": "PUT",
+        "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations",
+        "operationId": "open-compute-put-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "json"
       }
     ],
     "deviations": [
       "OC-ACCOUNT-SUBDOMAIN-001",
+      "OC-DEPLOY-001",
       "OC-D1-001",
       "OC-AI-SEARCH-TOKEN-001",
       "OC-OBSERVABILITY-001"

@@ -137,7 +137,10 @@ test("destinations reject overwrite, traversal, and symlink ancestors", async ()
 });
 
 test("release Cargo targets default locally and require an absolute non-root override", () => {
-  assert.match(cargoTargetDirectory(undefined), /\/open-compute\/target\/?$/);
+  assert.equal(
+    cargoTargetDirectory(undefined),
+    fileURLToPath(new URL("../target", import.meta.url)),
+  );
   assert.equal(
     cargoTargetDirectory("/tmp/release-target"),
     "/tmp/release-target",

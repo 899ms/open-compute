@@ -404,6 +404,7 @@ async fn assert_startup_limit_rejected(
             queue_consumers: Vec::new(),
             crons: Vec::new(),
             deployment_source: None,
+            observability: None,
             request_id: RequestId::generate(),
             now_ms: 42,
         })
@@ -461,6 +462,7 @@ async fn deploy(
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: None,
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 42,
     };

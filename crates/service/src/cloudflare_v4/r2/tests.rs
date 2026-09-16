@@ -591,7 +591,7 @@ async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
         .unwrap();
     assert_eq!(not_modified.status(), StatusCode::NOT_MODIFIED);
 
-    let unsupported_list = app
+    let listed = app
         .clone()
         .oneshot(
             Request::builder()
@@ -604,7 +604,38 @@ async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
         )
         .await
         .unwrap();
-    assert_eq!(unsupported_list.status(), StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(listed.status(), StatusCode::OK);
+    let listed = json(listed).await;
+    assert_eq!(listed["result"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["result"][0]["key"], "path/to/object.txt");
+    assert_eq!(listed["result"][0]["size"], 11);
+    assert_eq!(
+        listed["result"][0]["http_metadata"]["contentType"],
+        "text/plain"
+    );
+    assert_eq!(listed["result_info"]["per_page"], 10);
+    assert_eq!(listed["result_info"]["is_truncated"], false);
+
+    for query in [
+        "per_page=0",
+        "per_page=1001",
+        "delimiter=too-long",
+        "cursor=x&start_after=y",
+        "unknown=true",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{collection}/bucket-one/objects?{query}"))
+                    .header(header::AUTHORIZATION, "Bearer read-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{query}");
+    }
 
     for request in [
         Request::builder()

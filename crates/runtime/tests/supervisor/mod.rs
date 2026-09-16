@@ -258,6 +258,8 @@ mod late_control_event_is_unhealthy_restart;
 
 mod running_resets_consecutive_backoff;
 
+mod controlled_generation_rotation;
+
 mod shutdown_waits_for_held_blocking_spawn;
 
 mod term_grace_then_kill_order;
@@ -305,6 +307,7 @@ supervisor_case!(post_spawn_failures_reap_child);
 supervisor_case!(reader_failure_reaches_diagnostics);
 supervisor_case!(real_workerd_control_probe_term_kill);
 supervisor_case!(running_resets_consecutive_backoff);
+supervisor_case!(controlled_generation_rotation);
 supervisor_case!(shutdown_before_start_acks_and_is_idempotent);
 supervisor_case!(shutdown_cancels_slow_compile_control_probe_and_backoff);
 supervisor_case!(shutdown_does_not_consume_budget_and_is_idempotent);

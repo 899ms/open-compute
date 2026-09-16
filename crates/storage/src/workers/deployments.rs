@@ -1,6 +1,64 @@
 use super::*;
 
 impl<'a> WorkerRepository<'a> {
+    /// List force deletions that must complete before runtime admission starts.
+    pub fn force_delete_intents(&self) -> Result<Vec<WorkerDeleteIntent>, PlatformError> {
+        self.db.with_read(|conn| {
+            let mut statement = conn
+                .prepare(
+                    "SELECT account_id, worker_id, request_id
+                     FROM worker_delete_intents ORDER BY created_at_ms, worker_id",
+                )
+                .map_err(|_| db_error())?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|_| db_error())?;
+            let mut intents = Vec::new();
+            for row in rows {
+                let (account_id, worker_id, request_id) = row.map_err(|_| db_error())?;
+                intents.push(WorkerDeleteIntent {
+                    account_id: AccountId::from_str(&account_id).map_err(|_| invariant())?,
+                    worker_id: WorkerId::from_str(&worker_id).map_err(|_| invariant())?,
+                    request_id: RequestId::from_str(&request_id).map_err(|_| invariant())?,
+                });
+            }
+            Ok(intents)
+        })
+    }
+
+    /// Persist a crash-recoverable force-delete fence before runtime rotation.
+    pub fn begin_force_delete(
+        &self,
+        account_id: AccountId,
+        worker_id: WorkerId,
+        request_id: RequestId,
+        now_ms: i64,
+    ) -> Result<(), PlatformError> {
+        self.db.with_immediate(|tx| {
+            let worker = require_live_worker(tx, account_id, worker_id)?;
+            require_tenant_worker(&worker)?;
+            tx.execute(
+                "INSERT INTO worker_delete_intents(worker_id, account_id, request_id, created_at_ms)
+                 VALUES(?1, ?2, ?3, ?4)
+                 ON CONFLICT(worker_id) DO NOTHING",
+                params![
+                    worker_id.to_string(),
+                    account_id.to_string(),
+                    request_id.to_string(),
+                    now_ms
+                ],
+            )
+            .map_err(|_| db_error())?;
+            Ok(())
+        })
+    }
+
     /// Read an immutable version with vars and secret ciphertext in one snapshot.
     pub fn version_snapshot(
         &self,
@@ -537,9 +595,65 @@ impl<'a> WorkerRepository<'a> {
         request_id: RequestId,
         now_ms: i64,
     ) -> Result<(), PlatformError> {
+        self.delete_worker_inner(
+            account_id,
+            worker_id,
+            expected_versions,
+            request_id,
+            now_ms,
+            false,
+        )
+    }
+
+    /// Complete a previously admitted force delete, including inbound Service references.
+    pub fn finish_force_delete(
+        &self,
+        account_id: AccountId,
+        worker_id: WorkerId,
+        expected_versions: &[VersionId],
+        request_id: RequestId,
+        now_ms: i64,
+    ) -> Result<(), PlatformError> {
+        self.delete_worker_inner(
+            account_id,
+            worker_id,
+            expected_versions,
+            request_id,
+            now_ms,
+            true,
+        )
+    }
+
+    fn delete_worker_inner(
+        self,
+        account_id: AccountId,
+        worker_id: WorkerId,
+        expected_versions: &[VersionId],
+        request_id: RequestId,
+        now_ms: i64,
+        force: bool,
+    ) -> Result<(), PlatformError> {
         self.db.with_immediate(|tx| {
             let worker = require_live_worker(tx, account_id, worker_id)?;
             require_tenant_worker(&worker)?;
+            let intent: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM worker_delete_intents
+                                   WHERE worker_id=?1 AND account_id=?2)",
+                    params![worker_id.to_string(), account_id.to_string()],
+                    |row| row.get(0),
+                )
+                .map_err(|_| db_error())?;
+            if force != intent {
+                return Err(PlatformError::new(
+                    ErrorCode::VersionReferenced,
+                    if force {
+                        "force deletion intent is missing"
+                    } else {
+                        "force deletion is already in progress"
+                    },
+                ));
+            }
             let actual_versions = {
                 let mut statement = tx
                     .prepare(
@@ -584,7 +698,7 @@ impl<'a> WorkerRepository<'a> {
                     |row| row.get(0),
                 )
                 .map_err(|_| db_error())?;
-            if inbound {
+            if inbound && !force {
                 return Err(PlatformError::new(
                     ErrorCode::ServiceTargetReferenced,
                     "Worker is retained by another version Service declaration",
@@ -655,6 +769,13 @@ impl<'a> WorkerRepository<'a> {
                 [worker_id.to_string()],
             )
             .map_err(|_| db_error())?;
+            if force {
+                tx.execute(
+                    "DELETE FROM worker_delete_intents WHERE worker_id=?1 AND account_id=?2",
+                    params![worker_id.to_string(), account_id.to_string()],
+                )
+                .map_err(|_| db_error())?;
+            }
             audit(
                 tx,
                 account_id,

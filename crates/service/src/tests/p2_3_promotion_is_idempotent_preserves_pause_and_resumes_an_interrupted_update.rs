@@ -164,6 +164,7 @@ async fn establish_initial_products(scenario: &Scenario<'_, '_>) -> RuntimeFixtu
             version_id: first_id,
             source: open_compute_storage::DeploymentSource::VersionsApi,
             annotations: std::collections::BTreeMap::new(),
+            observability: None,
             request_id: open_compute_core::RequestId::generate(),
             now_ms: 60_001,
         })
@@ -705,6 +706,7 @@ async fn exercise_interrupted_update_recovery(
             version_id: third_id,
             source: open_compute_storage::DeploymentSource::VersionsApi,
             annotations: std::collections::BTreeMap::new(),
+            observability: None,
             request_id: open_compute_core::RequestId::generate(),
             now_ms: 60_003,
         })

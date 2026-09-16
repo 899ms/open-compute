@@ -303,6 +303,7 @@ fn consumer_request(
         }],
         crons: Vec::new(),
         deployment_source: Some(open_compute_storage::DeploymentSource::VersionsApi),
+        observability: None,
         request_id: RequestId::generate(),
         now_ms,
     }
@@ -348,6 +349,7 @@ fn caller_request(
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: Some(open_compute_storage::DeploymentSource::VersionsApi),
+        observability: None,
         request_id: RequestId::generate(),
         now_ms,
     }

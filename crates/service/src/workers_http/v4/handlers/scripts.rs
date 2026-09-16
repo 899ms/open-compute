@@ -95,6 +95,10 @@ pub(super) async fn upload(
         Err(error) => return platform_error(context.request_id(), &error),
     };
     let upload_observability = upload.metadata.observability.clone();
+    if !deploy && upload_observability.is_some() {
+        return error_response(V4Error::InvalidRequest, context.request_id());
+    }
+    let observability = upload_observability.as_ref().map(observability_patch);
     let now = now_ms();
     let _upload_guard = api.upload_serial.lock().await;
     let worker = match domain::worker_by_name(&api, account, &script) {
@@ -129,6 +133,7 @@ pub(super) async fn upload(
         upload,
         query.strict_inheritance,
         deploy.then_some(DeploymentSource::ScriptUpload),
+        observability,
         context.request_id(),
         now,
     )
@@ -151,21 +156,6 @@ pub(super) async fn upload(
             now,
         ) {
             return platform_error(context.request_id(), &cleanup);
-        }
-    }
-    if outcome.is_ok()
-        && let Some(observability) = &upload_observability
-    {
-        let repository = WorkerRepository::new(api.storage.db());
-        if let Err(error) = apply_upload_observability(
-            repository,
-            account,
-            worker.id,
-            observability,
-            context.request_id(),
-            now,
-        ) {
-            return platform_error(context.request_id(), &error);
         }
     }
     match outcome {
@@ -206,47 +196,16 @@ pub(super) async fn upload(
     }
 }
 
-pub(super) fn apply_upload_observability(
-    repository: WorkerRepository<'_>,
-    account: open_compute_core::AccountId,
-    worker: open_compute_core::WorkerId,
+fn observability_patch(
     value: &super::super::model::WorkerUploadObservability,
-    request_id: RequestId,
-    now_ms: i64,
-) -> Result<(), PlatformError> {
-    let current = repository.get_observability_settings(account, worker)?;
+) -> open_compute_storage::WorkerObservabilityPatch {
     let logs = value.logs.as_ref();
-    let replacement = UpdateWorkerObservabilitySettings {
-        enabled: value.enabled,
-        head_sampling_rate: value.head_sampling_rate.or(current.head_sampling_rate),
-        logs_enabled: logs
-            .and_then(|settings| settings.enabled)
-            .unwrap_or(current.logs_enabled),
-        logs_head_sampling_rate: logs
-            .and_then(|settings| settings.head_sampling_rate)
-            .or(current.logs_head_sampling_rate),
-        invocation_logs: logs
-            .and_then(|settings| settings.invocation_logs)
-            .unwrap_or(current.invocation_logs),
-        persist: logs
-            .and_then(|settings| settings.persist)
-            .unwrap_or(current.persist),
-    };
-    if same_observability(&current, &replacement) {
-        return Ok(());
+    open_compute_storage::WorkerObservabilityPatch {
+        enabled: Some(value.enabled),
+        head_sampling_rate: value.head_sampling_rate,
+        logs_enabled: logs.and_then(|settings| settings.enabled),
+        logs_head_sampling_rate: logs.and_then(|settings| settings.head_sampling_rate),
+        invocation_logs: logs.and_then(|settings| settings.invocation_logs),
+        persist: logs.and_then(|settings| settings.persist),
     }
-    repository.update_observability_settings(account, worker, &replacement, request_id, now_ms)?;
-    Ok(())
-}
-
-pub(super) fn same_observability(
-    current: &open_compute_storage::WorkerObservabilitySettings,
-    replacement: &UpdateWorkerObservabilitySettings,
-) -> bool {
-    current.enabled == replacement.enabled
-        && current.head_sampling_rate == replacement.head_sampling_rate
-        && current.logs_enabled == replacement.logs_enabled
-        && current.logs_head_sampling_rate == replacement.logs_head_sampling_rate
-        && current.invocation_logs == replacement.invocation_logs
-        && current.persist == replacement.persist
 }

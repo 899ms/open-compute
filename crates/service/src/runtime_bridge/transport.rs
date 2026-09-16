@@ -78,6 +78,17 @@ impl WorkerdTransport {
         self
     }
 
+    /// Rotate the single supervised runtime generation and wait for readiness.
+    pub async fn rotate_generation(&self, timeout: Duration) -> Result<(), PlatformError> {
+        let supervisor = self
+            .supervisor
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+            .ok_or_else(runtime_unavailable)?;
+        supervisor.rotate_generation(timeout).await
+    }
+
     /// Dispatch a public request to an already-frozen version target.
     pub async fn dispatch(
         &self,

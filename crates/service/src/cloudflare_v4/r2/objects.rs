@@ -1,32 +1,161 @@
 //! Official R2 raw-object HTTP operations.
 
-use super::super::storage::{iso_timestamp, require_no_query, require_query_fields};
+use super::super::storage::{iso_timestamp, require_no_query, strict_query};
 use super::{attach_request_id, bucket, header_text, jurisdiction};
-use crate::cloudflare_v4::{
-    V4Error, V4Permission, error_response, request_context, success_response,
-};
+use crate::cloudflare_v4::{V4Error, error_response, success_response};
 use crate::http::HttpState;
+use crate::r2_protocol::ListRequest;
 use axum::body::Body;
 use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use open_compute_artifacts::{R2HttpMetadata, R2PutOptions, R2StorageClass, UserObjectKey};
 
-pub(super) async fn list(request: Request) -> Response {
-    let context = match request_context(&request) {
+pub(super) async fn list(
+    State(state): State<HttpState>,
+    Path((account_id, bucket_name)): Path<(String, String)>,
+    request: Request,
+) -> Response {
+    let (context, account_id, bucket) =
+        match bucket(&state, &request, &account_id, &bucket_name, false) {
+            Ok(value) => value,
+            Err(response) => return response.into_response(),
+        };
+    let mut query = match strict_query(&request) {
         Ok(value) => value,
-        Err(response) => return response.into_response(),
+        Err(error) => return error_response(error, context.request_id()),
     };
-    if let Err(error) = context.require(V4Permission::Read) {
-        return error_response(error, context.request_id());
+    let per_page = match query
+        .remove("per_page")
+        .map(|value| value.parse::<u16>())
+        .transpose()
+    {
+        Ok(Some(value @ 1..=1000)) => value,
+        Ok(None) => 20,
+        _ => return error_response(V4Error::InvalidRequest, context.request_id()),
+    };
+    let prefix = query.remove("prefix").unwrap_or_default();
+    let delimiter = query.remove("delimiter");
+    let cursor = query.remove("cursor");
+    let start_after = query.remove("start_after");
+    if !query.is_empty()
+        || delimiter
+            .as_deref()
+            .is_some_and(|value| value.chars().count() != 1)
+        || cursor.is_some() && start_after.is_some()
+    {
+        return error_response(V4Error::InvalidRequest, context.request_id());
     }
-    if let Err(error) = require_query_fields(
-        &request,
-        &["per_page", "prefix", "delimiter", "cursor", "start_after"],
-    ) {
-        return error_response(error, context.request_id());
+    let Some(api) = state.r2_api() else {
+        return error_response(V4Error::Unavailable, context.request_id());
+    };
+    let binding = match api.binding() {
+        Ok(value) => value,
+        Err(error) => return error_response(V4Error::from(&error), context.request_id()),
+    };
+    let page = match binding
+        .management_object_list(
+            account_id,
+            bucket.resource.id,
+            ListRequest {
+                prefix,
+                delimiter,
+                cursor,
+                start_after,
+                limit: per_page,
+                include: vec!["httpMetadata".to_owned(), "customMetadata".to_owned()],
+            },
+        )
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => return error_response(V4Error::from(&error), context.request_id()),
+    };
+    let objects = match page
+        .objects
+        .into_iter()
+        .map(ListObject::try_from)
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(value) => value,
+        Err(error) => return error_response(error, context.request_id()),
+    };
+    let mut response = axum::Json(serde_json::json!({
+        "success": true,
+        "errors": [],
+        "messages": [],
+        "result": objects,
+        "result_info": {
+            "cursor": page.cursor.unwrap_or_default(),
+            "delimited": page.delimited_prefixes,
+            "is_truncated": page.truncated,
+            "per_page": per_page,
+        }
+    }))
+    .into_response();
+    attach_request_id(&mut response, context.request_id());
+    response
+}
+
+#[derive(serde::Serialize)]
+struct ListObject {
+    key: String,
+    size: u64,
+    etag: String,
+    last_modified: String,
+    storage_class: String,
+    ssec: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    http_metadata: Option<ListHttpMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    custom_metadata: Option<std::collections::BTreeMap<String, String>>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ListHttpMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_disposition: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_encoding: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_expiry: Option<String>,
+}
+
+impl TryFrom<open_compute_artifacts::R2ObjectMetadata> for ListObject {
+    type Error = V4Error;
+
+    fn try_from(value: open_compute_artifacts::R2ObjectMetadata) -> Result<Self, Self::Error> {
+        let http_metadata = value
+            .http_metadata
+            .map(|metadata| {
+                Ok::<_, V4Error>(ListHttpMetadata {
+                    content_type: metadata.content_type,
+                    content_language: metadata.content_language,
+                    content_disposition: metadata.content_disposition,
+                    content_encoding: metadata.content_encoding,
+                    cache_control: metadata.cache_control,
+                    cache_expiry: metadata.cache_expiry.map(iso_timestamp).transpose()?,
+                })
+            })
+            .transpose()?;
+        Ok(Self {
+            key: value.key,
+            size: value.size,
+            etag: value.etag,
+            last_modified: iso_timestamp(value.uploaded)?,
+            storage_class: value.storage_class,
+            ssec: value.ssec_key_md5.is_some(),
+            http_metadata,
+            custom_metadata: value.custom_metadata,
+        })
     }
-    error_response(V4Error::Unsupported, context.request_id())
 }
 
 pub(super) async fn get(
