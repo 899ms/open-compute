@@ -28,6 +28,7 @@
 | P12 Wrangler 项目体验    | [p12-wrangler-project-workflow.md](p12-wrangler-project-workflow.md)                                                                                                                                                                                                                    |
 | P14 Cloudflare Artifacts | [p14-cloudflare-artifacts.md](p14-cloudflare-artifacts.md)                                                                                                                                                                                                                              |
 | P15 SQLite migrations    | [p15-sqlite-refinery-migrations.md](p15-sqlite-refinery-migrations.md)                                                                                                                                                                                                                  |
+| P16 TypeScript SDK       | [p16-capability-scoped-typescript-sdk.md](p16-capability-scoped-typescript-sdk.md)                                                                                                                                                                                                      |
 
 ## 工程与调查
 

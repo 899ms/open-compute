@@ -14,7 +14,7 @@
 
 2026-09-15 再次读取 GitHub 时共有 31 个 issues（25 closed、6 open）；新增的
 [#68](https://github.com/elliothux/open-compute/issues/68) 是 capability-scoped TypeScript SDK，已由
-[`P16`](../p16-capability-scoped-typescript-sdk.md) 单独承接，晚于本批次上界且不依赖本批次实现，因此明确排除。
+[`P16`](p16-capability-scoped-typescript-sdk.md) 单独承接，晚于本批次上界且不依赖本批次实现，因此明确排除。
 本文消费 P15 和 W2 已验证合同，不重复数据库 migration 方案，也不再实现第二套 CPU limiter、isolate
 recovery、runtime liveness probe、workerd supervisor 或 limits API。
 
@@ -410,7 +410,7 @@ cross-cutting checklist 检查最终 diff，结论为 **无 Cloudflare 合同回
 合同的检查结论，也不把 hosted global topology 纳入 single-machine support scope。
 
 GitHub issues `#42`、`#58`、`#61`、`#62` 和 `#66` 已在实现及上述证据完成后分别写入提交、行为和验收证据，
-并以 completed 关闭；`#68` 仍由 P16 单独承接。
+并以 completed 关闭；`#68` 已由 P16 单独实现并归档。
 
 ## 13. 最终验收证据
 
