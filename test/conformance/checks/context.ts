@@ -82,14 +82,10 @@ export function sourceIdentity(): string {
       return false;
     }
   });
-  const objectIds = execFileSync(
-    "git",
-    ["hash-object", "--no-filters", "--stdin-paths"],
-    {
-      cwd: ROOT,
-      input: `${regularNames.join("\n")}\n`,
-    },
-  )
+  const objectIds = execFileSync("git", ["hash-object", "--stdin-paths"], {
+    cwd: ROOT,
+    input: `${regularNames.join("\n")}\n`,
+  })
     .toString("utf8")
     .trim()
     .split("\n");
