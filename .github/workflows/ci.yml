@@ -152,6 +152,9 @@ jobs:
           case ",$COMPONENTS," in
             *,toolchain,*) bun run --filter @open-compute/toolchain build ;;
           esac
+          case ",$COMPONENTS," in
+            *,docs,*) bun scripts/check-docs.ts ;;
+          esac
 
   docs-checks:
     needs: failfast

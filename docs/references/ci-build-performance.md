@@ -91,8 +91,10 @@ workspace/final binary。当前没有应用 benchmark，且仓库 cache 已接�
   秒级 `failfast`。release-only tooling scope 不启动 Rust。release tag 校验精确 source commit 已通过该静态资格，不再重跑。
 - CI 先按变更路径分类：纯 `docs/**`、README 和 release notes 只执行文档检查；纯 SDK、dashboard、
   website 或 toolchain 变更只执行对应 JavaScript 检查；release workflow/assembler/test 使用独立
-  release-tooling 检查；Rust、runtime、workerd、`ci.yml`、共享 setup、未知路径或混合变更仍执行完整静态资格。
-  汇总 job `ci` 保留不变，避免分支保护因跳过具体 job 失效。
+  release-tooling 检查；文档与 frontend 混合时在同一个 frontend job 执行两类检查。只有 `sourceDigest`
+  变化的独立修复提交回溯到上一次 baseline revision，按期间全部 owning files 选择检查；baseline 其他字段、
+  Rust、runtime、workerd、`ci.yml`、共享 setup 或未知路径仍执行完整静态资格。汇总 job `ci` 保留不变，
+  避免分支保护因跳过具体 job 失效。
 - tag qualification：`failfast` 先验证 release environment、source/release identity、notes、SDK report
   contract、npm credential 和目标版本；随后 coverage、一个 macOS 完整最终 workspace Gate 和 Linux
   `p0-2` 受控 egress 并行启动；Linux egress 不再重复 `--workspace`。

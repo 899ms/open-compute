@@ -44,7 +44,10 @@ full scope 将 core checks、Clippy 与 production executable hygiene 分成三�
 都先执行完整 `bun run build`，汇总 `ci` 只有在三者全部成功后才通过。
 只修改 release/recovery/dry-run workflow、release assembler/test 和随附文档时使用 `release-tooling`
 scope，只执行 TypeScript、format、文档与 release contract；修改 `ci.yml`、共享 setup action、Rust/runtime
-或未明确归属的路径仍执行 full scope。`sourceDigest` baseline 是随附身份文件，不会单独扩大 owning change 的 scope。
+或未明确归属的路径仍执行 full scope。baseline 只有 `sourceDigest` 字段变化时是随附身份更新，不会单独扩大
+owning change 的 scope；若它作为修复提交单独 push，分类器会回溯到上一次 baseline revision，并对期间所有
+owning files 重新分类。baseline 任何其他字段变化或无法证明来源时仍 fail closed 到 full scope。文档与 frontend
+混合时执行对应 frontend build 和文档检查，不为此启动 Rust。
 release PR 复用其 main head 已通过的 push check，不再重复执行相同检查；tag 触发的 release workflow
 会校验 release merge commit 对应的 main source commit 已通过该 pre-check。各 PR 与分支使用独立
 concurrency group，取消过期运行；汇总 job `ci` 是 `release` 分支的 required check。
