@@ -2,7 +2,7 @@
 title: "Environment variables"
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 
 `vars` are public, non-secret values. Structured-clone-compatible JSON enters `env`.
 
@@ -27,9 +27,15 @@ export default {
 Regenerate types after changing vars:
 
 <Tabs syncKey="package-manager">
-  <TabItem label="npm">```sh npm exec -- wrangler types ```</TabItem>
-  <TabItem label="pnpm">```sh pnpm exec wrangler types ```</TabItem>
-  <TabItem label="bun">```sh bun run wrangler types ```</TabItem>
+  <TabItem label="npm">
+    <Code code="npm exec -- wrangler types" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm">
+    <Code code="pnpm exec wrangler types" lang="sh" />
+  </TabItem>
+  <TabItem label="bun">
+    <Code code="bun run wrangler types" lang="sh" />
+  </TabItem>
 </Tabs>
 
 Wrangler writes literals into `worker-configuration.d.ts` (for example `GREETING: "Hello from TypeScript"`). Bundles do not contain vars; development and deployment inject them.

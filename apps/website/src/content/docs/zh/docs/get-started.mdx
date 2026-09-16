@@ -3,7 +3,7 @@ title: "快速开始"
 description: "安装 open-compute、启动一个本机实例并部署 TypeScript Worker。"
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 
 这条路径安装当前正式版本，启动一个本机 instance，并部署最小 Worker。正式二进制支持 Apple silicon macOS、ARM64 Linux 和 x86-64 Linux。
 
@@ -62,16 +62,22 @@ cd hello-worker
 
 <Tabs syncKey="package-manager">
   <TabItem label="npm">
-    ```sh npm init -y npm install --save-dev wrangler@4.127.1
-    @open-compute/workers-types ```
+    <Code
+      code={`npm init -y\nnpm install --save-dev wrangler@4.127.1 @cloudflare/workers-types@5.20260830.1`}
+      lang="sh"
+    />
   </TabItem>
   <TabItem label="pnpm">
-    ```sh pnpm init pnpm add --save-dev wrangler@4.127.1
-    @open-compute/workers-types ```
+    <Code
+      code={`pnpm init\npnpm add --save-dev wrangler@4.127.1 @cloudflare/workers-types@5.20260830.1`}
+      lang="sh"
+    />
   </TabItem>
   <TabItem label="bun">
-    ```sh bun init -y bun add --dev wrangler@4.127.1 @open-compute/workers-types
-    ```
+    <Code
+      code={`bun init -y\nbun add --dev wrangler@4.127.1 @cloudflare/workers-types@5.20260830.1`}
+      lang="sh"
+    />
   </TabItem>
 </Tabs>
 
@@ -109,9 +115,15 @@ export default {
 快速本地循环直接使用 Wrangler：
 
 <Tabs syncKey="package-manager">
-  <TabItem label="npm">```sh npm exec -- wrangler dev ```</TabItem>
-  <TabItem label="pnpm">```sh pnpm exec wrangler dev ```</TabItem>
-  <TabItem label="bun">```sh bun run wrangler dev ```</TabItem>
+  <TabItem label="npm">
+    <Code code="npm exec -- wrangler dev" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm">
+    <Code code="pnpm exec wrangler dev" lang="sh" />
+  </TabItem>
+  <TabItem label="bun">
+    <Code code="bun run wrangler dev" lang="sh" />
+  </TabItem>
 </Tabs>
 
 随后通过选中的 open-compute instance 部署：

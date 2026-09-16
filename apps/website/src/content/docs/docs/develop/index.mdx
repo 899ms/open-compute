@@ -3,19 +3,27 @@ title: "Develop applications"
 description: "Use Wrangler projects, local development, open-compute targets, deployments, logs, and CI."
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 
 Keep each application as a standard Wrangler project: `wrangler.jsonc`, TypeScript source, a project-local Wrangler dependency, and a committed lockfile.
 
 ## Development workflow
 
 <Tabs syncKey="package-manager">
-  <TabItem label="npm">```sh npm ci npm exec -- wrangler dev ```</TabItem>
+  <TabItem label="npm">
+    <Code code={`npm ci\nnpm exec -- wrangler dev`} lang="sh" />
+  </TabItem>
   <TabItem label="pnpm">
-    ```sh pnpm install --frozen-lockfile pnpm exec wrangler dev ```
+    <Code
+      code={`pnpm install --frozen-lockfile\npnpm exec wrangler dev`}
+      lang="sh"
+    />
   </TabItem>
   <TabItem label="bun">
-    ```sh bun install --frozen-lockfile bun run wrangler dev ```
+    <Code
+      code={`bun install --frozen-lockfile\nbun run wrangler dev`}
+      lang="sh"
+    />
   </TabItem>
 </Tabs>
 
