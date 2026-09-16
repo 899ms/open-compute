@@ -77,12 +77,16 @@ release profile 冷编译 27 分 09 秒；`single-binary` 整体准备从约 7 �
 - Rust dependency cache 按工具链、OS/CPU、编译环境和 manifest/lock 分隔；release target 与 coverage
   各自使用 profile key。失败的普通 target cache 不保存，避免把不完整目录当成下一次构建输入；PR
   仍不向共享 Rust cache 写入。
+- package 把正式 profile 隔离在 `.temp/release-target/`，使用每个平台独立的 `v3-release-*`
+  smart cache 保存第三方 release dependency artifacts；普通 `target/` 仍只服务 main 与
+  `single-binary` Gate。两个 profile 不互相覆盖，也不保存 incremental 或把开发产物当作发行物。
 - Cargo registry/index/git 下载使用独立、仅由 OS 与 `Cargo.lock` 定位的缓存，避免 profile-specific
   target cache 未命中时重新下载全部 Rust 依赖。
 - package 使用固定 sccache 0.16.0，512 MiB 本地缓存位于 `.temp/sccache`，整目录通过 Actions
   cache restore/save 复用；主 key 只包含 OS/CPU、Rust/sccache 版本和锁定输入，fallback 可跨源码
   commit 复用内容寻址的编译结果。精确命中不再重复保存，竞争保存失败也不影响构建。它是编译
-  加速缓存，不是测试通过证据或可信发行物。
+  加速缓存，不是测试通过证据或可信发行物。package 完成后先从环境移除 sccache，再执行
+  `single-binary` Gate，避免 debug/test 编译逐出容量有限的 release 编译项。
 - 2026-09-16 inventory 有 22 个条目、约 9.57 GiB，已经贴近 GitHub 每仓库 10 GiB 上限；其中
   8 个旧 package compiler key 含 run/attempt，约 3.9 GiB，几乎没有跨发布复用价值。v2 key
   目标是三个平台各 512 MiB，稳定占用约 1.5 GiB；旧条目由 GitHub 的 LRU 淘汰，不手工删除失败证据。
@@ -106,6 +110,8 @@ SKU，单独增加 SKU 预算不能覆盖它。要允许 cache 写入，Actions 
   最终链接、bin/proc-macro 编译等仍有不可缓存部分；不承诺完全免编译。
 - 保存 Cargo `--timings` 报告、cache statistics、失败时的未验收原生 binary 和现有失败 Gate evidence。
   一般日志显示子命令 stderr，避免长时间只看到一个无输出步骤。
+- 正式 release 和 dry-run 都上传 `.temp/release-target/cargo-timings/`；下一次真实 package run 直接提供
+  crate/编译单元关键路径，不为性能分析单独重复构建。
 - source、formal runtime pin、生成资产和 artifact SHA 校验仍执行；不得通过伪造 mtime 或复用不同
   revision 的发布二进制制造命中。输入发生变化，已有 Gate 结果只证明它原来的输入。
 

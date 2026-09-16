@@ -301,10 +301,18 @@ jobs:
           lfs: true
       - uses: ./.github/actions/setup-open-compute
         with:
-          # Reuse main's debug/test target for the single-binary harness. The
-          # release build remains owned by the separate bounded sccache.
+          # Reuse main's debug/test target for the single-binary harness.
           rust-cache-key: default-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
           rust-cache-save: "false"
+      - name: Cache release dependency artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: false
+          save-if: "true"
+          add-job-id-key: false
+          shared-key: v3-release-${{ matrix.target }}-${{ hashFiles('crates/storage/refinery-migrations/**/*.sql') }}
+          workspaces: ". -> .temp/release-target"
+          cache-all-crates: false
       - uses: mozilla-actions/sccache-action@v0.0.11
         with:
           version: v0.16.0
@@ -333,6 +341,7 @@ jobs:
           set -euo pipefail
           destination="$RUNNER_TEMP/ocd-$RELEASE_TAG-$RELEASE_TARGET"
           report="$RUNNER_TEMP/release-report-$RELEASE_TARGET.json"
+          export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/.temp/release-target"
           ./scripts/package-release.sh \
             --dest "$destination" \
             --archive "$OPEN_COMPUTE_BUILD_WORKERD_ARCHIVE" | tee "$report"
@@ -341,9 +350,10 @@ jobs:
             if (report.schemaVersion !== 1 || report.target !== process.env.RELEASE_TARGET
                 || report.version !== process.env.RELEASE_TAG.slice(1)
                 || report.revision !== process.env.GITHUB_SHA) {
-              throw new Error("packaged release identity does not match the matrix");
-            }
-          '
+                throw new Error("packaged release identity does not match the matrix");
+              }
+            '
+          unset CARGO_TARGET_DIR RUSTC_WRAPPER SCCACHE_DIR SCCACHE_CACHE_SIZE
           OPEN_COMPUTE_TEST_OCD="$destination" \
             ./test/gate.py single-binary --jobs 1
       - name: Exercise the packaged Dashboard against the candidate executable
@@ -399,7 +409,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: build-timings-${{ matrix.target }}
-          path: target/cargo-timings/
+          path: .temp/release-target/cargo-timings/
           if-no-files-found: ignore
       - name: Retain failed native builds for diagnosis and subsequent verification
         if: failure()
