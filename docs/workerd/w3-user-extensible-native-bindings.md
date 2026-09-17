@@ -1,7 +1,7 @@
 # W3：用户可扩展原生 Binding 与 Provider 子进程
 
-状态：**planned（2026-09-16）**。本文冻结 Day 1 架构与安全边界；实现、正式 workerd fork pin、产品 Gate 和
-macOS XPC 真实环境资格尚未完成。
+状态：**planned（2026-09-16）**。本文冻结 Day 1 架构与安全边界；实现、正式 workerd fork pin 和产品 Gate
+尚未完成。macOS XPC 只作为平台特定示例与后续可选资格项，不阻塞 W3 完成。
 
 ## 1. 用户结果与结论
 
@@ -377,18 +377,22 @@ operator 操作，不能作为普通 cache GC。
 
 ## 11. 文件系统扩展示例
 
-用户可以提供：
+W3 的正式跨平台 reference extension 固定为一个最小只读文件系统 fixture：
 
 ```text
 consumer env.FILES
   -> FileSystemExtension WorkerEntrypoint
   -> env.HOST
   -> fs-provider child
-  -> openat/read/write/list
+  -> openat/read/list
 ```
 
-公开 API 可以是用户自己定义的 `readText()`、`writeJson()`、`list()`，平台不固定 Node `fs` 兼容层。Provider 必须将用户路径视为
-不可信输入，并按 operator grant 限制根目录、读写权限、单文件大小、总流量和并发。
+fixture 只提供 `list(path)` 和 `read(path)`：目录列表覆盖 unary 调用，文件读取覆盖 stream、backpressure、abort 和大小限制。固定测试树
+包含普通文件、嵌套目录、大文件和指向授权根目录外的 symlink。Provider 必须将用户路径视为不可信输入，并按 operator grant 限制
+只读根目录、单文件大小、总流量和并发；绝对路径、`..`、symlink escape、未知路径和超限读取必须稳定失败。
+
+fixture 不实现 write、delete、watch、文件元数据全集或 Node `fs` 兼容层。它只证明 package、grant、两层 schema、unary/stream、路径
+containment、Provider 生命周期和版本升级的通用机制；其他文件系统业务 API 由用户扩展自行定义。
 
 Day 1 Native Provider 属于 operator-trusted code：manifest/grant 约束 Worker 能请求什么，不构成对恶意 Provider 的 OS sandbox。
 如果正式文件系统 Provider 需要平台可验证的目录 containment，`ocd` 应打开根目录并通过受控 descriptor handoff 授予 Provider，或使用
@@ -396,6 +400,9 @@ Day 1 Native Provider 属于 operator-trusted code：manifest/grant 约束 Worke
 宣布强 containment 前完成。
 
 ## 12. macOS XPC 扩展示例
+
+本节只说明相同 Provider 机制如何承载 macOS XPC，不是跨平台测试 fixture，也不是 W3 完成条件。真实 XPC 验证可以在后续 macOS-only
+qualification 中独立执行，不能阻塞其他正式目标或 workspace Gate。
 
 用户可以提供签名的 Swift/Objective-C/Rust Provider：
 
@@ -508,8 +515,11 @@ Day 1 不实现：
 4. **direct data plane**：Broker 授权、per-session socketpair、fd-backed capability、Provider attach/ACK、revoke 与 FD limits；
 5. **workerd bridge**：`HostExtensionFactory`、`HostExtensionPort`、Broker control fd、direct `TwoPartyClient`、Loader 委派、GC/abort/eviction；
 6. **Extension Worker target**：精确版本装载、原生 Service RPC stub、独立 env/limits；
-7. **reference extension**：一个文件系统 provider + facade 证明用户 package、两层 schema、unary/stream、权限、重启和升级全链路；
-8. **macOS qualification**：独立 XPC Provider 证明签名 binary、Mach service、拒绝、interrupt、restart 和系统权限边界。
+7. **reference extension**：一个只读文件系统 provider + facade 证明用户 package、两层 schema、unary/stream、路径 containment、重启和
+   升级全链路。
+
+macOS XPC Provider 不属于上述实施主线。需要验证真实 XPC 集成时，另做 macOS-only qualification，覆盖签名 binary、Mach service、
+拒绝、interrupt、restart 和系统权限边界。
 
 Rust ownership 遵守现有 crate 方向：storage 持久化 authority；workers 拥有 immutable descriptor/runtime snapshot；runtime 拥有 workerd binary
 与 supervisor 低层原语；service 组合 package、grant、Provider Manager 和私有 Broker。TypeScript facade/loader 在 `packages/runtime/`；workerd
@@ -530,9 +540,11 @@ JSG/Cap'n Proto 修改只在 `third_party/workerd/`。
 - workerd restart、`ocd` restart、extension upgrade、drain 和删除不泄漏进程、fd、socket、临时目录或 pin；
 - malicious path/schema/frame/stderr 不泄漏宿主路径、payload、secret 或拓扑；
 - active Provider 上限和单 Provider overload 不影响普通 Worker及其他 Provider；
-- 文件系统 reference extension 覆盖 traversal、symlink/race、读写权限、大文件 stream 和崩溃恢复；
-- macOS XPC qualification 覆盖签名/entitlement 不足、unknown service、interrupt/invalidate、Provider restart 和真实成功调用；
+- 只读文件系统 reference extension 覆盖目录 unary、文件 stream、traversal、symlink/race、读取限制和崩溃恢复；
 - 正式 fork commit、四平台 workerd archive/digest、compatibility date/flags、single-binary offline startup 和完整产品 Gate 协调更新。
+
+可选的 macOS XPC qualification 可以覆盖签名/entitlement 不足、unknown service、interrupt/invalidate、Provider restart 和真实成功调用；
+其缺失不影响 W3 完成声明。
 
 文档阶段只运行文档检查；实现涉及安全、协议、持久化、process lifecycle 和 workerd fork，最终必须按仓库规则完成对应 focused coverage、
 真实 runtime Gate 和一次完整 workspace Gate。
