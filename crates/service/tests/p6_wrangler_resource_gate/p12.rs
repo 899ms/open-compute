@@ -330,10 +330,8 @@ async fn assert_project(
     environment: &str,
 ) {
     let request = Request::builder()
-        .uri(format!(
-            "http://{}/__workers/{}/{script}/probe",
-            fixture.public_addr, fixture.internal_account
-        ))
+        .uri(format!("http://{}/probe", fixture.public_addr))
+        .header("host", worker_host(&fixture.internal_account, script))
         .body(Body::empty())
         .unwrap();
     let response = client.request(request).await.unwrap();

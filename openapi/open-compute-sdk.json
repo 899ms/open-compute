@@ -44493,15 +44493,30 @@
         "additionalProperties": false,
         "required": [
           "id",
-          "path",
+          "kind",
+          "url",
+          "scope",
           "created_on"
         ],
         "properties": {
           "id": {
             "type": "string"
           },
-          "path": {
-            "type": "string"
+          "kind": {
+            "type": "string",
+            "enum": [
+              "local_origin"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "local_machine"
+            ]
           },
           "created_on": {
             "type": "string",

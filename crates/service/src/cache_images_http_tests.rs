@@ -130,9 +130,33 @@ request_timeout_ms = 1000
         .unwrap()
         .public_id()
         .to_owned();
-    let app = crate::http::admin_router(state);
     let worker_endpoints =
         format!("/client/v4/accounts/{public_account}/open-compute/workers/cache-worker/endpoints");
+    let unavailable = crate::http::admin_router(
+        state
+            .clone()
+            .with_local_origin_addr("0.0.0.0:4321".parse().unwrap()),
+    )
+    .oneshot(
+        Request::builder()
+            .uri(&worker_endpoints)
+            .header(header::AUTHORIZATION, "Bearer read-token")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(
+            &to_bytes(unavailable.into_body(), 64 * 1024).await.unwrap()
+        )
+        .unwrap()["result"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let state = state.with_local_origin_addr("127.0.0.1:4321".parse().unwrap());
+    let app = crate::http::admin_router(state);
     let durable_objects =
         format!("/client/v4/accounts/{public_account}/open-compute/durable-objects");
     let mut public_namespace = None;
@@ -215,6 +239,15 @@ request_timeout_ms = 1000
             serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap())
                 .unwrap();
         assert_eq!(value["success"], true, "{path}");
+        if path.ends_with("/endpoints") {
+            assert_eq!(value["result"][0]["kind"], "local_origin");
+            assert_eq!(value["result"][0]["scope"], "local_machine");
+            assert_eq!(
+                value["result"][0]["url"],
+                format!("http://cache-worker.{account}.localhost:4321/")
+            );
+            assert!(value["result"][0].get("path").is_none());
+        }
         if path == durable_objects {
             assert_eq!(value["result"].as_array().unwrap().len(), 1);
             assert_eq!(value["result"][0]["class_name"], "CacheObject");

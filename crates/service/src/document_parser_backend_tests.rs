@@ -527,7 +527,7 @@ async fn parser_process_accepts_bounded_stderr_and_rejects_spawn_exit_and_timeou
     };
     let clean = script("clean.sh", "#!/bin/sh\nprintf ok\n");
     assert_eq!(
-        run_parser_child(&clean, Vec::new(), Duration::from_secs(10), 128, 0, 0)
+        process::run_parser_child_path(&clean, Vec::new(), Duration::from_secs(10), 128, 0, 0)
             .await
             .unwrap(),
         b"ok"
@@ -535,7 +535,7 @@ async fn parser_process_accepts_bounded_stderr_and_rejects_spawn_exit_and_timeou
 
     let stderr = script("stderr.sh", "#!/bin/sh\nprintf diagnostic >&2\n");
     assert_eq!(
-        run_parser_child(&stderr, Vec::new(), Duration::from_secs(10), 128, 0, 0)
+        process::run_parser_child_path(&stderr, Vec::new(), Duration::from_secs(10), 128, 0, 0)
             .await
             .unwrap(),
         b""
@@ -545,21 +545,23 @@ async fn parser_process_accepts_bounded_stderr_and_rejects_spawn_exit_and_timeou
         "#!/bin/sh\nprintf 0123456789abcdef >&2\nprintf ok\n",
     );
     assert_eq!(
-        run_parser_child(&noisy, Vec::new(), Duration::from_secs(10), 8, 0, 0).await,
+        process::run_parser_child_path(&noisy, Vec::new(), Duration::from_secs(10), 8, 0, 0).await,
         Err(ErrorCode::DocumentProcessFailed)
     );
     let failed = script("failed.sh", "#!/bin/sh\nexit 7\n");
     assert_eq!(
-        run_parser_child(&failed, Vec::new(), Duration::from_secs(10), 128, 0, 0).await,
+        process::run_parser_child_path(&failed, Vec::new(), Duration::from_secs(10), 128, 0, 0)
+            .await,
         Err(ErrorCode::DocumentProcessFailed)
     );
     let sleeping = script("sleep.sh", "#!/bin/sh\n/bin/sleep 5\n");
     assert_eq!(
-        run_parser_child(&sleeping, Vec::new(), Duration::from_millis(10), 128, 0, 0,).await,
+        process::run_parser_child_path(&sleeping, Vec::new(), Duration::from_millis(10), 128, 0, 0)
+            .await,
         Err(ErrorCode::DocumentTimeout)
     );
     assert_eq!(
-        run_parser_child(
+        process::run_parser_child_path(
             &temporary.path().join("missing"),
             Vec::new(),
             Duration::from_secs(10),
@@ -650,34 +652,11 @@ async fn parser_process_preserves_exit_and_resource_signal_classification() {
     }
 }
 
-#[tokio::test]
-async fn parser_output_collection_classifies_reader_failures() {
-    async fn reader_panic() -> (Vec<u8>, bool) {
-        panic!("reader fixture");
-    }
-    let success = || tokio::spawn(async { (Vec::new(), true) });
-    let stdout = process::collect_output(tokio::spawn(reader_panic()), success())
-        .await
-        .unwrap_err();
-    assert_eq!(stdout.kind(), process::ParserFailureKind::OutputIo);
-    let stderr = process::collect_output(success(), tokio::spawn(reader_panic()))
-        .await
-        .unwrap_err();
-    assert_eq!(stderr.kind(), process::ParserFailureKind::OutputIo);
-    let read_error = tokio::spawn(async { (Vec::new(), false) });
-    let failure = process::collect_output(read_error, success())
-        .await
-        .unwrap_err();
-    assert_eq!(failure.kind(), process::ParserFailureKind::OutputIo);
-}
-
 #[test]
 fn parser_process_failure_labels_are_stable_and_exhaustive() {
     for (kind, label) in [
         (process::ParserFailureKind::Spawn, "spawn"),
-        (process::ParserFailureKind::Stream, "stream"),
         (process::ParserFailureKind::InputIo, "input_io"),
-        (process::ParserFailureKind::WaitIo, "wait_io"),
         (process::ParserFailureKind::OutputIo, "output_io"),
         (process::ParserFailureKind::TimedOut, "timeout"),
         (process::ParserFailureKind::ProcessExited, "process_exit"),

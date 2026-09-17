@@ -62,19 +62,11 @@ async fn workflow_ocd_sigkill_after_step_commit_replays_without_callback() {
             now(),
         )
         .unwrap();
-    workers
-        .create_exact_route(
-            account,
-            caller.worker_id,
-            "workflow.example",
-            "/",
-            None,
-            Some(caller.version_id),
-            RequestId::generate(),
-            now(),
-            1_000_000,
-        )
-        .unwrap();
+    let host = workers
+        .list_routes(account, caller.worker_id)
+        .unwrap()
+        .remove(0)
+        .hostname_ascii;
     harness.quiesce().await;
     let mock = harness.mock.clone();
     let evidence = Evidence(harness.temp.take());
@@ -91,7 +83,7 @@ async fn workflow_ocd_sigkill_after_step_commit_replays_without_callback() {
             .build_http();
     let mut process = spawn(&config, &log);
     ready(&client, admin, &mut process).await;
-    let create = tenant_json(&client, public, "/create/crash-instance").await;
+    let create = tenant_json(&client, public, &host, "/create/crash-instance").await;
     assert_eq!(create["id"], "crash-instance", "{create}");
     let connection = rusqlite::Connection::open_with_flags(
         data.join("scheduler.sqlite"),
@@ -115,7 +107,7 @@ async fn workflow_ocd_sigkill_after_step_commit_replays_without_callback() {
     ready(&client, admin, &mut process).await;
     let deadline = Instant::now() + Duration::from_secs(45);
     let status = loop {
-        let status = tenant_json(&client, public, "/status/crash-instance").await;
+        let status = tenant_json(&client, public, &host, "/status/crash-instance").await;
         if status["status"] == "complete" {
             break status;
         }

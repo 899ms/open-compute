@@ -15,7 +15,7 @@ const WORKFLOW_NAME: &str = "wrangler-runtime-gate-flow";
 const FIXTURE_SECRET: &str = "wrangler-runtime-gate-secret";
 
 pub(super) async fn exercise(
-    app: axum::Router,
+    state: HttpState,
     storage: Arc<PlatformStorage>,
     account: open_compute_core::AccountId,
     public_account: &str,
@@ -23,7 +23,10 @@ pub(super) async fn exercise(
 ) {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let traced = requests.clone();
-    let app = app.layer(middleware::from_fn(
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let origin = format!("http://{address}");
+    let app = merged_router(state.with_local_origin_addr(address)).layer(middleware::from_fn(
         move |request: axum::extract::Request, next: middleware::Next| {
             let traced = traced.clone();
             async move {
@@ -35,8 +38,6 @@ pub(super) async fn exercise(
             }
         },
     ));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let origin = format!("http://{}", listener.local_addr().unwrap());
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
     let server = tokio::spawn(async move {
         axum::serve(listener, app)
@@ -148,13 +149,16 @@ async fn verify_project(
     );
     assert_worker_response(origin, account, 42).await;
 
-    let upload_url = format!("{origin}/__workers/{account}/{WORKER_NAME}/upload");
+    let upload_url = format!("{origin}/upload");
     let client: Client<HttpConnector, Body> =
         Client::builder(TokioExecutor::new()).build(HttpConnector::new());
     for declared in [true, false] {
         for size in [16 * 1024, 32 * 1024, 32 * 1024 + 1] {
             let payload = vec![b'u'; size];
-            let mut request = Request::builder().method("POST").uri(&upload_url);
+            let mut request = Request::builder()
+                .method("POST")
+                .uri(&upload_url)
+                .header("host", format!("{WORKER_NAME}.{account}.localhost"));
             if declared {
                 request = request.header(header::CONTENT_LENGTH, size);
             }
@@ -364,11 +368,7 @@ async fn verify_project(
         line.starts_with("POST ") && line.contains("/versions?bindings_inherit=strict")
     }));
     assert!(trace.iter().any(|line| line.contains("/deployments")));
-    assert!(
-        trace
-            .iter()
-            .all(|line| line.contains(" /client/v4/") || line.contains(" /__workers/"))
-    );
+    assert!(trace.iter().all(|line| !line.contains("/__workers/")));
 }
 
 fn write_project(project: &Path, account_id: &str, wrangler: &Path) {
@@ -545,10 +545,15 @@ fn json_output(output: &Output) -> serde_json::Value {
 }
 
 async fn assert_worker_response(origin: &str, account: open_compute_core::AccountId, answer: u64) {
-    let url = format!("{origin}/__workers/{account}/{WORKER_NAME}/hello");
+    let url = format!("{origin}/hello");
     let client: Client<HttpConnector, Body> =
         Client::builder(TokioExecutor::new()).build(HttpConnector::new());
-    let response = client.get(url.parse().unwrap()).await.unwrap();
+    let request = Request::builder()
+        .uri(url)
+        .header("host", format!("{WORKER_NAME}.{account}.localhost"))
+        .body(Body::empty())
+        .unwrap();
+    let response = client.request(request).await.unwrap();
     assert_eq!(response.status(), 200);
     let body = to_bytes(Body::new(response.into_body()), 64 * 1024)
         .await

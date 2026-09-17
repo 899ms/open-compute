@@ -1,21 +1,22 @@
 //! Isolated parser child lifecycle, resource fencing, and bounded protocol I/O.
 
-use open_compute_core::ErrorCode;
+use open_compute_core::{ErrorCode, Redactor};
 use open_compute_document_parser::MAX_OUTPUT_FRAME_BYTES;
-use rustix::process::{Pid, Signal, kill_process, kill_process_group};
+use open_compute_runtime::{HostProcessSpec, VerifiedLaunchImage, run_host_process};
 use sha2::{Digest as _, Sha256};
+use std::ffi::OsString;
 use std::fs::DirBuilder;
+#[cfg(test)]
+use std::fs::File;
 use std::os::unix::fs::DirBuilderExt as _;
-use std::os::unix::process::{CommandExt as _, ExitStatusExt};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Stdio};
+use std::process::ExitStatus;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-use tokio::process::Command;
 use uuid::Uuid;
 
 pub(super) async fn run_parser_child(
-    executable: &Path,
+    executable: &VerifiedLaunchImage,
     frame: Vec<u8>,
     deadline: Duration,
     max_stderr: usize,
@@ -23,7 +24,7 @@ pub(super) async fn run_parser_child(
     max_cpu_seconds: u64,
 ) -> Result<Vec<u8>, ErrorCode> {
     let working_dir = ParserWorkingDirectory::create()?;
-    match run_parser_child_inner(
+    match run_parser_image(
         executable,
         frame,
         deadline,
@@ -69,35 +70,11 @@ impl Drop for ParserWorkingDirectory {
     }
 }
 
-struct ParserProcessGuard {
-    pid: Option<i32>,
-    armed: bool,
-}
-
-impl ParserProcessGuard {
-    fn new(pid: Option<i32>) -> Self {
-        Self { pid, armed: true }
-    }
-
-    fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-impl Drop for ParserProcessGuard {
-    fn drop(&mut self) {
-        if self.armed {
-            kill_parser_group(self.pid);
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ParserFailureKind {
+    #[cfg(test)]
     Spawn,
-    Stream,
     InputIo,
-    WaitIo,
     OutputIo,
     TimedOut,
     ProcessExited,
@@ -108,10 +85,9 @@ pub(super) enum ParserFailureKind {
 impl ParserFailureKind {
     pub(super) const fn as_str(self) -> &'static str {
         match self {
+            #[cfg(test)]
             Self::Spawn => "spawn",
-            Self::Stream => "stream",
             Self::InputIo => "input_io",
-            Self::WaitIo => "wait_io",
             Self::OutputIo => "output_io",
             Self::TimedOut => "timeout",
             Self::ProcessExited => "process_exit",
@@ -180,11 +156,11 @@ impl ParserChildFailure {
             ParserFailureKind::ProcessExited
             | ParserFailureKind::StdoutLimit
             | ParserFailureKind::StderrLimit => ErrorCode::DocumentProcessFailed,
-            ParserFailureKind::Spawn
-            | ParserFailureKind::Stream
-            | ParserFailureKind::InputIo
-            | ParserFailureKind::WaitIo
-            | ParserFailureKind::OutputIo => ErrorCode::DocumentUnavailable,
+            ParserFailureKind::InputIo | ParserFailureKind::OutputIo => {
+                ErrorCode::DocumentUnavailable
+            }
+            #[cfg(test)]
+            ParserFailureKind::Spawn => ErrorCode::DocumentUnavailable,
         }
     }
 
@@ -203,11 +179,76 @@ impl ParserChildFailure {
 }
 
 #[derive(Debug)]
-pub(super) struct CapturedOutput {
+struct CapturedOutput {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
 }
 
+async fn run_parser_image(
+    executable: &VerifiedLaunchImage,
+    frame: Vec<u8>,
+    deadline: Duration,
+    max_stderr: usize,
+    max_address_space_bytes: u64,
+    max_cpu_seconds: u64,
+    working_dir: &Path,
+) -> Result<Vec<u8>, ParserChildFailure> {
+    let output = run_host_process(
+        executable,
+        HostProcessSpec {
+            args: vec![
+                OsString::from("__document-parser-v1"),
+                OsString::from(max_address_space_bytes.to_string()),
+                OsString::from(max_cpu_seconds.to_string()),
+            ],
+            environment: vec![
+                (
+                    OsString::from("XBERG_CACHE_DIR"),
+                    working_dir.join("xberg-cache").into_os_string(),
+                ),
+                (
+                    OsString::from("LLVM_PROFILE_FILE"),
+                    OsString::from("/dev/null"),
+                ),
+            ],
+            working_directory: working_dir.to_owned(),
+            stdin: frame,
+            deadline,
+            max_stdout: MAX_OUTPUT_FRAME_BYTES,
+            max_stderr,
+            redactor: Redactor::new(),
+        },
+    )
+    .await
+    .map_err(|_| ParserChildFailure::empty(ParserFailureKind::OutputIo))?;
+    let captured = CapturedOutput {
+        stdout: output.stdout,
+        stderr: output.stderr,
+    };
+    let failure = if output.timed_out {
+        Some(ParserFailureKind::TimedOut)
+    } else if output.stdout_overflow {
+        Some(ParserFailureKind::StdoutLimit)
+    } else if output.stderr_overflow {
+        Some(ParserFailureKind::StderrLimit)
+    } else if output.stdin_error {
+        Some(ParserFailureKind::InputIo)
+    } else if output.status.is_none_or(|status| !status.success()) {
+        Some(ParserFailureKind::ProcessExited)
+    } else {
+        None
+    };
+    if let Some(kind) = failure {
+        return Err(ParserChildFailure::observed(
+            kind,
+            output.status.as_ref(),
+            &captured,
+        ));
+    }
+    Ok(captured.stdout)
+}
+
+#[cfg(test)]
 pub(super) async fn run_parser_child_inner(
     executable: &Path,
     frame: Vec<u8>,
@@ -217,144 +258,39 @@ pub(super) async fn run_parser_child_inner(
     max_cpu_seconds: u64,
     working_dir: &Path,
 ) -> Result<Vec<u8>, ParserChildFailure> {
-    let mut command = Command::new(executable);
-    command
-        .arg("__document-parser-v1")
-        .arg(max_address_space_bytes.to_string())
-        .arg(max_cpu_seconds.to_string())
-        .env_clear()
-        // Keep every upstream cache resolution inside the disposable sandbox.
-        // OCR result caching is disabled, so this directory must remain unused.
-        .env("XBERG_CACHE_DIR", working_dir.join("xberg-cache"))
-        // Keep compiler-inserted profiling runtimes from attempting a regular-file
-        // write after the child has installed its zero-byte file-size limit.
-        .env("LLVM_PROFILE_FILE", "/dev/null")
-        .current_dir(working_dir)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    command.as_std_mut().process_group(0);
-    let mut child = command
-        .spawn()
-        .map_err(|_| ParserChildFailure::empty(ParserFailureKind::Spawn))?;
-    let pid = child.id().and_then(|pid| i32::try_from(pid).ok());
-    let mut process_guard = ParserProcessGuard::new(pid);
-    let (Some(mut stdin), Some(stdout), Some(stderr)) =
-        (child.stdin.take(), child.stdout.take(), child.stderr.take())
-    else {
-        terminate_parser(&mut child, &mut process_guard).await;
-        return Err(ParserChildFailure::empty(ParserFailureKind::Stream));
-    };
-    let stdout_task = tokio::spawn(async move {
-        read_bounded(stdout, MAX_OUTPUT_FRAME_BYTES.saturating_add(1)).await
-    });
-    let stderr_task =
-        tokio::spawn(async move { read_bounded(stderr, max_stderr.saturating_add(1)).await });
-    let input_task = tokio::spawn(async move {
-        stdin.write_all(&frame).await?;
-        stdin.shutdown().await
-    });
-
-    let status = match tokio::time::timeout(deadline, child.wait()).await {
-        Ok(Ok(status)) => Some(status),
-        Ok(Err(_)) => {
-            terminate_parser(&mut child, &mut process_guard).await;
-            None
-        }
-        Err(_) => {
-            terminate_parser(&mut child, &mut process_guard).await;
-            let (output, _) = tokio::join!(collect_output(stdout_task, stderr_task), input_task);
-            let output = output?;
-            return Err(ParserChildFailure::observed(
-                ParserFailureKind::TimedOut,
-                None,
-                &output,
-            ));
-        }
-    };
-    process_guard.disarm();
-    let (output, input_result) = tokio::join!(collect_output(stdout_task, stderr_task), input_task);
-    let output = output?;
-    let input_ok = matches!(input_result, Ok(Ok(())));
-    let Some(status) = status else {
-        return Err(ParserChildFailure::observed(
-            ParserFailureKind::WaitIo,
-            None,
-            &output,
-        ));
-    };
-    if output.stdout.len() > MAX_OUTPUT_FRAME_BYTES {
-        return Err(ParserChildFailure::observed(
-            ParserFailureKind::StdoutLimit,
-            Some(&status),
-            &output,
-        ));
-    }
-    if output.stderr.len() > max_stderr {
-        return Err(ParserChildFailure::observed(
-            ParserFailureKind::StderrLimit,
-            Some(&status),
-            &output,
-        ));
-    }
-    if !status.success() {
-        return Err(ParserChildFailure::observed(
-            ParserFailureKind::ProcessExited,
-            Some(&status),
-            &output,
-        ));
-    }
-    if !input_ok {
-        return Err(ParserChildFailure::observed(
-            ParserFailureKind::InputIo,
-            Some(&status),
-            &output,
-        ));
-    }
-    Ok(output.stdout)
+    let file =
+        File::open(executable).map_err(|_| ParserChildFailure::empty(ParserFailureKind::Spawn))?;
+    run_parser_image(
+        &VerifiedLaunchImage::from_verified_file(file),
+        frame,
+        deadline,
+        max_stderr,
+        max_address_space_bytes,
+        max_cpu_seconds,
+        working_dir,
+    )
+    .await
 }
 
-async fn read_bounded(reader: impl tokio::io::AsyncRead + Unpin, limit: usize) -> (Vec<u8>, bool) {
-    let mut bytes = Vec::new();
-    let success = reader
-        .take(u64::try_from(limit).unwrap_or(u64::MAX))
-        .read_to_end(&mut bytes)
-        .await
-        .is_ok();
-    (bytes, success)
-}
-
-pub(super) async fn collect_output(
-    stdout_task: tokio::task::JoinHandle<(Vec<u8>, bool)>,
-    stderr_task: tokio::task::JoinHandle<(Vec<u8>, bool)>,
-) -> Result<CapturedOutput, ParserChildFailure> {
-    let (stdout, stderr) = tokio::join!(stdout_task, stderr_task);
-    let (stdout, stdout_ok) =
-        stdout.map_err(|_| ParserChildFailure::empty(ParserFailureKind::OutputIo))?;
-    let (stderr, stderr_ok) =
-        stderr.map_err(|_| ParserChildFailure::empty(ParserFailureKind::OutputIo))?;
-    let output = CapturedOutput { stdout, stderr };
-    if !stdout_ok || !stderr_ok {
-        return Err(ParserChildFailure::observed(
-            ParserFailureKind::OutputIo,
-            None,
-            &output,
-        ));
-    }
-    Ok(output)
-}
-
-async fn terminate_parser(child: &mut tokio::process::Child, guard: &mut ParserProcessGuard) {
-    kill_parser_group(guard.pid);
-    let _ = child.kill().await;
-    let _ = child.wait().await;
-    guard.disarm();
-}
-
-fn kill_parser_group(pid: Option<i32>) {
-    if let Some(pid) = pid.and_then(Pid::from_raw) {
-        let _ = kill_process_group(pid, Signal::KILL);
-        let _ = kill_process(pid, Signal::KILL);
-    }
+#[cfg(test)]
+pub(super) async fn run_parser_child_path(
+    executable: &Path,
+    frame: Vec<u8>,
+    deadline: Duration,
+    max_stderr: usize,
+    max_address_space_bytes: u64,
+    max_cpu_seconds: u64,
+) -> Result<Vec<u8>, ErrorCode> {
+    let working = ParserWorkingDirectory::create()?;
+    run_parser_child_inner(
+        executable,
+        frame,
+        deadline,
+        max_stderr,
+        max_address_space_bytes,
+        max_cpu_seconds,
+        working.path(),
+    )
+    .await
+    .map_err(|failure| failure.error_code())
 }

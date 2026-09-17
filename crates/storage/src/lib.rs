@@ -205,11 +205,12 @@ pub use vectorize::{
 pub use workers::{
     DeploymentRecord, DeploymentRuntimeAssessmentSummary, DeploymentSource,
     EffectiveResourceLimits, IdempotencyReservation, LOADER_SCHEMA_VERSION, NewVersion,
-    NewVersionProducts, ObservabilityAudit, RetentionCandidate, RouteKind, RouteRecord,
-    RouteSnapshot, SYSTEM_DASHBOARD_WORKER_NAME, StoredVersionSecret, SystemOwnedVersionKind,
+    NewVersionProducts, ObservabilityAudit, RetentionCandidate, RouteRecord, RouteSnapshot,
+    SYSTEM_DASHBOARD_WORKER_NAME, StoredVersionSecret, SystemOwnedVersionKind,
     SystemOwnedVersionRecord, UpdateWorkerObservabilitySettings, VersionContentKind, VersionRecord,
     VersionReferrer, VersionSnapshot, VersionState, WorkerDeleteIntent, WorkerObservabilityPatch,
     WorkerObservabilitySettings, WorkerOwnership, WorkerRecord, WorkerRepository,
+    local_worker_hostname,
 };
 pub use workflows::{
     WorkflowAppliedOperation, WorkflowBindingDescriptor, WorkflowBindingRecord, WorkflowDefinition,

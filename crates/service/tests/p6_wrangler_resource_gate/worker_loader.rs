@@ -639,12 +639,8 @@ async fn invoke(
     path: &str,
 ) -> (u16, Value) {
     let request = Request::builder()
-        .uri(format!(
-            "http://{}/__workers/{}/{script}/{}",
-            fixture.public_addr,
-            fixture.internal_account,
-            path.trim_start_matches('/')
-        ))
+        .uri(format!("http://{}{}", fixture.public_addr, path))
+        .header("host", worker_host(&fixture.internal_account, script))
         .body(Body::empty())
         .unwrap();
     let response = tokio::time::timeout(Duration::from_secs(30), client.request(request))

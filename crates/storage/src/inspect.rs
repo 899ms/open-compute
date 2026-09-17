@@ -215,7 +215,7 @@ pub fn inspect_control_inventory(db: &ControlDb) -> Result<ControlInventory, Pla
             )?,
             routes: query_count(
                 connection,
-                "SELECT COUNT(*) FROM worker_routes WHERE state = 'active'",
+                "SELECT COUNT(*) FROM worker_host_routes WHERE state = 'active'",
             )?,
             kv_namespaces: query_resource_count(connection, "kv_namespace")?,
             r2_buckets: query_resource_count(connection, "r2_bucket")?,

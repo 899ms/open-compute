@@ -51,7 +51,7 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
 
     // Accepted HTTP send is durable before the delayed consumer can claim it.
     assert_eq!(
-        request(&client, public, "/enqueue/chain", json!({})).await["accepted"],
+        request(&client, public, &fixture.host, "/enqueue/chain", json!({})).await["accepted"],
         true
     );
     assert_eq!(
@@ -91,7 +91,14 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
     crash(&mut process);
     process.restart(&config, &log);
     ready(&client, admin, &mut process).await;
-    request(&client, public, "/release-consumer/chain", json!({})).await;
+    request(
+        &client,
+        public,
+        &fixture.host,
+        "/release-consumer/chain",
+        json!({}),
+    )
+    .await;
     wait(&mut process, "redelivered consumer acknowledgement", || {
         (count(&database, "SELECT count(*) FROM queue_messages") == 0).then_some(())
     })
@@ -106,7 +113,14 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
             "SELECT count(*) FROM workflow_steps WHERE ordinal=0 AND error_code IS NOT NULL",
         ) > 0
         {
-            let diagnostic = request(&client, public, "/diagnostic/chain", json!({})).await;
+            let diagnostic = request(
+                &client,
+                public,
+                &fixture.host,
+                "/diagnostic/chain",
+                json!({}),
+            )
+            .await;
             panic!("product step failed before its commit: {diagnostic}");
         }
         assert!(
@@ -128,7 +142,7 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
     assert_eq!(fence.instance_id.to_string(), identity);
     assert_eq!(attempt.attempt, 1);
     assert_eq!(
-        request(&client, public, "/guards/chain", json!({})).await,
+        request(&client, public, &fixture.host, "/guards/chain", json!({})).await,
         json!({"id":"chain", "status":"running", "rolledBack": true, "rolledExists": false, "created": "from-object-chain"}),
     );
     assert_eq!(
@@ -167,22 +181,30 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
         ErrorCode::WorkflowRunStale
     );
     drop(store);
-    request(&client, public, "/release-workflow/chain", json!({})).await;
+    request(
+        &client,
+        public,
+        &fixture.host,
+        "/release-workflow/chain",
+        json!({}),
+    )
+    .await;
     let due: i64 = wait(&mut process, "durable sleep releases its run lease", || {
         database.query_row("SELECT s.due_at_ms FROM workflow_steps s JOIN workflow_instances i ON i.id=s.instance_id
             WHERE i.id=?1 AND s.kind='sleep' AND s.state='waiting' AND i.state='waiting' AND i.run_token IS NULL",
             [&identity], |r| r.get(0)).optional().unwrap()
     }).await;
-    request(&client, public, "/pause/chain", json!({})).await;
+    request(&client, public, &fixture.host, "/pause/chain", json!({})).await;
     request(
         &client,
         public,
+        &fixture.host,
         "/event/chain",
         json!({"type":"continue","payload":{"accepted":true}}),
     )
     .await;
     assert_eq!(count(&database, "SELECT count(*) FROM workflow_events"), 1);
-    request(&client, public, "/arm/chain", json!({})).await;
+    request(&client, public, &fixture.host, "/arm/chain", json!({})).await;
     assert!(
         p0_exit_support::now_ms() < due,
         "sleep must become due after the crash cut"
@@ -197,7 +219,7 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
     process.restart(&config, &log);
     ready(&client, admin, &mut process).await;
     assert_eq!(
-        request(&client, public, "/status/chain", json!({})).await["status"],
+        request(&client, public, &fixture.host, "/status/chain", json!({})).await["status"],
         "paused"
     );
     assert_eq!(count(&database, "SELECT count(*) FROM workflow_events"), 1);
@@ -239,7 +261,7 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
             .then_some(())
     })
     .await;
-    request(&client, public, "/resume/chain", json!({})).await;
+    request(&client, public, &fixture.host, "/resume/chain", json!({})).await;
     wait(
         &mut process,
         "Workflow completion after paused event recovery",
@@ -255,7 +277,7 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
         },
     )
     .await;
-    let status = request(&client, public, "/status/chain", json!({})).await;
+    let status = request(&client, public, &fixture.host, "/status/chain", json!({})).await;
     let output = &status["output"];
     assert_eq!(output["version"], "frozen");
     assert_eq!(output["callbacks"], 0);
@@ -279,7 +301,7 @@ async fn p2_chain_preserves_queue_handoff_frozen_workflow_and_due_work_across_si
     assert_eq!(output["products"]["object"]["count"], 1);
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
-        let effects = request(&client, public, "/effects/chain", json!({})).await;
+        let effects = request(&client, public, &fixture.host, "/effects/chain", json!({})).await;
         if effects["alarm"] == "done" {
             assert_eq!(effects["kv"], "frozen");
             assert_eq!(effects["r2"], "frozen");
@@ -420,11 +442,17 @@ fn grant(database: &Connection) -> Option<(WorkflowFence, WorkflowStepAttempt)> 
     }).optional().unwrap()
 }
 
-async fn request(client: &Client, address: SocketAddr, path: &str, body: Value) -> Value {
+async fn request(
+    client: &Client,
+    address: SocketAddr,
+    host: &str,
+    path: &str,
+    body: Value,
+) -> Value {
     let request = Request::builder()
         .method("POST")
         .uri(format!("http://{address}{path}"))
-        .header("host", "workflow.example")
+        .header("host", host)
         .header("content-type", "application/json")
         .body(Body::from(body.to_string()))
         .unwrap();

@@ -20,7 +20,11 @@ pub(super) async fn exercise_live_tail(
             .env("OPEN_COMPUTE_V4_ACCOUNT_ID", public_account)
             .env(
                 "OPEN_COMPUTE_P7_PUBLIC_URL",
-                format!("http://{public_addr}/__workers/{internal_account}/p6-wrangler-resource-gate/live-tail"),
+                format!(
+                    "http://{}:{}/live-tail",
+                    worker_host(internal_account, "p6-wrangler-resource-gate"),
+                    public_addr.port()
+                ),
             )
             .env("OPEN_COMPUTE_P7_SECRET", TAIL_SECRET)
             .env("HTTP_PROXY", "http://127.0.0.1:9")
@@ -241,7 +245,11 @@ pub(super) async fn exercise_tail(
             );
             let mut request = Request::builder()
                 .method(method)
-                .uri(format!("http://{public_addr}/__workers/{internal_account}/p6-wrangler-resource-gate/{path}?token={TAIL_SECRET}"))
+                .uri(format!("http://{public_addr}/{path}?token={TAIL_SECRET}"))
+                .header(
+                    "host",
+                    worker_host(internal_account, "p6-wrangler-resource-gate"),
+                )
                 .header("authorization", format!("Bearer {TAIL_SECRET}"))
                 .header("x-api-key", TAIL_SECRET);
             if let Some(value) = content_type {

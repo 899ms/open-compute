@@ -19,6 +19,7 @@ use open_compute_document_parser::{
     ParseSuccess, ParsedContentKind, VisionCandidate, decode_output_frame, encode_input_frame,
     markdown_conversion_formats, materialize_tessdata,
 };
+use open_compute_runtime::VerifiedLaunchImage;
 use open_compute_storage::{
     BuiltinBindingKind, PlatformStorage, VersionState, WorkerRepository, version_runtime_features,
 };
@@ -47,7 +48,7 @@ use crate::ai_provider::OpenAiVisionClient;
 pub struct DocumentParserBindingService {
     storage: Arc<PlatformStorage>,
     config: DocumentParserConfig,
-    executable: PathBuf,
+    executable: Arc<VerifiedLaunchImage>,
     tessdata_path: PathBuf,
     vlm_contract: Option<ResolvedVlmModelContract>,
     vlm: Option<OpenAiVisionClient>,
@@ -136,6 +137,7 @@ impl DocumentParserBindingService {
         ai: &AiConfig,
         executable: PathBuf,
     ) -> Result<Self, PlatformError> {
+        let executable = std::fs::File::open(executable).map_err(|_| unavailable())?;
         let tessdata_path =
             materialize_tessdata(storage.data_dir().root()).map_err(|_| unavailable())?;
         let vlm_contract = ai.resolve_default_vlm_model()?;
@@ -150,7 +152,7 @@ impl DocumentParserBindingService {
             global: Arc::new(Semaphore::new(config.max_concurrency as usize)),
             accounts: Mutex::new(HashMap::new()),
             versions: Mutex::new(HashMap::new()),
-            executable,
+            executable: Arc::new(VerifiedLaunchImage::from_verified_file(executable)),
             tessdata_path,
             vlm_contract,
             vlm,

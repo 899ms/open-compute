@@ -215,7 +215,9 @@ export type UpgradeCheck = {
 
 export type WorkerEndpoint = {
   readonly id: string;
-  readonly path: string;
+  readonly kind: "local_origin";
+  readonly url: string;
+  readonly scope: "local_machine";
   readonly created_on: string;
 };
 

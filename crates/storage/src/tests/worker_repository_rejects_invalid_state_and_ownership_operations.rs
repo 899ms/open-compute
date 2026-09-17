@@ -263,59 +263,12 @@ fn worker_repository_rejects_invalid_routes_retention_and_deletion() {
     );
     repo.promote(account, worker.id, promotable, None, request, 20)
         .unwrap();
+    let routes = repo.list_routes(account, worker.id).unwrap();
+    assert_eq!(routes.len(), 1);
     assert_eq!(
-        repo.create_exact_route(
-            account,
-            worker.id,
-            "conflict.example",
-            "/",
-            None,
-            Some(VersionId::generate()),
-            request,
-            21,
-            1_000_000,
-        )
-        .unwrap_err()
-        .code(),
-        ErrorCode::IdempotencyConflict
+        routes[0].hostname_ascii,
+        format!("state-matrix.{account}.localhost")
     );
-    let route = repo
-        .create_exact_route(
-            account,
-            worker.id,
-            "conflict.example",
-            "/",
-            None,
-            Some(promotable),
-            request,
-            22,
-            1_000_000,
-        )
-        .unwrap();
-    assert_eq!(
-        repo.create_exact_route(
-            account,
-            worker.id,
-            "conflict.example",
-            "/",
-            None,
-            Some(promotable),
-            request,
-            23,
-            1_000_000,
-        )
-        .unwrap_err()
-        .code(),
-        ErrorCode::RouteConflict
-    );
-    assert_eq!(
-        repo.delete_route(account, worker.id, "missing-route", request, 24)
-            .unwrap_err()
-            .code(),
-        ErrorCode::RouteNotFound
-    );
-    repo.delete_route(account, worker.id, &route.id, request, 25)
-        .unwrap();
 
     let invalid_state_fingerprint = [11; 32];
     repo.reserve_idempotency(

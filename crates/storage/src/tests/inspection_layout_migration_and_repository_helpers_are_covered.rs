@@ -78,8 +78,8 @@ fn inspection_layout_migration_and_repository_helpers_are_covered() {
     assert!(crate::ControlDb::open(Path::new("/"), 100).is_err());
 
     use crate::workers::{
-        array32, db_error, idempotency_ref_id, invariant, route_not_found, validate_exact_route,
-        validate_referrer, validate_worker_name, version_not_found, worker_not_found,
+        array32, db_error, idempotency_ref_id, invariant, route_not_found, validate_referrer,
+        validate_worker_name, version_not_found, worker_not_found,
     };
     for state in [
         VersionState::Staging,
@@ -92,15 +92,6 @@ fn inspection_layout_migration_and_repository_helpers_are_covered() {
         assert_eq!(VersionState::parse(state.as_str()).unwrap(), state);
     }
     assert!(VersionState::parse("bad").is_err());
-    assert_eq!(
-        crate::RouteKind::parse("platform_path").unwrap(),
-        crate::RouteKind::PlatformPath
-    );
-    assert_eq!(
-        crate::RouteKind::parse("exact_host").unwrap(),
-        crate::RouteKind::ExactHost
-    );
-    assert!(crate::RouteKind::parse("bad").is_err());
     for valid in ["a", "worker-1"] {
         validate_worker_name(valid).unwrap();
     }
@@ -110,17 +101,12 @@ fn inspection_layout_migration_and_repository_helpers_are_covered() {
     validate_referrer("route", "host/path:one").unwrap();
     assert!(validate_referrer("", "id").is_err());
     assert!(validate_referrer("kind", "bad value").is_err());
-    validate_exact_route("example.com", "/path", Some("handler_1$")).unwrap();
-    for (host, path, entrypoint) in [
-        ("", "/", None),
-        ("UPPER.example", "/", None),
-        ("example.com", "relative", None),
-        ("example.com", "/bad?query", None),
-        ("example.com", "/", Some("bad-name")),
-    ] {
-        assert!(validate_exact_route(host, path, entrypoint).is_err());
-    }
     let account = AccountId::generate();
+    assert_eq!(
+        crate::local_worker_hostname(account, "worker-1").unwrap(),
+        format!("worker-1.{account}.localhost")
+    );
+    assert!(crate::local_worker_hostname(account, "Upper").is_err());
     assert_eq!(idempotency_ref_id(account, "scope", "key").len(), 64);
     assert!(array32(&[0_u8; 32]).is_ok());
     assert!(array32(&[0_u8; 31]).is_err());

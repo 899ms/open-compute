@@ -151,8 +151,8 @@ HTTP 字段；S3 provider 自行补入的默认 header 不成为 R2 用户 metad
 
 ### 租户请求体预算
 
-控制面已注册路由的 4 KiB（v4 为 64 MiB）声明长度检查不作用于 tenant ingress fallback，
-包括 `/__workers/` 和自定义域名路由。租户 body 始终由 `WorkerdTransport` 按
+控制面已注册路由的 4 KiB（v4 为 64 MiB）声明长度检查不作用于 Host-first tenant ingress。
+租户 body 始终由 `WorkerdTransport` 按
 固定的 `100000000` bytes 流式限额，旧 `workers.max_request_body_bytes` 配置已删除。
 这个十进制 100 MB 值来自 [Cloudflare account-plan 请求大小最低 baseline](https://developers.cloudflare.com/workers/platform/limits/#request-and-response-limits)，
 不代表复刻商业 plan。声明长度与 chunked overflow 的 413 定向回归已在缩小预算下通过；生产 100 MB 边界、最终
@@ -161,6 +161,14 @@ stock-workerd/Wrangler Gate 与 hosted differential 尚未通过，不能把配�
 现有 30 秒 host response-header deadline 仍是尚未资格化的本地 transport policy，其失败归类为
 runtime unavailable，不宣称执行 CPU limit 或产生 `exceededCpu`。原生 limits、isolate 摘除、公开 API 与
 supervisor 自恢复已经资格化，见 [workerd W2](../implemented/w2-standard-limits.md)。
+
+### 本机 Worker origin
+
+tenant Worker 使用 `http://<worker>.<account-id>.localhost:<port>/` 的 exact-host origin，path 从 `/` 开始。它与 Cloudflare
+[`workers.dev`](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
+`<worker>.<account-subdomain>.workers.dev` 的 Worker/account host identity 同形，但 `.localhost`、本机 HTTP、单机 SQLite authority
+和只在 loopback listener 可达时发布 endpoint 都是自托管拓扑差异，不宣称提供 Cloudflare 公共 DNS、TLS、preview URL 或全球路由。
+Host-first dispatch、canonical authority 拒绝、V5→V6 route migration、endpoint OpenAPI/SDK shape 和真实进程调用均有回归覆盖。
 
 ### 固定客户端的 Worker upload wire
 

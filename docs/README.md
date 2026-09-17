@@ -13,6 +13,13 @@
 已完成文档保留实现职责、关键边界和实际验收结果；重复规则引用权威入口，不再保留实施过程、独立结果副本或废弃方案比较。
 历史 PASS 不代表当前工作树已验收；必须原样保留的生成报告会单独标明。
 
+## 本次完成
+
+| 文档                                                                 | 当前状态                                                                                                    |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [P17 宿主子进程管理基础设施](p17-host-process-infrastructure.md)     | 已实现 verified launch、显式进程边界和统一 TERM/KILL/reap；Xberg 已迁移到 runtime owner                     |
+| [R0 Worker `.localhost` Origin 重构](r0-localhost-worker-origins.md) | 已实现 hostname claim、Worker typed route、Host-first ingress 与 `local_origin` endpoint，GitHub `#90` 完成 |
+
 ## 待实施
 
 | 文档                                                                               | 当前状态                                                                                                                                                                                                               |
@@ -23,8 +30,6 @@
 | [workerd W1 Worker Loader](implemented/w1-native-limits-loader.md)                 | 已完成并固定三个正式平台；macOS Intel 仅支持手动编译                                                                                                                                                                   |
 | [workerd W3 用户可扩展原生 Binding](workerd/w3-user-extensible-native-bindings.md) | Day 1 Extension Worker + `ocd` 托管 Provider、Cap'n Proto Broker 控制面、FD 直连数据面与两层 schema 合同完成；待实现 package/grant authority、workerd bridge、Provider lifecycle 与文件系统/XPC 资格                   |
 | [I42–67 GitHub open issues 剩余实施批次](implemented/i42-67-github-open-issues.md) | 已完成 `#66`、`#61`、`#62`、`#42`、`#58`，包含 Day1 实现、测试与 Cloudflare 兼容性检查                                                                                                                                 |
-| [R0 Worker `.localhost` Origin 重构](r0-localhost-worker-origins.md)               | blocked（GitHub `#90`）：等待 P17 实现并验收；随后建立全局 hostname claim、Worker typed route 与 Host-first ingress，以 `<worker>.<account>.localhost` origin 替换 tenant `platform_path`                              |
-| [P17 宿主子进程管理基础设施](p17-host-process-infrastructure.md)                   | Day 1 三层架构完成：通用 Host Process Runtime、composition-root Process Coordinator、独立 Domain Managers；待抽取现有 workerd/Xberg ownership，并供 Gateway、Extension Provider 与 Browser 复用                        |
 | [P18 单域名公网网关、DNS 与 TLS](p18-single-domain-public-gateway.md)              | Day 1 公网 Gateway 合同完成：复用 R0 hostname authority 与 P17 child ownership，只新增 wildcard DNS/TLS、pinned Caddy 和公网 binding lifecycle；待实现与真实 DNS/ACME 验收                                             |
 | [P19 Cloudflare Browser Run](p19-browser-run.md)                                   | Day 1 合同与单文件分发架构完成；`ocd` 内嵌压缩 Browser Runtime、首次使用时离线物化并完整监督；待 BR-G0 在 `chrome-headless-shell` 与 Obscura 中选择一个正式引擎                                                        |
 | [P20 Cloudflare Containers](p20-cloudflare-containers.md)                          | Day 1 合同与两阶段 provider 路线完成；短期依赖宿主 Docker + restricted Broker，长期以 BoxLite 或其他待 G0 的可嵌入 runtime + Docker 子集 shim 替换；受 dynamic DoHost/workerd attachment 与真实 engine/package G0 阻断 |

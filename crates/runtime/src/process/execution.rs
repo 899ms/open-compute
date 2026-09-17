@@ -10,7 +10,22 @@ pub(crate) async fn run_verified_fd(
 ) -> Result<BoundedOutput, PlatformError> {
     run_exec_hook();
     let image = exec_image(file)?;
-    run_image(&image, args, deadline, max_stdout, redactor, stdout_file).await
+    let args = args.iter().map(OsString::from).collect::<Vec<_>>();
+    run_image(
+        &image,
+        RunImageSpec {
+            args: &args,
+            deadline,
+            max_stdout,
+            max_stderr: MAX_STDERR,
+            redactor,
+            stdout_file,
+            working_directory: None,
+            environment: &[],
+            stdin_bytes: Vec::new(),
+        },
+    )
+    .await
 }
 
 #[allow(
@@ -29,24 +44,63 @@ pub(crate) async fn run_verified_fd_with_lease(
 ) -> Result<BoundedOutput, PlatformError> {
     run_exec_hook();
     let image = exec_image_with_lease(file, lease_path, binary_sha256)?;
-    run_image(&image, args, deadline, max_stdout, redactor, stdout_file).await
+    let args = args.iter().map(OsString::from).collect::<Vec<_>>();
+    run_image(
+        &image,
+        RunImageSpec {
+            args: &args,
+            deadline,
+            max_stdout,
+            max_stderr: MAX_STDERR,
+            redactor,
+            stdout_file,
+            working_directory: None,
+            environment: &[],
+            stdin_bytes: Vec::new(),
+        },
+    )
+    .await
 }
 
-async fn run_image(
+pub(super) struct RunImageSpec<'a> {
+    pub(super) args: &'a [OsString],
+    pub(super) deadline: Duration,
+    pub(super) max_stdout: usize,
+    pub(super) max_stderr: usize,
+    pub(super) redactor: &'a Redactor,
+    pub(super) stdout_file: Option<File>,
+    pub(super) working_directory: Option<&'a Path>,
+    pub(super) environment: &'a [(OsString, OsString)],
+    pub(super) stdin_bytes: Vec<u8>,
+}
+
+pub(super) async fn run_image(
     image: &ExecImage,
-    args: &[&str],
-    deadline: Duration,
-    max_stdout: usize,
-    redactor: &Redactor,
-    stdout_file: Option<File>,
+    spec: RunImageSpec<'_>,
 ) -> Result<BoundedOutput, PlatformError> {
+    let RunImageSpec {
+        args,
+        deadline,
+        max_stdout,
+        max_stderr,
+        redactor,
+        stdout_file,
+        working_directory,
+        environment,
+        stdin_bytes,
+    } = spec;
     let mut std_cmd = std::process::Command::new(&image.program);
     std::os::unix::process::CommandExt::process_group(&mut std_cmd, 0);
     std_cmd
-        .args(args.iter().copied().map(OsStr::new))
-        .stdin(Stdio::null())
+        .args(args)
+        .env_clear()
+        .envs(environment.iter().cloned())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(directory) = working_directory {
+        std_cmd.current_dir(directory);
+    }
     let child = std_cmd.spawn().map_err(|_| {
         PlatformError::new(ErrorCode::RuntimeInvalid, "failed to spawn runtime process")
     })?;
@@ -66,6 +120,7 @@ async fn run_image(
     }
     let stdout = owned.take_stdout();
     let stderr = owned.take_stderr();
+    let stdin = owned.child.as_mut().and_then(|child| child.stdin.take());
 
     let cancel = Arc::new(AtomicBool::new(false));
     let (done_tx, done_rx) = oneshot::channel();
@@ -90,8 +145,11 @@ async fn run_image(
                 owned,
                 stdout,
                 stderr,
+                stdin,
+                stdin_bytes,
                 stdout_file,
                 max_stdout,
+                max_stderr,
                 cancel: owner_cancel,
                 deadline_at,
                 hard_deadline,
@@ -240,8 +298,11 @@ pub(crate) struct OwnerWait {
     pub(crate) owned: OwnedChild,
     pub(crate) stdout: Option<std::process::ChildStdout>,
     pub(crate) stderr: Option<std::process::ChildStderr>,
+    pub(crate) stdin: Option<std::process::ChildStdin>,
+    pub(crate) stdin_bytes: Vec<u8>,
     pub(crate) stdout_file: Option<File>,
     pub(crate) max_stdout: usize,
+    pub(crate) max_stderr: usize,
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) deadline_at: std::time::Instant,
     pub(crate) hard_deadline: std::time::Instant,
@@ -294,8 +355,11 @@ pub(super) fn owner_wait(
         mut owned,
         stdout,
         stderr,
+        stdin,
+        stdin_bytes,
         mut stdout_file,
         max_stdout,
+        max_stderr,
         cancel,
         deadline_at,
         hard_deadline,
@@ -303,6 +367,8 @@ pub(super) fn owner_wait(
 ) -> Result<BoundedOutput, PlatformError> {
     let pid = owned.pid;
     let overflow = Arc::new(AtomicBool::new(false));
+    let stderr_overflow = Arc::new(AtomicBool::new(false));
+    let stdin_error = Arc::new(AtomicBool::new(false));
     let stdout_state = PipeState::new();
     let stderr_state = PipeState::new();
     let stream_to_file = stdout_file.is_some();
@@ -332,12 +398,13 @@ pub(super) fn owner_wait(
         })
     });
     let stderr_thread = stderr.map(|pipe| {
+        let overflow = stderr_overflow.clone();
         let state = stderr_state.done.clone();
         let error = stderr_state.error.clone();
         let bytes = stderr_state.bytes.clone();
         std::thread::spawn(move || {
             let _done = ReaderDoneGuard { done: state };
-            let result = read_stderr(pipe);
+            let result = read_stderr(pipe, max_stderr, &overflow);
             match result {
                 Ok(out) => {
                     *bytes
@@ -352,6 +419,21 @@ pub(super) fn owner_wait(
             }
         })
     });
+    let input_done = Arc::new(AtomicBool::new(false));
+    let input_thread = stdin.map(|mut pipe| {
+        let done = input_done.clone();
+        let error = stdin_error.clone();
+        std::thread::spawn(move || {
+            let _done = ReaderDoneGuard { done };
+            if pipe.write_all(&stdin_bytes).is_err() {
+                error.store(true, Ordering::SeqCst);
+            }
+        })
+    });
+    if input_thread.is_none() {
+        input_done.store(true, Ordering::SeqCst);
+        stdin_error.store(true, Ordering::SeqCst);
+    }
 
     let mut status = None;
     let mut timed_out = false;
@@ -383,8 +465,9 @@ pub(super) fn owner_wait(
         let cancelled = cancel.load(Ordering::SeqCst);
         let deadline_hit = now >= deadline_at;
         let group_live = process_group_live(pid);
-        let readers_done =
-            stdout_state.done.load(Ordering::SeqCst) && stderr_state.done.load(Ordering::SeqCst);
+        let readers_done = stdout_state.done.load(Ordering::SeqCst)
+            && stderr_state.done.load(Ordering::SeqCst)
+            && input_done.load(Ordering::SeqCst);
         let leader_exited = status.is_some();
         let stop_live = overflowed || cancelled || deadline_hit || outcome_err.is_some();
 
@@ -416,7 +499,7 @@ pub(super) fn owner_wait(
         std::thread::sleep(Duration::from_millis(10));
     }
 
-    if let Err(err) = join_readers(stdout_thread, stderr_thread, hard_deadline)
+    if let Err(err) = join_readers(stdout_thread, stderr_thread, input_thread, hard_deadline)
         && outcome_err.is_none()
     {
         outcome_err = Some(err);
@@ -458,6 +541,8 @@ pub(super) fn owner_wait(
         stderr: stderr_bytes,
         timed_out,
         stdout_overflow: overflow.load(Ordering::SeqCst),
+        stderr_overflow: stderr_overflow.load(Ordering::SeqCst),
+        stdin_error: stdin_error.load(Ordering::SeqCst),
         pid: Some(pid),
     })
 }
@@ -484,6 +569,7 @@ pub(super) fn reap_after_kill(
 pub(super) fn join_readers(
     stdout_thread: Option<std::thread::JoinHandle<()>>,
     stderr_thread: Option<std::thread::JoinHandle<()>>,
+    input_thread: Option<std::thread::JoinHandle<()>>,
     _hard_deadline: std::time::Instant,
 ) -> Result<(), PlatformError> {
     let mut panicked = false;
@@ -493,6 +579,11 @@ pub(super) fn join_readers(
         panicked = true;
     }
     if let Some(t) = stderr_thread
+        && t.join().is_err()
+    {
+        panicked = true;
+    }
+    if let Some(t) = input_thread
         && t.join().is_err()
     {
         panicked = true;
@@ -616,7 +707,11 @@ pub(super) fn finish_compile_stdout(file: &mut File) -> Result<(), PlatformError
     })
 }
 
-pub(super) fn read_stderr(mut pipe: std::process::ChildStderr) -> Result<Vec<u8>, PlatformError> {
+pub(super) fn read_stderr(
+    mut pipe: std::process::ChildStderr,
+    max_stderr: usize,
+    overflow: &AtomicBool,
+) -> Result<Vec<u8>, PlatformError> {
     let mut err = Vec::new();
     let mut tmp = [0u8; 4096];
     loop {
@@ -629,9 +724,13 @@ pub(super) fn read_stderr(mut pipe: std::process::ChildStderr) -> Result<Vec<u8>
         match pipe.read(&mut tmp) {
             Ok(0) => break,
             Ok(n) => {
-                if err.len() < MAX_STDERR {
-                    let take = (MAX_STDERR - err.len()).min(n);
+                let previous = err.len();
+                if err.len() < max_stderr {
+                    let take = (max_stderr - err.len()).min(n);
                     err.extend_from_slice(&tmp[..take]);
+                }
+                if previous.saturating_add(n) > max_stderr {
+                    overflow.store(true, Ordering::SeqCst);
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}

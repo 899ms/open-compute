@@ -137,9 +137,11 @@ async fn exercise_worker_binding(
     let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
         .build_http();
     let request = Request::builder()
-        .uri(format!(
-            "http://{public_addr}/__workers/{internal_account}/p6-wrangler-resource-gate/artifacts"
-        ))
+        .uri(format!("http://{public_addr}/artifacts"))
+        .header(
+            "host",
+            worker_host(internal_account, "p6-wrangler-resource-gate"),
+        )
         .body(Body::empty())
         .unwrap();
     let response = tokio::time::timeout(Duration::from_secs(15), client.request(request))

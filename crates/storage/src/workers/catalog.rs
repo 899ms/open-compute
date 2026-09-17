@@ -31,7 +31,7 @@ impl<'a> WorkerRepository<'a> {
         let worker_id = WorkerId::generate();
         let do_storage_id = Uuid::now_v7().to_string();
         let route_id = Uuid::now_v7().to_string();
-        let prefix = format!("/__workers/{account_id}/{name}/");
+        let hostname = local_worker_hostname(account_id, name)?;
         self.db.with_immediate(|tx| {
             require_account(tx, account_id)?;
             let live_count: i64 = tx
@@ -78,16 +78,22 @@ impl<'a> WorkerRepository<'a> {
             )
             .map_err(|_| db_error())?;
             tx.execute(
-                "INSERT INTO worker_routes
-                 (id, account_id, worker_id, kind, hostname_ascii, path_prefix,
-                  entrypoint, state, generation, created_at_ms, updated_at_ms, deleted_at_ms)
-                 VALUES (?1, ?2, ?3, 'platform_path', NULL, ?4, NULL,
-                         'active', 1, ?5, ?5, NULL)",
+                "INSERT INTO hostname_claims
+                 (id, hostname_ascii, account_id, namespace, exposure, state, generation,
+                  created_at_ms, updated_at_ms, deleted_at_ms)
+                 VALUES (?1, ?2, ?3, 'worker', 'local', 'active', 1, ?4, ?4, NULL)",
+                params![route_id, hostname, account_id.to_string(), now_ms],
+            )
+            .map_err(|_| db_error())?;
+            tx.execute(
+                "INSERT INTO worker_host_routes
+                 (id, claim_id, account_id, worker_id, path_prefix, entrypoint, state,
+                  generation, created_at_ms, updated_at_ms, deleted_at_ms)
+                 VALUES (?1, ?1, ?2, ?3, '/', NULL, 'active', 1, ?4, ?4, NULL)",
                 params![
                     route_id,
                     account_id.to_string(),
                     worker_id.to_string(),
-                    prefix,
                     now_ms
                 ],
             )
@@ -119,11 +125,11 @@ impl<'a> WorkerRepository<'a> {
                 id: route_id.clone(),
                 account_id,
                 worker_id,
-                kind: RouteKind::PlatformPath,
-                hostname_ascii: None,
-                path_prefix: prefix.clone(),
+                hostname_ascii: hostname.clone(),
+                path_prefix: "/".to_owned(),
                 entrypoint: None,
                 generation: 1,
+                created_at_ms: now_ms,
             };
             Ok((worker, route))
         })

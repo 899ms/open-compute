@@ -694,9 +694,11 @@ function extensionSchemas() {
       running: nonNegativeInteger,
       capacity: nonNegativeInteger,
     }),
-    WorkerEndpoint: objectSchema(["id", "path", "created_on"], {
+    WorkerEndpoint: objectSchema(["id", "kind", "url", "scope", "created_on"], {
       id: string,
-      path: string,
+      kind: { type: "string", enum: ["local_origin"] },
+      url: { type: "string", format: "uri" },
+      scope: { type: "string", enum: ["local_machine"] },
       created_on: { type: "string", format: "date-time" },
     }),
     DurableObjectNamespace: objectSchema(["id", "script_name", "class_name"], {

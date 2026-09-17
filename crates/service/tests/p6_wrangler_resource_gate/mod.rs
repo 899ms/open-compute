@@ -48,6 +48,10 @@ const R2_NAME: &str = "resource-gate-r2";
 const QUEUE_NAME: &str = "resource-gate-queue";
 const WORKFLOW_NAME: &str = "resource-gate-workflow";
 
+fn worker_host(account: &str, worker: &str) -> String {
+    format!("{worker}.{account}.localhost")
+}
+
 mod fixed_wrangler_resource_commands_use_live_v4_authorities;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -568,27 +568,7 @@ pub struct VersionSnapshot {
     pub builtin_bindings: Vec<crate::VersionBuiltinBindingRecord>,
 }
 
-/// Route kind supported by P0.2.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RouteKind {
-    /// Platform-owned account/worker path.
-    PlatformPath,
-    /// Exact canonical hostname plus path prefix.
-    ExactHost,
-}
-
-impl RouteKind {
-    pub(crate) fn parse(value: &str) -> Result<Self, PlatformError> {
-        match value {
-            "platform_path" => Ok(Self::PlatformPath),
-            "exact_host" => Ok(Self::ExactHost),
-            _ => Err(invariant()),
-        }
-    }
-}
-
-/// Active route metadata.
+/// Active local-hostname route metadata.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RouteRecord {
@@ -598,16 +578,16 @@ pub struct RouteRecord {
     pub account_id: AccountId,
     /// Target Worker.
     pub worker_id: WorkerId,
-    /// Route kind.
-    pub kind: RouteKind,
     /// Canonical exact hostname.
-    pub hostname_ascii: Option<String>,
+    pub hostname_ascii: String,
     /// Canonical path prefix.
     pub path_prefix: String,
     /// Optional named entrypoint.
     pub entrypoint: Option<String>,
     /// Route generation at creation/update.
     pub generation: u64,
+    /// Route creation time.
+    pub created_at_ms: i64,
 }
 
 /// Frozen route and active version identity for one request.

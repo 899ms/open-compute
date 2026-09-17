@@ -64,14 +64,7 @@ pub(super) async fn api_matrix(
         .with_workflow_api(Some(workflow_api));
     let (state, public_account) =
         open_compute_service::cloudflare_v4_for_test(state, storage.clone());
-    wrangler::exercise(
-        merged_router(state),
-        storage,
-        account,
-        &public_account,
-        WRANGLER_TOKEN,
-    )
-    .await;
+    wrangler::exercise(state, storage, account, &public_account, WRANGLER_TOKEN).await;
 }
 
 fn token_reference(path: &Path, value: &str) -> SecretReference {

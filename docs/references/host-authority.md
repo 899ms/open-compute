@@ -27,7 +27,7 @@ Worker | R2 | another explicit HTTP product
 - 自动生成的 Worker origin 和公开 bucket origin 绑定 `/`，因此该 origin 的全部 path 归属同一 target；
 - SQLite 是 authority；Gateway config、runtime memory、endpoint response 和 SDK model 都只是 projection。
 
-R0 首先建立全局 hostname claim 和 Worker typed route，并把默认 Worker endpoint 从 `platform_path` 改为
+R0 已建立全局 hostname claim 和 Worker typed route，默认 Worker endpoint 为
 `<worker>.<account>.localhost`。后续公网 Gateway 和其他 HTTP 产品复用该 authority，不建立第二套 hostname registry、内存 route map
 或 Gateway-owned resource mapping。
 
@@ -58,8 +58,8 @@ deployment 建立本机可用状态。
 
 ## 实施归属
 
-- [R0 Worker `.localhost` Origin 重构](../r0-localhost-worker-origins.md)：首先落地 hostname claim、Worker typed route、Host-first
+- [R0 Worker `.localhost` Origin 重构](../r0-localhost-worker-origins.md)：已落地 hostname claim、Worker typed route、Host-first
   ingress 与 endpoint projection；
-- [P17 宿主子进程管理基础设施](../p17-host-process-infrastructure.md)：只提供 Gateway child 的通用 process ownership，不拥有路由；
+- [P17 宿主子进程管理基础设施](../p17-host-process-infrastructure.md)：提供 verified child 的通用 process ownership，不拥有路由；
 - [P18 单域名公网网关、DNS 与 TLS](../p18-single-domain-public-gateway.md)：复用 R0 authority，增加公网 DNS、TLS、Gateway transport
   与 public binding lifecycle。

@@ -6,7 +6,7 @@ use rustix::process::{
     Pid, Signal, getpgid, kill_process, kill_process_group, test_kill_process,
     test_kill_process_group,
 };
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs::{self, File};
 #[cfg(target_os = "macos")]
 use std::io::Seek;
@@ -39,8 +39,71 @@ pub struct BoundedOutput {
     pub timed_out: bool,
     /// True if stdout exceeded the configured bound.
     pub stdout_overflow: bool,
+    /// True if stderr exceeded the configured bound.
+    pub stderr_overflow: bool,
+    /// True if writing the complete stdin payload failed.
+    pub stdin_error: bool,
     /// Child PID that was waited, if spawn succeeded.
     pub pid: Option<i32>,
+}
+
+/// An already-opened executable whose identity was verified by its owning domain.
+#[derive(Debug)]
+pub struct VerifiedLaunchImage {
+    file: File,
+}
+
+impl VerifiedLaunchImage {
+    /// Transfer an already-opened, verified executable into the process runtime.
+    #[must_use]
+    pub const fn from_verified_file(file: File) -> Self {
+        Self { file }
+    }
+}
+
+/// Exact launch inputs for one bounded host child execution.
+#[derive(Debug)]
+pub struct HostProcessSpec {
+    /// Argument vector excluding argv[0].
+    pub args: Vec<OsString>,
+    /// Complete environment; the parent environment is always cleared.
+    pub environment: Vec<(OsString, OsString)>,
+    /// Private working directory selected by the owning domain.
+    pub working_directory: PathBuf,
+    /// Complete stdin payload written before the pipe is closed.
+    pub stdin: Vec<u8>,
+    /// Maximum lifetime before TERM/KILL/reap.
+    pub deadline: Duration,
+    /// Maximum captured stdout bytes.
+    pub max_stdout: usize,
+    /// Maximum captured stderr bytes.
+    pub max_stderr: usize,
+    /// Exact-value redactor applied to captured stderr.
+    pub redactor: Redactor,
+}
+
+/// Run one verified executable with explicit environment, cwd, stdio and lifecycle bounds.
+pub async fn run_host_process(
+    image: &VerifiedLaunchImage,
+    spec: HostProcessSpec,
+) -> Result<BoundedOutput, PlatformError> {
+    run_exec_hook();
+    let image = exec_image(&image.file)?;
+    run_image(
+        &image,
+        RunImageSpec {
+            args: &spec.args,
+            deadline: spec.deadline,
+            max_stdout: spec.max_stdout,
+            max_stderr: spec.max_stderr,
+            redactor: &spec.redactor,
+            stdout_file: None,
+            working_directory: Some(&spec.working_directory),
+            environment: &spec.environment,
+            stdin_bytes: spec.stdin,
+        },
+    )
+    .await
 }
 
 /// Keep-alive executable identity used for fd-based spawn.
@@ -562,9 +625,9 @@ fn process_helpers_fail_closed_on_absent_and_invalid_processes() {
     let pipe = PipeState::new();
     assert!(pipe.take_error().is_none());
     assert!(pipe.take_bytes().is_empty());
-    join_readers(None, None, std::time::Instant::now()).expect("no readers");
+    join_readers(None, None, None, std::time::Instant::now()).expect("no readers");
     let panicking = std::thread::spawn(|| panic!("reader failure"));
-    assert!(join_readers(Some(panicking), None, std::time::Instant::now()).is_err());
+    assert!(join_readers(Some(panicking), None, None, std::time::Instant::now()).is_err());
 
     let mut owned = OwnedChild {
         child: None,
