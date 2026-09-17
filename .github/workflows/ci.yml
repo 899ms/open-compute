@@ -135,6 +135,7 @@ jobs:
             *,sdk,*)
               bun run --filter @open-compute/sdk typecheck
               bun run --filter @open-compute/sdk test
+              bun run --filter @open-compute/sdk build
               bun packages/sdk/scripts/inspect-package.ts
               ;;
           esac

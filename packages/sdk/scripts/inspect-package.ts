@@ -90,6 +90,7 @@ const allowed = new Set([
   "package/dist/index.d.mts",
   "package/dist/client.d.ts",
   "package/dist/generated.d.ts",
+  "package/dist/artifacts.d.ts",
 ]);
 const unexpected = files.filter((file) => !allowed.has(file));
 if (unexpected.length > 0)
