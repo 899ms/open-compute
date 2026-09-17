@@ -221,6 +221,40 @@ async fn host_process_uses_explicit_cwd_environment_and_bounded_stdio() {
     assert!(!output.stdin_error);
 }
 
+#[tokio::test]
+async fn host_process_stops_when_stderr_exceeds_its_bound() {
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("stderr-overflow.sh");
+    fs::write(
+        &executable,
+        b"#!/bin/sh\nprintf 'diagnostic' >&2\nsleep 30\n",
+    )
+    .unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+    let image = VerifiedLaunchImage::from_verified_file(File::open(&executable).unwrap());
+    let started = std::time::Instant::now();
+    let output = run_host_process(
+        &image,
+        HostProcessSpec {
+            args: Vec::new(),
+            environment: Vec::new(),
+            working_directory: directory.path().to_owned(),
+            stdin: Vec::new(),
+            deadline: Duration::from_secs(5),
+            max_stdout: 0,
+            max_stderr: 4,
+            redactor: Redactor::new(),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(output.stderr, b"diag");
+    assert!(output.stderr_overflow);
+    assert!(!output.timed_out);
+    wait_reaped(output.pid.unwrap(), Duration::from_secs(2)).unwrap();
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn exec_image_materializes_verified_fd_and_drops_staging() {

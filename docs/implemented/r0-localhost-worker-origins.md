@@ -2,7 +2,7 @@
 
 状态：**implemented（2026-09-17）**。GitHub `#90` 对应的本机 Worker ingress 已从 tenant path 改为 exact-host origin。
 
-R0 是 [Host authority](references/host-authority.md) 的首个实现批次。它不依赖 P18 Gateway、DNS 或 TLS，也不修改 workerd。
+R0 是 [Host authority](../references/host-authority.md) 的首个实现批次。它不依赖 P18 Gateway、DNS 或 TLS，也不修改 workerd。
 
 ## 当前 Day 1 合同
 
@@ -74,7 +74,7 @@ vendor endpoint API 现在只返回当前 shape：
 route 的原子拒绝，以及 real-process Gate 使用 canonical local hostname 调用 Worker。Static Assets 和 workerd transport 继续复用既有真实
 runtime 覆盖；不增加 mount-prefix rewrite。
 
-Cloudflare 兼容结论记录在 [Cloudflare API 兼容性](references/cloudflare-compatibility.md) 和
-[P1 差异登记](references/p1-deviations.md)。
+Cloudflare 兼容结论记录在 [Cloudflare API 兼容性](../references/cloudflare-compatibility.md) 和
+[P1 差异登记](../references/p1-deviations.md)。
 
 返回[文档索引](README.md)。

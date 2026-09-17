@@ -29,6 +29,8 @@
 | P14 Cloudflare Artifacts | [p14-cloudflare-artifacts.md](p14-cloudflare-artifacts.md)                                                                                                                                                                                                                              |
 | P15 SQLite migrations    | [p15-sqlite-refinery-migrations.md](p15-sqlite-refinery-migrations.md)                                                                                                                                                                                                                  |
 | P16 TypeScript SDK       | [p16-capability-scoped-typescript-sdk.md](p16-capability-scoped-typescript-sdk.md)                                                                                                                                                                                                      |
+| P17 Host process         | [p17-host-process-infrastructure.md](p17-host-process-infrastructure.md)                                                                                                                                                                                                                |
+| R0 Worker local origin   | [r0-localhost-worker-origins.md](r0-localhost-worker-origins.md)                                                                                                                                                                                                                        |
 
 ## 工程与调查
 

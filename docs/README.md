@@ -13,13 +13,6 @@
 已完成文档保留实现职责、关键边界和实际验收结果；重复规则引用权威入口，不再保留实施过程、独立结果副本或废弃方案比较。
 历史 PASS 不代表当前工作树已验收；必须原样保留的生成报告会单独标明。
 
-## 本次完成
-
-| 文档                                                                 | 当前状态                                                                                                    |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [P17 宿主子进程管理基础设施](p17-host-process-infrastructure.md)     | 已实现 verified launch、显式进程边界和统一 TERM/KILL/reap；Xberg 已迁移到 runtime owner                     |
-| [R0 Worker `.localhost` Origin 重构](r0-localhost-worker-origins.md) | 已实现 hostname claim、Worker typed route、Host-first ingress 与 `local_origin` endpoint，GitHub `#90` 完成 |
-
 ## 待实施
 
 | 文档                                                                               | 当前状态                                                                                                                                                                                                               |

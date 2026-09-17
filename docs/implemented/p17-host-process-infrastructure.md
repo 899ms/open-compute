@@ -3,7 +3,7 @@
 状态：**implemented（2026-09-17）**。
 
 P17 将当前宿主子进程共有的安全启动和回收能力收敛到 `open-compute-runtime`，并把 Xberg 文档解析 child 迁移到该唯一实现。它不改变
-[Host authority](references/host-authority.md)，也不为尚未存在的 Gateway、Extension Provider 或 Browser child 预建 Manager。
+[Host authority](../references/host-authority.md)，也不为尚未存在的 Gateway、Extension Provider 或 Browser child 预建 Manager。
 
 ## 当前合同
 
@@ -36,10 +36,10 @@ FD/child 竞争后于 composition root 增加一个实际共享的总预算。
 
 ## 验收覆盖
 
-runtime 定向回归覆盖显式 cwd、清空环境、stdin 完整传输、stdout 内容、stderr cap/overflow 和正常退出。既有 runtime suite 继续覆盖
+runtime 定向回归覆盖显式 cwd、清空环境、stdin 完整传输、stdout 内容、stderr cap/overflow 和 overflow 后及时回收。既有 runtime suite 继续覆盖
 deadline、取消、leader/descendant 回收、reader/wait failure、lease identity、PID/PGID 校验和 macOS verified-fd staging。parser 回归覆盖
 spawn/input/output/timeout/exit/resource-signal 分类以及稳定公开错误映射。
 
 实现没有新增依赖、第二套 supervisor、兼容 wrapper 或运行时下载路径。
 
-返回[文档索引](README.md)。
+返回[完成索引](README.md)。

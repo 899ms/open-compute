@@ -58,8 +58,8 @@ deployment 建立本机可用状态。
 
 ## 实施归属
 
-- [R0 Worker `.localhost` Origin 重构](../r0-localhost-worker-origins.md)：已落地 hostname claim、Worker typed route、Host-first
+- [R0 Worker `.localhost` Origin 重构](../implemented/r0-localhost-worker-origins.md)：已落地 hostname claim、Worker typed route、Host-first
   ingress 与 endpoint projection；
-- [P17 宿主子进程管理基础设施](../p17-host-process-infrastructure.md)：提供 verified child 的通用 process ownership，不拥有路由；
+- [P17 宿主子进程管理基础设施](../implemented/p17-host-process-infrastructure.md)：提供 verified child 的通用 process ownership，不拥有路由；
 - [P18 单域名公网网关、DNS 与 TLS](../p18-single-domain-public-gateway.md)：复用 R0 authority，增加公网 DNS、TLS、Gateway transport
   与 public binding lifecycle。

@@ -28,17 +28,17 @@ const value = await env.MY_EXTENSION.lookup("key");
 
 ## 2. 术语与所有权
 
-| 名称 | 含义 | 所有者 |
-| --- | --- | --- |
-| Extension Package | manifest、Extension Worker bundle、Provider binaries、类型、协议 schema 和 digest 的不可变集合 | operator 安装，`ocd` 校验和持久化身份 |
-| Extension Version | 一个 package digest 对应的不可变版本 | SQLite authority |
-| Extension Worker | 用户提供的 Worker 模块，以 `WorkerEntrypoint` 暴露 RPC 方法 | workerd isolate |
-| Native Provider | 用户提供的目标平台 executable，执行宿主调用 | `ocd` 子进程 supervisor |
-| HostExtensionPort | Extension Worker 可见的私有 JSG transport；只提供二进制 unary/stream 调用和 dispose | workerd fork |
-| Provider Session | 已绑定一个 extension binding、descriptor digest 与 grant 的 Cap'n Proto capability | `ocd` 授权，Provider 执行 |
-| Direct Session Channel | `ocd` 创建并通过 fd-backed capability 分发的 workerd-to-Provider Unix socketpair | `ocd` 建立和 fence，端点分别由 workerd/Provider 持有 |
-| Extension Binding | consumer Worker 环境中的 RPC stub，指向精确 Extension Version/entrypoint | Worker immutable descriptor |
-| Grant | operator 对某个扩展版本批准的宿主权限请求及其规范化 digest | SQLite authority |
+| 名称                   | 含义                                                                                           | 所有者                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Extension Package      | manifest、Extension Worker bundle、Provider binaries、类型、协议 schema 和 digest 的不可变集合 | operator 安装，`ocd` 校验和持久化身份                |
+| Extension Version      | 一个 package digest 对应的不可变版本                                                           | SQLite authority                                     |
+| Extension Worker       | 用户提供的 Worker 模块，以 `WorkerEntrypoint` 暴露 RPC 方法                                    | workerd isolate                                      |
+| Native Provider        | 用户提供的目标平台 executable，执行宿主调用                                                    | `ocd` 子进程 supervisor                              |
+| HostExtensionPort      | Extension Worker 可见的私有 JSG transport；只提供二进制 unary/stream 调用和 dispose            | workerd fork                                         |
+| Provider Session       | 已绑定一个 extension binding、descriptor digest 与 grant 的 Cap'n Proto capability             | `ocd` 授权，Provider 执行                            |
+| Direct Session Channel | `ocd` 创建并通过 fd-backed capability 分发的 workerd-to-Provider Unix socketpair               | `ocd` 建立和 fence，端点分别由 workerd/Provider 持有 |
+| Extension Binding      | consumer Worker 环境中的 RPC stub，指向精确 Extension Version/entrypoint                       | Worker immutable descriptor                          |
+| Grant                  | operator 对某个扩展版本批准的宿主权限请求及其规范化 digest                                     | SQLite authority                                     |
 
 Extension Worker 不是权限来源。它只能使用 `ocd` 已批准并在装载时注入的 `HostExtensionPort`。Native Provider 也不是资源、部署
 或租户身份 authority；它只处理已打开 session 中的业务调用。
@@ -56,8 +56,8 @@ Extension Worker 不是权限来源。它只能使用 `ocd` 已批准并在装�
   “只允许一个 OS 子进程”，见[单二进制分发](../references/single-binary.md#磁盘与进程)。
 - Xberg child 已有 environment clearing、独立 process group、bounded stdio、deadline、signal、强制回收和脱敏诊断，可复用底层
   process-ownership 规则，但不能直接复用其一次一帧、一次一进程的上层状态机。
-- workerd、Provider、Browser 与 Xberg 共享的 spawn/ownership/reap/lease/预算边界由
-  [P17 宿主子进程管理基础设施](../p17-host-process-infrastructure.md)统一；W3 只拥有 Provider 状态机和 Extension IPC。
+- workerd、Provider、Browser 与 Xberg 共享的 spawn/ownership/reap/lease primitives 由
+  [P17 宿主子进程管理基础设施](../implemented/p17-host-process-infrastructure.md)统一；W3 只拥有 Provider 状态机、capacity 和 Extension IPC。
 
 ### 3.2 workerd 缺口
 
@@ -96,8 +96,8 @@ Provider worker pool 或负载均衡。`ocd` 对同时 active Provider 数设置
 正式 open-compute release 仍只有一个 `ocd` executable；用户安装的 Extension Package 是 instance data，不是 open-compute release
 artifact。生产启动保持离线，不自动下载 Provider。
 
-底层进程 ownership、全局 permit/inventory 与 shutdown 协调遵守
-[P17](../p17-host-process-infrastructure.md)；Provider readiness、session、Cap'n Proto control/data plane 和 restart policy 仍由 W3
+底层进程 ownership 与 shutdown/reap primitives 遵守
+[P17](../implemented/p17-host-process-infrastructure.md)；Provider readiness、session、capacity、Cap'n Proto control/data plane 和 restart policy 仍由 W3
 `ProviderManager` 独立拥有。
 
 ## 5. Extension Package 合同
@@ -340,8 +340,8 @@ Day 1 生命周期：
 9. `ocd` shutdown 先停止 acquire、drain 有界时间，再 TERM、KILL、reap 完整 process group；
 10. restart 时只认领 SQLite lease 中同时匹配 start identity、binary digest、package digest 和 process identity 的 orphan；未知进程不 signal。
 
-Provider 不应塞进 `WorkerdSupervisor`。它复用[P17](../p17-host-process-infrastructure.md)的 Host Process Runtime、permit、inventory 与
-shutdown 协调，但保持独立的 readiness、control channel、direct session 与 restart 状态机。
+Provider 不应塞进 `WorkerdSupervisor`。它复用[P17](../implemented/p17-host-process-infrastructure.md)的 Host Process Runtime 与 shutdown/reap primitives，但保持独立的
+capacity、readiness、control channel、direct session 与 restart 状态机；共享总预算只在出现实际跨产品 child/FD 竞争时由 composition root 增加。
 
 ## 10. 安装、绑定、装载与升级
 
@@ -503,7 +503,7 @@ Day 1 不实现：
 按一个完整纵向切片实施，不保留第二套协议或占位 registry：
 
 1. **Authority/package**：Extension Package 验证、immutable version、grant、binding descriptor、pins 与 operator API/CLI；
-2. **Process substrate**：先实现[P17](../p17-host-process-infrastructure.md)的通用 owner/permit/inventory，并迁移 Xberg 证明短命路径；
+2. **Process substrate**：复用已实现的[P17](../implemented/p17-host-process-infrastructure.md)通用 owner 与 Xberg 短命路径，按 Provider 实际容量需求增加 admission；
 3. **Provider lifecycle/control**：content-addressed executable、Provider Manager、control socket、handshake、limits、crash/backoff、shutdown/orphan；
 4. **direct data plane**：Broker 授权、per-session socketpair、fd-backed capability、Provider attach/ACK、revoke 与 FD limits；
 5. **workerd bridge**：`HostExtensionFactory`、`HostExtensionPort`、Broker control fd、direct `TwoPartyClient`、Loader 委派、GC/abort/eviction；

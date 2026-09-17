@@ -9,8 +9,8 @@ P18 为一个 self-hosted open-compute 实例接入一个 operator 控制的专�
 wildcard DNS 和 ACME challenge DNS；之后创建、删除资源和证书续期均由 open-compute 自动完成。
 
 P18 遵循 [Host authority](references/host-authority.md)，复用先行的
-[R0 Worker `.localhost` Origin 重构](r0-localhost-worker-origins.md)建立的 Host-first ingress、hostname claim、typed product route
-和 origin endpoint API；Caddy lifecycle 复用 [P17 宿主子进程管理基础设施](p17-host-process-infrastructure.md)。R0 本机 origin
+[R0 Worker `.localhost` Origin 重构](implemented/r0-localhost-worker-origins.md)建立的 Host-first ingress、hostname claim、typed product route
+和 origin endpoint API；Caddy lifecycle 复用 [P17 宿主子进程管理基础设施](implemented/p17-host-process-infrastructure.md)。R0 本机 origin
 不依赖 P18；P18 只增加可选的公网 DNS、HTTPS 与 public-name 生命周期。
 
 ## 1. 范围与结论
@@ -102,11 +102,11 @@ binding onboarding。
 
 ### 3.2 固定 namespace
 
-| 产品 | URL | DNS/certificate namespace |
-| --- | --- | --- |
-| Worker | `<public-name>.<base_domain>` | `*.<base_domain>` |
-| R2 public bucket | `<public-name>.r2.<base_domain>` | `*.r2.<base_domain>` |
-| KV public endpoint | `<public-name>.kv.<base_domain>` | `*.kv.<base_domain>` |
+| 产品               | URL                              | DNS/certificate namespace |
+| ------------------ | -------------------------------- | ------------------------- |
+| Worker             | `<public-name>.<base_domain>`    | `*.<base_domain>`         |
+| R2 public bucket   | `<public-name>.r2.<base_domain>` | `*.r2.<base_domain>`      |
+| KV public endpoint | `<public-name>.kv.<base_domain>` | `*.kv.<base_domain>`      |
 
 KV 行固定未来的命名方法。新增公开产品在 HTTP contract 完成后加入平台固定枚举。
 
@@ -264,7 +264,7 @@ ocd（唯一分发文件）
 ```
 
 P17 Host Process Runtime 负责 Caddy 的 verified launch、process group、bounded stdout/stderr、TERM/KILL/reap 与 orphan
-primitives；P17 Coordinator 负责 permit、inventory 和 shutdown coordination。P18 `GatewayManager` 独占 typed Caddy JSON、配置验证、
+primitives。P18 `GatewayManager` 独占 typed Caddy JSON、配置验证、
 TLS readiness、ACME storage、restart/backoff 和 gateway health。Caddy admin API 默认禁用；完整配置先用正式 pinned binary
 validate，再原子发布并启动或受控重启。
 
@@ -456,7 +456,7 @@ API/CLI/dashboard 必须提供：
 1. **Caddy supply chain**：冻结 Caddy/Go/module pin，构建三平台定制 binary，建立 lock、LFS bytes、licenses 与离线物化验证。
 2. **Open Compute provider**：实现最小 `dns.providers.opencompute` libdns adapter 和私有 Unix-socket protocol。
 3. **Challenge DNS**：实现固定 zone 的 UDP/TCP SOA/NS/TXT authoritative responder、无 recursion 和边界测试。
-4. **GatewayManager**：复用 P17 Host Process Runtime 与 Coordinator，增加 typed JSON、storage、readiness 和 restart recovery。
+4. **GatewayManager**：复用 P17 Host Process Runtime，增加 typed JSON、storage、readiness 和 restart recovery；只在出现实际跨产品 child/FD 竞争时于 composition root 增加共享总预算。
 5. **Domain authority**：追加 migration，建立 singleton domain、namespace workflow，并复用 R0 hostname claim/typed binding authority。
 6. **Host ingress**：复用 R0 Host-first resolver，实现 Caddy trusted-ingress boundary、public Worker URL 与 passthrough PROXY protocol
    allowlist。
