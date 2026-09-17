@@ -5,8 +5,11 @@ const baseURL = process.env.OPEN_COMPUTE_V4_BASE_URL;
 const apiToken = process.env.OPEN_COMPUTE_V4_TOKEN;
 const accountID = process.env.OPEN_COMPUTE_V4_ACCOUNT_ID;
 const publicURL = process.env.OPEN_COMPUTE_P7_PUBLIC_URL;
+const publicHost = process.env.OPEN_COMPUTE_P7_PUBLIC_HOST;
 const secret = process.env.OPEN_COMPUTE_P7_SECRET;
-assert.ok(baseURL && apiToken && accountID && publicURL && secret);
+assert.ok(
+  baseURL && apiToken && accountID && publicURL && publicHost && secret,
+);
 
 const client = createOpenComputeClient({ apiToken, baseURL, maxRetries: 0 });
 const prepared = await client.workers.observability.telemetry.liveTail({
@@ -67,6 +70,7 @@ const eventPromise = new Promise((resolve, reject) => {
 });
 const response = await fetch(publicURL, {
   headers: {
+    host: publicHost,
     authorization: `Bearer ${secret}`,
     "x-api-key": secret,
   },
