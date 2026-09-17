@@ -20,11 +20,11 @@ pub(super) async fn exercise_live_tail(
             .env("OPEN_COMPUTE_V4_ACCOUNT_ID", public_account)
             .env(
                 "OPEN_COMPUTE_P7_PUBLIC_URL",
-                format!(
-                    "http://{}:{}/live-tail",
-                    worker_host(internal_account, "p6-wrangler-resource-gate"),
-                    public_addr.port()
-                ),
+                format!("http://{public_addr}/live-tail"),
+            )
+            .env(
+                "OPEN_COMPUTE_P7_PUBLIC_HOST",
+                worker_host(internal_account, "p6-wrangler-resource-gate"),
             )
             .env("OPEN_COMPUTE_P7_SECRET", TAIL_SECRET)
             .env("HTTP_PROXY", "http://127.0.0.1:9")
