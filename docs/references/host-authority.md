@@ -51,7 +51,7 @@ public client --HTTPS--> Gateway/TLS child --> private ocd ingress
                                                    `-- same hostname authority
 ```
 
-Gateway 是可选 transport edge，只拥有 TLS、ACME、固定 product namespace admission、外部 header 清洗和一个固定 `ocd` upstream。
+Gateway 的平台路径只拥有 TLS、ACME、固定 product namespace admission、外部 header 清洗和一个固定 `ocd` upstream。
 它不接收逐 Worker/bucket route，不持有 deployment/account mapping；资源创建、删除和切换不得触发 Gateway reload。
 
 `ocd` 从实际 listener 建立可信 ingress context。直接 listener 使用实际 scheme/client address；Gateway private listener 只接受经过固定
@@ -61,6 +61,20 @@ header 不能自行提升为可信 context。两条路径使用相同的 canonic
 
 平台管理的 tenant hostname 必须在 path-based 控制面 router 之前解析。匹配后，`/health`、`/client/v4`、`/operator` 等 path 都是
 tenant path；unknown、disabled、tombstoned 或 Host/SNI 不一致均 fail closed。
+
+## Operator Caddyfile 扩展（P18 待实现）
+
+同一个 Caddy 可通过标准 `import` 加载 operator 管理的额外站点文件；平台配置仍由 ocd 生成。一个基础域名的约束针对平台
+Worker/R2 等 origin，不禁止用户在其他域名上发布非平台应用。平台 `base_domain` 及其子域树保留，不允许用户 exact/wildcard
+或无 Host 限制的站点抢占；平台 unknown/disabled Host 不落入用户 fallback，不能仅靠文件顺序保证隔离。
+
+额外站点的原始 Caddyfile 是 operator 配置来源，不复制成 Worker claim/route 或第二套 deployment mapping；其请求直接由 Caddy
+处理，不经过 workerd，不作为 Worker endpoint 返回。扩展是宿主级管理员能力，不开放给 tenant/deployer，也不是不可信配置沙箱。
+
+所有托管文件和证书状态仍在现有 data-dir；平台总入口与用户文件组合成一份完整运行配置，`ocd caddy` 通过既有实例控制通道
+交给 GatewayManager 统一验证、热重载和恢复。admin API 仅在私有 Unix socket，不能让 CLI 或 Dashboard 成为第二个配置 writer。
+用户文件变更可触发显式整体 reload，普通 Worker 资源绑定变化仍不重载 Caddy。完整合同见 [P18](../p18-single-domain-public-gateway.md)
+§6.4、§8.4、§9.4 与 §11.2；这些配置和命令目前尚未实现。
 
 ## Endpoint projection
 
