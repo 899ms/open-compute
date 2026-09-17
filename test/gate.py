@@ -264,7 +264,7 @@ def resolve_targets(selected, workspace):
                 bun,
                 (str(ROOT / 'test/conformance/check.ts'),),
                 ('--list',),
-                ('PATH',),
+                ('PATH', 'HOME'),
                 120,
                 'light',
                 'conformance-check',
