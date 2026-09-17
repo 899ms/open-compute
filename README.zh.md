@@ -84,35 +84,35 @@ open-compute **就是这一层**——而且只有**一个文件**。
 
 ### 运行时与 binding
 
-| 模块                    | 状态               |
-| ----------------------- | ------------------ |
-| Workers                 | ██████████ 100% ✅ |
-| Workers Standard limits | ██████████ 100% ✅ |
-| KV                      | ██████████ 100% ✅ |
-| R2                      | ██████████ 100% ✅ |
-| D1                      | ██████████ 100% ✅ |
-| Durable Objects         | ██████████ 100% ✅ |
-| Alarms                  | ██████████ 100% ✅ |
-| Queues                  | ██████████ 100% ✅ |
-| Cron                    | ██████████ 100% ✅ |
-| Workflows               | ██████████ 100% ✅ |
-| Static Assets           | ██████████ 100% ✅ |
-| Service Bindings        | ██████████ 100% ✅ |
-| Cache                   | ██████████ 100% ✅ |
-| Images                  | ██████████ 100% ✅ |
-| Version Metadata        | ██████████ 100% ✅ |
-| WebSocket Hibernation   | ██████████ 100% ✅ |
-| Vectorize               | ██████████ 100% ✅ |
-| Markdown Conversion     | ██████████ 100% ✅ |
-| AI Search               | ██████████ 100% ✅ |
-| Artifacts               | ██████████ 100% ✅ |
+| 模块                    | 状态              |
+| ----------------------- | ----------------- |
+| Workers                 | █████████▉ 99% ✅ |
+| Workers Standard limits | █████████▉ 99% ✅ |
+| KV                      | █████████▉ 99% ✅ |
+| R2                      | █████████▉ 99% ✅ |
+| D1                      | █████████▉ 99% ✅ |
+| Durable Objects         | █████████▉ 99% ✅ |
+| Alarms                  | █████████▉ 99% ✅ |
+| Queues                  | █████████▉ 99% ✅ |
+| Cron                    | █████████▉ 99% ✅ |
+| Workflows               | █████████▉ 99% ✅ |
+| Static Assets           | █████████▉ 99% ✅ |
+| Service Bindings        | █████████▉ 99% ✅ |
+| Cache                   | █████████▉ 99% ✅ |
+| Images                  | █████████▉ 99% ✅ |
+| Version Metadata        | █████████▉ 99% ✅ |
+| WebSocket Hibernation   | █████████▉ 99% ✅ |
+| Vectorize               | █████████▉ 99% ✅ |
+| Markdown Conversion     | █████████▉ 99% ✅ |
+| AI Search               | █████████▉ 99% ✅ |
+| Artifacts               | █████████▉ 99% ✅ |
 
 ### 管理面
 
 | 表面                         | 状态                                                                 |
 | ---------------------------- | -------------------------------------------------------------------- |
 | Cloudflare v4 API            | █████████░ 90% — 本地 `/client/v4` 可与 Wrangler 及官方 SDK 配合使用 |
-| Wrangler                     | ██████████ 100% ✅ — Wrangler `4.127.1` 可部署和管理已支持产品       |
+| Wrangler                     | █████████▉ 99% ✅ — Wrangler `4.127.1` 可部署和管理已支持产品        |
 | Dashboard                    | ████████░░ 80% — 基于同一套 `/client/v4` API 的 operator UI          |
 | Workers Logs / realtime tail | █████████░ 90% — 单机 logs、query、`wrangler tail` 与 live tail      |
 
@@ -147,7 +147,7 @@ open-compute **就是这一层**——而且只有**一个文件**。
 | mTLS certificates               | ░░░░░░░░░░ 0% — 尚未支持。 |
 | Tail Workers / traces / Logpush | ░░░░░░░░░░ 0% — 尚未支持。 |
 
-100% ✅ 表示文档列出的 Worker 或产品 API 没有缺失方法。单机差异见[兼容性指南](https://open-compute.dev/zh/docs/platform/compatibility/)。运行中能力：`ocd capabilities --json`。
+Cloudflare 的 API 非常纷繁复杂。**99% ✅ 表示文档列出的 public API 已完全对齐，但不承诺所有细节行为都与 Cloudflare 完全一致。** open-compute 仍处于早期阶段；如果遇到未与 Cloudflare 对齐的行为，欢迎[提交 issue](https://github.com/elliothux/open-compute/issues/new)。单机差异见[兼容性指南](https://open-compute.dev/zh/docs/platform/compatibility/)。运行中能力：`ocd capabilities --json`。
 
 ## 快速开始
 

@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 const WRANGLER_VERSION: &str = "4.127.1";
 
 mod backups;
+mod migrations;
 
 pub(super) fn router() -> Router<HttpState> {
     Router::new()
@@ -49,6 +50,7 @@ pub(super) fn router() -> Router<HttpState> {
             get(durable_object_records),
         )
         .merge(backups::router())
+        .merge(migrations::router())
 }
 
 async fn capabilities(State(_state): State<HttpState>, request: Request) -> Response {
@@ -430,13 +432,18 @@ async fn worker_endpoints(
     };
     match workers.list_routes(account, worker.id) {
         Ok(routes) => {
+            let Some(port) = state.local_origin_port() else {
+                return success_response(context, Vec::<WorkerEndpoint>::new());
+            };
             let result = routes
                 .into_iter()
                 .map(|route| {
                     Ok(WorkerEndpoint {
                         id: route.id,
-                        path: route.path_prefix,
-                        created_on: crate::cloudflare_v4::iso_timestamp(worker.created_at_ms)?,
+                        kind: WorkerEndpointKind::LocalOrigin,
+                        url: format!("http://{}:{port}/", route.hostname_ascii),
+                        scope: WorkerEndpointScope::LocalMachine,
+                        created_on: crate::cloudflare_v4::iso_timestamp(route.created_at_ms)?,
                     })
                 })
                 .collect::<Result<Vec<_>, V4Error>>();
@@ -545,7 +552,7 @@ fn resolve_account(state: &HttpState, public: &str) -> Result<AccountId, V4Error
         .resolve(public)
 }
 
-fn resolve_resource(
+pub(super) fn resolve_resource(
     state: &HttpState,
     public_account: &str,
     public_resource: &str,
@@ -709,8 +716,22 @@ struct ImageCapacity {
 #[derive(Serialize)]
 struct WorkerEndpoint {
     id: String,
-    path: String,
+    kind: WorkerEndpointKind,
+    url: String,
+    scope: WorkerEndpointScope,
     created_on: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+enum WorkerEndpointKind {
+    LocalOrigin,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+enum WorkerEndpointScope {
+    LocalMachine,
 }
 
 #[derive(Serialize)]

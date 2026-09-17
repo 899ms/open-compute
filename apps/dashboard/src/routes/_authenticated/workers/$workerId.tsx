@@ -534,15 +534,17 @@ function WorkerDetailPage() {
             <DataTable
               columns={[
                 { key: "id", label: "Endpoint" },
-                { key: "path", label: "Path" },
+                { key: "url", label: "Origin" },
+                { key: "scope", label: "Scope" },
                 { key: "created", label: "Created" },
               ]}
               rows={(endpoints.data ?? []).map((item) => ({
                 id: item.id,
-                path: item.path,
+                url: item.url,
+                scope: item.scope,
                 created: item.created_on,
               }))}
-              emptyLabel="No platform endpoints found."
+              emptyLabel="No local endpoints are reachable from this listener."
             />
           </div>
         </>

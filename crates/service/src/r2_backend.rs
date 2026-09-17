@@ -40,6 +40,14 @@ mod service;
 
 pub use service::R2BindingService;
 
+/// Typed list page shared by the private Worker adapter and official management adapter.
+pub(crate) struct R2ManagementListPage {
+    pub(crate) objects: Vec<R2ObjectMetadata>,
+    pub(crate) truncated: bool,
+    pub(crate) cursor: Option<String>,
+    pub(crate) delimited_prefixes: Vec<String>,
+}
+
 struct StagedPut {
     header: PutHeader,
     length: u64,

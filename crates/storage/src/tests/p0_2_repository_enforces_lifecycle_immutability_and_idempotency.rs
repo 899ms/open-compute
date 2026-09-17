@@ -12,9 +12,10 @@ fn p0_2_repository_enforces_lifecycle_immutability_and_idempotency() {
     let (worker, route) = repo
         .create_worker(account, "hello-worker", request, 1_000, 1_000_000)
         .unwrap();
+    assert_eq!(route.path_prefix, "/");
     assert_eq!(
-        route.path_prefix,
-        format!("/__workers/{account}/hello-worker/")
+        route.hostname_ascii,
+        format!("hello-worker.{account}.localhost")
     );
     assert_eq!(
         repo.create_worker(account, "hello-worker", request, 1_001, 1_000_000)
@@ -79,9 +80,7 @@ fn p0_2_repository_enforces_lifecycle_immutability_and_idempotency() {
         .promote(account, worker.id, version, None, request, 2_200)
         .unwrap();
     assert_eq!(promoted.active_version_id, Some(version));
-    let resolved = repo
-        .resolve_route(None, &format!("{}path", route.path_prefix))
-        .unwrap();
+    let resolved = repo.resolve_route(&route.hostname_ascii, "/path").unwrap();
     assert_eq!(resolved.version.id, version);
     let snapshot = repo
         .version_snapshot(account, worker.id, version, false)

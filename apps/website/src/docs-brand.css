@@ -39,6 +39,10 @@ open-compute-language-select::before {
   border-bottom: 1px solid var(--gray-6);
 }
 
+[role="tabpanel"] .expressive-code .copy button {
+  opacity: 1;
+}
+
 @media print {
   .site-title::before {
     background-image: url("../../../share/brand/logo-black.svg");

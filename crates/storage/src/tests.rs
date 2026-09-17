@@ -102,6 +102,8 @@ fn raw_user_version(path: &Path) -> i64 {
 
 mod migration_faults_checksum_future_and_restart;
 
+mod localhost_worker_origin_migration_converts_routes_and_rejects_missing_authority;
+
 mod p0_2_migration_ddl_fault_rolls_back_to_schema_one;
 
 mod master_key_modes_and_failures;
@@ -189,6 +191,17 @@ fn insert_ready(
     request: open_compute_core::RequestId,
     now: i64,
 ) -> VersionId {
+    insert_ready_result(*repo, account, worker, digest, request, now).unwrap()
+}
+
+fn insert_ready_result(
+    repo: WorkerRepository<'_>,
+    account: AccountId,
+    worker: WorkerId,
+    digest: [u8; 32],
+    request: open_compute_core::RequestId,
+    now: i64,
+) -> Result<VersionId, open_compute_core::PlatformError> {
     let id = VersionId::generate();
     repo.insert_staging_version(
         &NewVersion {
@@ -211,11 +224,10 @@ fn insert_ready(
         },
         &crate::NewVersionProducts::default(),
         1_000_000,
-    )
-    .unwrap();
-    repo.begin_validation(id).unwrap();
-    repo.mark_ready(id, now + 1).unwrap();
-    id
+    )?;
+    repo.begin_validation(id)?;
+    repo.mark_ready(id, now + 1)?;
+    Ok(id)
 }
 
 mod service_declarations_follow_active_targets_and_protect_worker_identity;

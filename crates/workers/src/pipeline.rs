@@ -42,7 +42,7 @@ use open_compute_storage::{
     NewVersionBinding, NewVersionObjectRef, NewVersionService, PlatformStorage, QueueAvailability,
     QueueConsumerConfig, QueueConsumerRepository, QueueRepository, QueueState, ResourceRepository,
     StoredVersionSecret, VersionBuiltinBindingRecord, VersionCachePolicyRecord, VersionContentKind,
-    VersionObjectKind, VersionRecord, VersionState, WorkerRepository,
+    VersionObjectKind, VersionRecord, VersionState, WorkerObservabilityPatch, WorkerRepository,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -325,7 +325,7 @@ pub trait ProductPromotionCoordinator: Send + Sync + 'static {
 }
 
 /// Immutable authority needed by the Queue/Cron promotion coordinator.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProductPromotionRequest {
     /// Owning account.
     pub account_id: AccountId,
@@ -337,6 +337,8 @@ pub struct ProductPromotionRequest {
     pub source: DeploymentSource,
     /// Closed Cloudflare deployment annotations persisted with the traffic assignment.
     pub annotations: BTreeMap<String, String>,
+    /// Script-level observability fields committed with the active Deployment.
+    pub observability: Option<WorkerObservabilityPatch>,
     /// Audit request identity.
     pub request_id: RequestId,
     /// Control-plane wall time.
@@ -374,6 +376,8 @@ pub struct CreateVersionRequest {
     pub crons: Vec<String>,
     /// Create a 100-percent Deployment only after runtime validation succeeds.
     pub deployment_source: Option<DeploymentSource>,
+    /// Script-level observability fields committed only when this request deploys.
+    pub observability: Option<WorkerObservabilityPatch>,
     /// Audit request identity.
     pub request_id: RequestId,
     /// Current wall-clock milliseconds.

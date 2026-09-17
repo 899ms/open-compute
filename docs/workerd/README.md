@@ -2,7 +2,7 @@
 
 W1 的逐 surface 复核见[兼容审查记录](../implemented/w1-worker-loader-compatibility-review.md)。
 
-状态：**W1 与 W2 均已完成**。W2 的 Wrangler/v4 配置、Dynamic Worker ceiling、原生执行、公开错误、
+状态：**W1 与 W2 均已完成；W3 用户可扩展原生 Binding 已完成 Day 1 设计、尚未实施**。W2 的 Wrangler/v4 配置、Dynamic Worker ceiling、原生执行、公开错误、
 isolate 摘除与 supervisor 自恢复已在同一 Day1 路径完成资格化。四个平台的源码 revision、二进制与 digest
 由 formal lock 固定。2026-09-05 用户确认接受维护自己的 workerd fork 并重新编译。
 W1/W2 不再以“等待上游合并后才能开发”为实施前提；public Loader 已接入原生 fork。W2 同时交付原生
@@ -75,9 +75,10 @@ git clone --recurse-submodules https://github.com/elliothux/open-compute.git
 | [W1 原生 Loader 方案](../implemented/w1-native-limits-loader.md)                         | 接口复用、capability 边界、fork 维护与完成结果                     |
 | [W1 Dynamic Workers / Worker Loader](../implemented/w1-dynamic-workers-worker-loader.md) | public binding、原生 JS API、namespace、动态 Worker 与产品验收合同 |
 | [W2 Workers Standard limits](../implemented/w2-standard-limits.md)                       | Standard limits、公开配置/API、可观察行为和自恢复的完成合同        |
+| [W3 用户可扩展原生 Binding](w3-user-extensible-native-bindings.md)                       | Extension Worker、Provider child、Broker 控制面、Cap'n Proto 直连数据面与安装/装载合同 |
 | [此前 stock workerd 可行性复核](../implemented/p10-worker-loader-feasibility.md)         | 保留旧 pin 的 No-Go 实测；不作为当前 fork 路线的禁令或完成证据     |
 
 本目录保存尚未完成的 workerd 设计与 fork 维护入口。源码基线、fork 交付方式和内部实现分工以本目录为准；
-W1/W2 已完成合同不会因允许 fork 而降低。
+W1/W2 已完成合同不会因允许 fork 而降低；W3 不把用户 Provider 解释为第二个 workerd 或第二套 authority。
 
 返回[文档索引](../README.md)。

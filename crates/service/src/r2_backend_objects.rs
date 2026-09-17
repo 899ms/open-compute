@@ -9,6 +9,32 @@ use open_compute_storage::{
 };
 
 impl R2BindingService {
+    /// List committed objects for an authenticated management request.
+    pub(crate) async fn management_object_list(
+        &self,
+        account_id: AccountId,
+        resource_id: ResourceId,
+        input: ListRequest,
+    ) -> Result<R2ManagementListPage, PlatformError> {
+        let binding = crate::resource_binding::management_binding(
+            &self.storage,
+            account_id,
+            resource_id,
+            BindingKind::R2Bucket,
+        )?;
+        let bucket = R2BucketRepository::new(self.storage.db()).get(account_id, resource_id)?;
+        let locator = self
+            .objects
+            .locator(bucket.resource.id, &bucket.physical_prefix)?;
+        self.list_page(
+            &binding,
+            &locator,
+            &input,
+            Duration::from_millis(self.config.operation_timeout_ms),
+        )
+        .await
+    }
+
     pub(super) async fn authoritative_head(
         &self,
         binding: &AuthorizedBinding,

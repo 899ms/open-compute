@@ -186,20 +186,14 @@ pub async fn public_ingress(State(state): State<HttpState>, mut request: Request
         .get(header::HOST)
         .and_then(|value| value.to_str().ok())
         .ok_or_else(|| PlatformError::new(ErrorCode::RouteNotFound, "Host header is required"))
-        .and_then(canonical_request_host)
+        .and_then(|value| canonical_request_host(value, state.local_origin_port()))
     {
         Ok(hostname) => hostname,
         Err(error) => return crate::http::platform_error_response(&error, request_id),
     };
     let repo = WorkerRepository::new(api.storage.db());
-    let snapshot = match repo.resolve_route(Some(&hostname), request.uri().path()) {
+    let snapshot = match repo.resolve_route(&hostname, request.uri().path()) {
         Ok(snapshot) => snapshot,
-        Err(error) if error.code() == ErrorCode::RouteNotFound => {
-            match repo.resolve_route(None, request.uri().path()) {
-                Ok(snapshot) => snapshot,
-                Err(error) => return crate::http::platform_error_response(&error, request_id),
-            }
-        }
         Err(error) => return crate::http::platform_error_response(&error, request_id),
     };
     let Some(deployment_id) = snapshot.worker.active_deployment_id else {
@@ -249,21 +243,69 @@ fn request_id(request: &Request) -> RequestId {
         .unwrap_or_else(RequestId::generate)
 }
 
-fn canonical_request_host(value: &str) -> Result<String, PlatformError> {
+fn canonical_request_host(
+    value: &str,
+    expected_port: Option<u16>,
+) -> Result<String, PlatformError> {
     let authority = value.parse::<axum::http::uri::Authority>().map_err(|_| {
         PlatformError::new(ErrorCode::RouteNotFound, "public request Host is invalid")
     })?;
+    if authority
+        .port_u16()
+        .is_some_and(|port| Some(port) != expected_port)
+    {
+        return Err(PlatformError::new(
+            ErrorCode::RouteNotFound,
+            "public request Host port does not match the listener",
+        ));
+    }
     canonical_hostname(authority.host())
 }
 
 fn canonical_hostname(value: &str) -> Result<String, PlatformError> {
-    if value.is_empty() || value.len() > 253 || value.contains(['/', '@', '#', '?']) {
+    if value.is_empty()
+        || value.len() > 253
+        || value.ends_with('.')
+        || value.bytes().any(|byte| byte.is_ascii_uppercase())
+        || value.contains(['/', '@', '#', '?'])
+    {
         return Err(PlatformError::new(
             ErrorCode::RouteNotFound,
             "public request Host is invalid",
         ));
     }
-    url::Host::parse(value)
-        .map(|host| host.to_string().trim_end_matches('.').to_ascii_lowercase())
-        .map_err(|_| PlatformError::new(ErrorCode::RouteNotFound, "public request Host is invalid"))
+    let parsed = url::Host::parse(value).map_err(|_| {
+        PlatformError::new(ErrorCode::RouteNotFound, "public request Host is invalid")
+    })?;
+    match parsed {
+        url::Host::Domain(host) if host == value => Ok(host),
+        _ => Err(PlatformError::new(
+            ErrorCode::RouteNotFound,
+            "public request Host is invalid",
+        )),
+    }
+}
+
+#[cfg(test)]
+mod local_origin_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_local_host_rejects_aliases_and_port_spoofing() {
+        assert_eq!(
+            canonical_request_host("app.account.localhost:8787", Some(8787)).unwrap(),
+            "app.account.localhost"
+        );
+        for value in [
+            "APP.account.localhost:8787",
+            "app.account.localhost.:8787",
+            "app.account.localhost:9999",
+            "127.0.0.1:8787",
+        ] {
+            assert!(
+                canonical_request_host(value, Some(8787)).is_err(),
+                "{value}"
+            );
+        }
+    }
 }

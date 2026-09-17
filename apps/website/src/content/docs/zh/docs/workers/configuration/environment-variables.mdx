@@ -2,7 +2,7 @@
 title: "环境变量"
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 
 `vars` 是公开、非密钥的值，以 structured-clone 兼容的 JSON 进入 `env`。
 
@@ -27,9 +27,15 @@ export default {
 更改 vars 后重新生成类型：
 
 <Tabs syncKey="package-manager">
-  <TabItem label="npm">```sh npm exec -- wrangler types ```</TabItem>
-  <TabItem label="pnpm">```sh pnpm exec wrangler types ```</TabItem>
-  <TabItem label="bun">```sh bun run wrangler types ```</TabItem>
+  <TabItem label="npm">
+    <Code code="npm exec -- wrangler types" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm">
+    <Code code="pnpm exec wrangler types" lang="sh" />
+  </TabItem>
+  <TabItem label="bun">
+    <Code code="bun run wrangler types" lang="sh" />
+  </TabItem>
 </Tabs>
 
 Wrangler 会把字面量写入 `worker-configuration.d.ts`（例如 `GREETING: "Hello from TypeScript"`）。bundle 不包含 vars；开发与部署时才注入。

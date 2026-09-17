@@ -267,10 +267,11 @@ export async function runFixture(
     openComputeAbsent: false,
     openComputeOwned: false,
     cloudflareUrl: undefined,
-    openComputeUrl: new URL(
-      `/__workers/${context.openComputeInternalAccount}/${name}/`,
-      context.endpoint,
-    ).href,
+    openComputeUrl: (() => {
+      const url = new URL("/", context.endpoint);
+      url.hostname = `${name}.${context.openComputeInternalAccount}.localhost`;
+      return url.href;
+    })(),
   };
   let result: JsonRecord;
   let failure: string | undefined;

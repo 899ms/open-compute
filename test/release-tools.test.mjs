@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
   assembleRelease,
+  parseSdkPackageReport,
   releaseTargets,
   stableVersionFromTag,
   workspaceVersion,
@@ -23,6 +24,7 @@ import {
 import { verifyReleaseExecutable } from "../scripts/verify-release-executable.ts";
 import {
   absoluteDestination,
+  cargoTargetDirectory,
   hostTarget,
   loadPin,
   prepareWorkerd,
@@ -36,6 +38,15 @@ const installerPath = fileURLToPath(
 );
 const releaseWorkflowPath = fileURLToPath(
   new URL("../.github/workflows/release.yml", import.meta.url),
+);
+const recoveryWorkflowPath = fileURLToPath(
+  new URL("../.github/workflows/release-recovery.yml", import.meta.url),
+);
+const ciWorkflowPath = fileURLToPath(
+  new URL("../.github/workflows/ci.yml", import.meta.url),
+);
+const dryRunWorkflowPath = fileURLToPath(
+  new URL("../.github/workflows/release-dry-run.yml", import.meta.url),
 );
 
 async function writeTestCommand(directory, name, source) {
@@ -125,6 +136,19 @@ test("destinations reject overwrite, traversal, and symlink ancestors", async ()
   }
 });
 
+test("release Cargo targets default locally and require an absolute non-root override", () => {
+  assert.equal(
+    cargoTargetDirectory(undefined),
+    fileURLToPath(new URL("../target", import.meta.url)),
+  );
+  assert.equal(
+    cargoTargetDirectory("/tmp/release-target"),
+    "/tmp/release-target",
+  );
+  for (const path of ["relative", "/"])
+    assert.throws(() => cargoTargetDirectory(path));
+});
+
 test("wrong archives fail without download, execution, or publication", async () => {
   const root = await mkdtemp(join(tmpdir(), "oc-release-hash-test-"));
   try {
@@ -163,12 +187,59 @@ test("release tags are stable SemVer and match the workspace version", () => {
 
 test("release qualification runs long checks in parallel without a second Linux workspace Gate", async () => {
   const workflow = await readFile(releaseWorkflowPath, "utf8");
-  assert.match(workflow, /  coverage:\n    needs: validate\n/);
-  assert.match(workflow, /  integration:\n    needs: validate\n/);
+  const recovery = await readFile(recoveryWorkflowPath, "utf8");
+  const ci = await readFile(ciWorkflowPath, "utf8");
+  const dryRun = await readFile(dryRunWorkflowPath, "utf8");
   assert.match(
     workflow,
-    /  sdk-package:\n    # Build the SDK tarball once[\s\S]*?needs: validate\n/,
+    /  failfast:\n    runs-on: ubuntu-24\.04\n    environment: release[\s\S]*?bun test\/conformance\/check\.ts --case baseline-identity[\s\S]*?node --test test\/release-tools\.test\.mjs[\s\S]*?npm whoami/,
   );
+  assert.match(workflow, /  coverage:\n    needs: failfast\n/);
+  assert.match(workflow, /  integration:\n    needs: failfast\n/);
+  assert.match(
+    workflow,
+    /  sdk-package:\n    # Build the SDK tarball once[\s\S]*?needs: failfast\n/,
+  );
+  assert.match(
+    ci,
+    /  failfast:\n    runs-on: ubuntu-24\.04[\s\S]*?Classify changed files[\s\S]*?bun test\/conformance\/check\.ts --case baseline-identity[\s\S]*?node --test test\/release-tools\.test\.mjs/,
+  );
+  for (const suite of ["core", "clippy", "production"]) {
+    assert.match(ci, new RegExp(`- suite: ${suite}\\n`));
+  }
+  for (const command of [
+    "./test/check-rust-clippy.sh",
+    "cargo check --workspace --no-default-features",
+    "cargo +1.98.0 check --workspace --all-targets",
+    "./test/check-production.py",
+  ]) {
+    assert.equal(ci.split(command).length - 1, 1);
+  }
+  assert.match(
+    dryRun,
+    /  failfast:\n    runs-on: ubuntu-24\.04[\s\S]*?bun test\/conformance\/check\.ts --case baseline-identity[\s\S]*?  package:\n    needs: failfast/,
+  );
+  assert.match(
+    dryRun,
+    /package_matrix:[\s\S]*?matrix: \$\{\{ fromJSON\(needs\.failfast\.outputs\.package_matrix\) \}\}/,
+  );
+  assert.match(
+    dryRun,
+    /rust-cache-key: default-\$\{\{ hashFiles\('crates\/storage\/refinery-migrations\/\*\*\/\*\.sql'\) \}\}/,
+  );
+  for (const source of [workflow, dryRun]) {
+    assert.match(
+      source,
+      /shared-key: v3-release-\$\{\{ matrix\.target \}\}-\$\{\{ hashFiles\('crates\/storage\/refinery-migrations\/\*\*\/\*\.sql'\) \}\}/,
+    );
+    assert.match(source, /workspaces: "\. -> \.temp\/release-target"/);
+    assert.match(
+      source,
+      /unset CARGO_TARGET_DIR RUSTC_WRAPPER SCCACHE_DIR SCCACHE_CACHE_SIZE[\s\S]*?\.\/test\/gate\.py single-binary --jobs 1/,
+    );
+    assert.match(source, /path: \.temp\/release-target\/cargo-timings\//);
+  }
+  assert.doesNotMatch(dryRun, /Skip unselected target/);
   assert.equal(
     workflow.match(/\.\/test\/gate\.py --workspace --jobs 2/g)?.length,
     1,
@@ -186,8 +257,11 @@ test("release qualification runs long checks in parallel without a second Linux 
   assert.match(workflow, /npm publish "\$tarball" --access public/);
   assert.match(
     workflow,
-    /npm view "@open-compute\/sdk@\$RELEASE_VERSION" dist\.shasum/,
+    /if ! npm publish "\$tarball"[\s\S]*?npm view "@open-compute\/sdk@\$RELEASE_VERSION" dist\.shasum/,
   );
+  for (const source of [workflow, recovery]) {
+    assert.doesNotMatch(source, /for attempt in|sleep 5/);
+  }
   assert.match(workflow, /--draft=false/);
   assert.doesNotMatch(workflow, /--provenance/);
   assert.doesNotMatch(workflow, /tolerate-republish/);
@@ -210,12 +284,19 @@ test("release assembly requires and describes the exact three native executables
     schemaVersion: 1,
     package: "@open-compute/sdk",
     packageVersion: "1.2.3",
+    tarball: "open-compute-sdk-1.2.3.tgz",
     tarballShasum: "b".repeat(40),
     tarballIntegrity: "sha512-cdkovenkZmV2ZGVk",
     surfaceDigest: "c".repeat(64),
     openapiRevision: "d".repeat(40),
     cloudflareSdkVersion: "7.1.0",
+    files: ["package/package.json"],
   };
+  assert.deepEqual(parseSdkPackageReport(sdkReport), sdkReport);
+  assert.throws(
+    () => parseSdkPackageReport({ ...sdkReport, schemaVersion: 2 }),
+    /schema/,
+  );
   try {
     for (const target of releaseTargets) {
       const filename = `ocd-v1.2.3-${target}`;

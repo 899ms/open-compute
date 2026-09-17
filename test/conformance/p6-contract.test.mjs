@@ -54,14 +54,15 @@ test("vendor extension operations have stable typed envelopes and exact request 
       Object.entries(methods).map(([method, operation]) => ({
         path,
         method,
+        key: `${method.toUpperCase()} ${path}`,
         operation,
       })),
   );
-  assert.equal(operations.length, 19);
+  assert.equal(operations.length, 21);
   assert.equal(operations.filter(({ method }) => method === "post").length, 8);
   assert.equal(
     new Set(operations.map(({ operation }) => operation.operationId)).size,
-    19,
+    21,
   );
   assert.ok(
     operations.every(
@@ -82,9 +83,24 @@ test("vendor extension operations have stable typed envelopes and exact request 
           "#/components/schemas/RestoreRequest",
     ),
   );
+  const migrations = operations.filter(({ key }) =>
+    key.endsWith("/open-compute/d1/databases/{database_id}/migrations"),
+  );
+  assert.equal(migrations.length, 2);
+  assert.equal(migrations[0].operation["x-open-compute-request-body"], "none");
+  assert.equal(migrations[0].operation.requestBody, undefined);
+  assert.equal(migrations[1].operation["x-open-compute-request-body"], "json");
+  assert.equal(
+    migrations[1].operation.requestBody.content["application/json"].schema.$ref,
+    "#/components/schemas/D1MigrationRequest",
+  );
   assert.ok(
     operations
-      .filter(({ operation }) => !operation.operationId.endsWith("-restore"))
+      .filter(
+        ({ operation, key }) =>
+          !operation.operationId.endsWith("-restore") &&
+          !key.startsWith("PUT "),
+      )
       .every(
         ({ operation }) =>
           operation["x-open-compute-request-body"] === "none" &&
@@ -139,13 +155,13 @@ test("settings surfaces, asset upload variants, and old routes are classified ex
     capability.managementApi.routes.filter(
       (item) => item.status === "supported",
     ).length,
-    167,
+    169,
   );
   assert.equal(
     capability.managementApi.routes.filter(
       (item) => item.status === "supported_with_deviation",
     ).length,
-    12,
+    13,
   );
   assert.equal(
     capability.managementApi.routes.filter((item) => item.status === "planned")
@@ -156,7 +172,7 @@ test("settings surfaces, asset upload variants, and old routes are classified ex
     capability.managementApi.routes.filter(
       (item) => item.status === "unsupported",
     ).length,
-    1,
+    0,
   );
   assert.equal(
     routes.get(
@@ -236,6 +252,7 @@ test("settings surfaces, asset upload variants, and old routes are classified ex
   );
   assert.deepEqual(capability.managementApi.deviations, [
     "OC-ACCOUNT-SUBDOMAIN-001",
+    "OC-DEPLOY-001",
     "OC-D1-001",
     "OC-AI-SEARCH-TOKEN-001",
     "OC-OBSERVABILITY-001",
@@ -254,7 +271,7 @@ test("settings surfaces, asset upload variants, and old routes are classified ex
   assert.equal(
     routes.get("GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects")
       ?.status,
-    "unsupported",
+    "supported",
   );
   assert.ok(
     capability.managementApi.legacyRoutes.every(

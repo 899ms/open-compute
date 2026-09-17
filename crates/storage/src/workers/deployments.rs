@@ -1,6 +1,64 @@
 use super::*;
 
 impl<'a> WorkerRepository<'a> {
+    /// List force deletions that must complete before runtime admission starts.
+    pub fn force_delete_intents(&self) -> Result<Vec<WorkerDeleteIntent>, PlatformError> {
+        self.db.with_read(|conn| {
+            let mut statement = conn
+                .prepare(
+                    "SELECT account_id, worker_id, request_id
+                     FROM worker_delete_intents ORDER BY created_at_ms, worker_id",
+                )
+                .map_err(|_| db_error())?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|_| db_error())?;
+            let mut intents = Vec::new();
+            for row in rows {
+                let (account_id, worker_id, request_id) = row.map_err(|_| db_error())?;
+                intents.push(WorkerDeleteIntent {
+                    account_id: AccountId::from_str(&account_id).map_err(|_| invariant())?,
+                    worker_id: WorkerId::from_str(&worker_id).map_err(|_| invariant())?,
+                    request_id: RequestId::from_str(&request_id).map_err(|_| invariant())?,
+                });
+            }
+            Ok(intents)
+        })
+    }
+
+    /// Persist a crash-recoverable force-delete fence before runtime rotation.
+    pub fn begin_force_delete(
+        &self,
+        account_id: AccountId,
+        worker_id: WorkerId,
+        request_id: RequestId,
+        now_ms: i64,
+    ) -> Result<(), PlatformError> {
+        self.db.with_immediate(|tx| {
+            let worker = require_live_worker(tx, account_id, worker_id)?;
+            require_tenant_worker(&worker)?;
+            tx.execute(
+                "INSERT INTO worker_delete_intents(worker_id, account_id, request_id, created_at_ms)
+                 VALUES(?1, ?2, ?3, ?4)
+                 ON CONFLICT(worker_id) DO NOTHING",
+                params![
+                    worker_id.to_string(),
+                    account_id.to_string(),
+                    request_id.to_string(),
+                    now_ms
+                ],
+            )
+            .map_err(|_| db_error())?;
+            Ok(())
+        })
+    }
+
     /// Read an immutable version with vars and secret ciphertext in one snapshot.
     pub fn version_snapshot(
         &self,
@@ -248,30 +306,27 @@ impl<'a> WorkerRepository<'a> {
         })
     }
 
-    /// Resolve the longest active exact-host or platform path route and freeze active version.
+    /// Resolve one active canonical local hostname and freeze its active version.
     pub fn resolve_route(
         &self,
-        hostname_ascii: Option<&str>,
+        hostname_ascii: &str,
         path: &str,
     ) -> Result<RouteSnapshot, PlatformError> {
         self.db.with_read(|conn| {
-            let sql = if hostname_ascii.is_some() {
-                "SELECT id, account_id, worker_id, kind, hostname_ascii, path_prefix,
-                        entrypoint, generation
-                 FROM worker_routes
-                 WHERE kind = 'exact_host' AND hostname_ascii = ?1 AND state = 'active'
-                   AND ?2 LIKE path_prefix || '%'
-                 ORDER BY length(path_prefix) DESC LIMIT 1"
-            } else {
-                "SELECT id, account_id, worker_id, kind, hostname_ascii, path_prefix,
-                        entrypoint, generation
-                 FROM worker_routes
-                 WHERE kind = 'platform_path' AND state = 'active'
-                   AND ?2 LIKE path_prefix || '%'
-                 ORDER BY length(path_prefix) DESC LIMIT 1"
-            };
             let route = conn
-                .query_row(sql, params![hostname_ascii.unwrap_or(""), path], map_route)
+                .query_row(
+                    "SELECT r.id, r.account_id, r.worker_id, c.hostname_ascii,
+                            r.path_prefix, r.entrypoint, r.generation, r.created_at_ms
+                     FROM hostname_claims c
+                     JOIN worker_host_routes r ON r.claim_id = c.id
+                     WHERE c.hostname_ascii = ?1
+                       AND c.namespace = 'worker' AND c.exposure = 'local'
+                       AND c.state = 'active' AND r.state = 'active'
+                       AND ?2 LIKE r.path_prefix || '%'
+                     LIMIT 1",
+                    params![hostname_ascii, path],
+                    map_route,
+                )
                 .optional()
                 .map_err(|_| db_error())?
                 .ok_or_else(route_not_found)?;
@@ -325,115 +380,6 @@ impl<'a> WorkerRepository<'a> {
         })
     }
 
-    /// Add an exact-host route while atomically enforcing the account route limit.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "SQLite boundary inputs mirror authoritative persisted fields"
-    )]
-    pub fn create_exact_route(
-        &self,
-        account_id: AccountId,
-        worker_id: WorkerId,
-        hostname_ascii: &str,
-        path_prefix: &str,
-        entrypoint: Option<&str>,
-        expected_active: Option<VersionId>,
-        request_id: RequestId,
-        now_ms: i64,
-        max_live: u32,
-    ) -> Result<RouteRecord, PlatformError> {
-        validate_exact_route(hostname_ascii, path_prefix, entrypoint)?;
-        if max_live == 0 {
-            return Err(PlatformError::new(
-                ErrorCode::LimitInvalid,
-                "route count limit must be greater than zero",
-            ));
-        }
-        let route_id = Uuid::now_v7().to_string();
-        self.db.with_immediate(|tx| {
-            let worker = require_live_worker(tx, account_id, worker_id)?;
-            require_tenant_worker(&worker)?;
-            let live_count: i64 = tx
-                .query_row(
-                    "SELECT COUNT(*) FROM worker_routes
-                     WHERE account_id = ?1 AND state = 'active' AND deleted_at_ms IS NULL",
-                    [account_id.to_string()],
-                    |row| row.get(0),
-                )
-                .map_err(|_| db_error())?;
-            if live_count >= i64::from(max_live) {
-                return Err(PlatformError::new(
-                    ErrorCode::QuotaExceeded,
-                    "account route count quota was exceeded",
-                ));
-            }
-            if expected_active.is_some_and(|expected| worker.active_version_id != Some(expected)) {
-                return Err(PlatformError::new(
-                    ErrorCode::IdempotencyConflict,
-                    "route entrypoint probe snapshot changed",
-                ));
-            }
-            let generation = worker
-                .route_generation
-                .checked_add(1)
-                .ok_or_else(invariant)?;
-            let inserted = tx
-                .execute(
-                    "INSERT OR IGNORE INTO worker_routes
-                 (id, account_id, worker_id, kind, hostname_ascii, path_prefix,
-                  entrypoint, state, generation, created_at_ms, updated_at_ms, deleted_at_ms)
-                 VALUES (?1, ?2, ?3, 'exact_host', ?4, ?5, ?6,
-                         'active', ?7, ?8, ?8, NULL)",
-                    params![
-                        route_id,
-                        account_id.to_string(),
-                        worker_id.to_string(),
-                        hostname_ascii,
-                        path_prefix,
-                        entrypoint,
-                        i64::try_from(generation).map_err(|_| invariant())?,
-                        now_ms
-                    ],
-                )
-                .map_err(|_| db_error())?;
-            if inserted != 1 {
-                return Err(PlatformError::new(
-                    ErrorCode::RouteConflict,
-                    "an active route already owns this host and path prefix",
-                ));
-            }
-            tx.execute(
-                "UPDATE workers SET route_generation = ?1, updated_at_ms = ?2 WHERE id = ?3",
-                params![
-                    i64::try_from(generation).map_err(|_| invariant())?,
-                    now_ms,
-                    worker_id.to_string()
-                ],
-            )
-            .map_err(|_| db_error())?;
-            audit(
-                tx,
-                account_id,
-                "route.create",
-                "route",
-                &route_id,
-                request_id,
-                br#"{"state":"active"}"#,
-                now_ms,
-            )?;
-            Ok(RouteRecord {
-                id: route_id.clone(),
-                account_id,
-                worker_id,
-                kind: RouteKind::ExactHost,
-                hostname_ascii: Some(hostname_ascii.to_owned()),
-                path_prefix: path_prefix.to_owned(),
-                entrypoint: entrypoint.map(ToOwned::to_owned),
-                generation,
-            })
-        })
-    }
-
     /// List active routes owned by one live Worker visible to tenant APIs.
     pub fn list_routes(
         &self,
@@ -454,11 +400,13 @@ impl<'a> WorkerRepository<'a> {
         self.db.with_read(|conn| {
             let mut stmt = conn
                 .prepare(
-                    "SELECT id, account_id, worker_id, kind, hostname_ascii, path_prefix,
-                            entrypoint, generation
-                     FROM worker_routes
-                     WHERE account_id = ?1 AND worker_id = ?2 AND state = 'active'
-                     ORDER BY kind, hostname_ascii, path_prefix, id",
+                    "SELECT r.id, r.account_id, r.worker_id, c.hostname_ascii,
+                            r.path_prefix, r.entrypoint, r.generation, r.created_at_ms
+                     FROM worker_host_routes r
+                     JOIN hostname_claims c ON c.id = r.claim_id
+                     WHERE r.account_id = ?1 AND r.worker_id = ?2
+                       AND r.state = 'active' AND c.state = 'active'
+                     ORDER BY c.hostname_ascii, r.id",
                 )
                 .map_err(|_| db_error())?;
             let rows = stmt
@@ -471,63 +419,6 @@ impl<'a> WorkerRepository<'a> {
         })
     }
 
-    /// Tombstone one exact-host route and increment the Worker route generation.
-    pub fn delete_route(
-        &self,
-        account_id: AccountId,
-        worker_id: WorkerId,
-        route_id: &str,
-        request_id: RequestId,
-        now_ms: i64,
-    ) -> Result<(), PlatformError> {
-        self.db.with_immediate(|tx| {
-            let worker = require_live_worker(tx, account_id, worker_id)?;
-            require_tenant_worker(&worker)?;
-            let generation = worker
-                .route_generation
-                .checked_add(1)
-                .ok_or_else(invariant)?;
-            let changed = tx
-                .execute(
-                    "UPDATE worker_routes
-                     SET state = 'tombstoned', generation = ?1, updated_at_ms = ?2,
-                         deleted_at_ms = ?2
-                     WHERE id = ?3 AND account_id = ?4 AND worker_id = ?5
-                       AND kind = 'exact_host' AND state = 'active'",
-                    params![
-                        i64::try_from(generation).map_err(|_| invariant())?,
-                        now_ms,
-                        route_id,
-                        account_id.to_string(),
-                        worker_id.to_string()
-                    ],
-                )
-                .map_err(|_| db_error())?;
-            if changed != 1 {
-                return Err(route_not_found());
-            }
-            tx.execute(
-                "UPDATE workers SET route_generation = ?1, updated_at_ms = ?2 WHERE id = ?3",
-                params![
-                    i64::try_from(generation).map_err(|_| invariant())?,
-                    now_ms,
-                    worker_id.to_string()
-                ],
-            )
-            .map_err(|_| db_error())?;
-            audit(
-                tx,
-                account_id,
-                "route.delete",
-                "route",
-                route_id,
-                request_id,
-                br#"{"state":"tombstoned"}"#,
-                now_ms,
-            )
-        })
-    }
-
     /// Atomically verify a pre-fenced version set, disable routes, and tombstone a Worker.
     pub fn delete_worker(
         &self,
@@ -537,9 +428,65 @@ impl<'a> WorkerRepository<'a> {
         request_id: RequestId,
         now_ms: i64,
     ) -> Result<(), PlatformError> {
+        self.delete_worker_inner(
+            account_id,
+            worker_id,
+            expected_versions,
+            request_id,
+            now_ms,
+            false,
+        )
+    }
+
+    /// Complete a previously admitted force delete, including inbound Service references.
+    pub fn finish_force_delete(
+        &self,
+        account_id: AccountId,
+        worker_id: WorkerId,
+        expected_versions: &[VersionId],
+        request_id: RequestId,
+        now_ms: i64,
+    ) -> Result<(), PlatformError> {
+        self.delete_worker_inner(
+            account_id,
+            worker_id,
+            expected_versions,
+            request_id,
+            now_ms,
+            true,
+        )
+    }
+
+    fn delete_worker_inner(
+        self,
+        account_id: AccountId,
+        worker_id: WorkerId,
+        expected_versions: &[VersionId],
+        request_id: RequestId,
+        now_ms: i64,
+        force: bool,
+    ) -> Result<(), PlatformError> {
         self.db.with_immediate(|tx| {
             let worker = require_live_worker(tx, account_id, worker_id)?;
             require_tenant_worker(&worker)?;
+            let intent: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM worker_delete_intents
+                                   WHERE worker_id=?1 AND account_id=?2)",
+                    params![worker_id.to_string(), account_id.to_string()],
+                    |row| row.get(0),
+                )
+                .map_err(|_| db_error())?;
+            if force != intent {
+                return Err(PlatformError::new(
+                    ErrorCode::VersionReferenced,
+                    if force {
+                        "force deletion intent is missing"
+                    } else {
+                        "force deletion is already in progress"
+                    },
+                ));
+            }
             let actual_versions = {
                 let mut statement = tx
                     .prepare(
@@ -584,7 +531,7 @@ impl<'a> WorkerRepository<'a> {
                     |row| row.get(0),
                 )
                 .map_err(|_| db_error())?;
-            if inbound {
+            if inbound && !force {
                 return Err(PlatformError::new(
                     ErrorCode::ServiceTargetReferenced,
                     "Worker is retained by another version Service declaration",
@@ -595,9 +542,23 @@ impl<'a> WorkerRepository<'a> {
                 .checked_add(1)
                 .ok_or_else(invariant)?;
             tx.execute(
-                "UPDATE worker_routes SET state = 'tombstoned', generation = ?1,
+                "UPDATE worker_host_routes SET state = 'tombstoned', generation = ?1,
                         updated_at_ms = ?2, deleted_at_ms = ?2
                  WHERE account_id = ?3 AND worker_id = ?4 AND state = 'active'",
+                params![
+                    i64::try_from(generation).map_err(|_| invariant())?,
+                    now_ms,
+                    account_id.to_string(),
+                    worker_id.to_string()
+                ],
+            )
+            .map_err(|_| db_error())?;
+            tx.execute(
+                "UPDATE hostname_claims SET state = 'tombstoned', generation = ?1,
+                        updated_at_ms = ?2, deleted_at_ms = ?2
+                 WHERE id IN (SELECT claim_id FROM worker_host_routes
+                              WHERE account_id = ?3 AND worker_id = ?4)
+                   AND state = 'active'",
                 params![
                     i64::try_from(generation).map_err(|_| invariant())?,
                     now_ms,
@@ -655,6 +616,13 @@ impl<'a> WorkerRepository<'a> {
                 [worker_id.to_string()],
             )
             .map_err(|_| db_error())?;
+            if force {
+                tx.execute(
+                    "DELETE FROM worker_delete_intents WHERE worker_id=?1 AND account_id=?2",
+                    params![worker_id.to_string(), account_id.to_string()],
+                )
+                .map_err(|_| db_error())?;
+            }
             audit(
                 tx,
                 account_id,

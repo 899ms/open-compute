@@ -26,6 +26,7 @@ interface LockAuthority {
   subsetSha256: string;
   subsetManifestSha256: string;
   extensionSha256: string;
+  observedStandardSha256: string;
 }
 
 interface ManifestEntry {
@@ -177,6 +178,22 @@ interface Authority {
     paths: Record<string, Record<string, VendorOperation>>;
     components: { schemas: Record<string, Schema> };
   };
+  observed: {
+    "x-open-compute-evidence": { schemaSha256: Record<string, string> };
+    paths: Record<
+      string,
+      Record<
+        string,
+        { operationId: string; "x-open-compute-sdk-method": string }
+      >
+    >;
+    components: {
+      parameters: Record<string, unknown>;
+      schemas: Record<string, unknown>;
+      requestBodies: Record<string, unknown>;
+      responses: Record<string, unknown>;
+    };
+  };
 }
 
 function loadAuthority(): Authority {
@@ -193,6 +210,10 @@ function loadAuthority(): Authority {
     REPO_ROOT,
     "openapi/open-compute-extension.json",
   );
+  const observedPath = resolve(
+    REPO_ROOT,
+    "openapi/cloudflare-observed-standard.json",
+  );
   const lock = readJson(lockPath) as LockAuthority;
   if (lock.schemaVersion !== 1)
     throw new Error("unsupported lock schema version");
@@ -200,6 +221,7 @@ function loadAuthority(): Authority {
     [subsetPath, "subsetSha256", lock.subsetSha256],
     [manifestPath, "subsetManifestSha256", lock.subsetManifestSha256],
     [extensionPath, "extensionSha256", lock.extensionSha256],
+    [observedPath, "observedStandardSha256", lock.observedStandardSha256],
   ];
   for (const [path, field, expected] of digests) {
     if (sha256(readFileSync(path)) !== expected)
@@ -220,11 +242,27 @@ function loadAuthority(): Authority {
         `installed Cloudflare SDK does not match the fixed lock identity (${file})`,
       );
   }
+  const observed = readJson(observedPath) as Authority["observed"];
+  const schemaNames = Object.keys(observed.components.schemas).sort();
+  if (
+    JSON.stringify(
+      Object.keys(observed["x-open-compute-evidence"].schemaSha256).sort(),
+    ) !== JSON.stringify(schemaNames)
+  )
+    throw new Error("observed-standard schema digest inventory drift");
+  for (const name of schemaNames) {
+    if (
+      sha256(JSON.stringify(observed.components.schemas[name])) !==
+      observed["x-open-compute-evidence"].schemaSha256[name]
+    )
+      throw new Error(`observed-standard schema digest drift: ${name}`);
+  }
   return {
     lock,
     subset: readJson(subsetPath) as Authority["subset"],
     manifest: readJson(manifestPath) as Authority["manifest"],
     extension: readJson(extensionPath) as Authority["extension"],
+    observed,
   };
 }
 
@@ -424,7 +462,11 @@ function planTypeReExports(
 
 interface TreeNode {
   children: Map<string, TreeNode>;
-  methods: Array<{ officialMethod: string; variable: string }>;
+  methods: Array<{
+    operation: string;
+    officialMethod: string;
+    variable: string;
+  }>;
   variable?: string;
 }
 
@@ -449,6 +491,7 @@ function buildTree(mapped: MappedOperation[]): TreeNode {
     }
     current.variable = variable;
     current.methods.push({
+      operation: operation.operation,
       officialMethod: operation.officialMethod,
       variable,
     });
@@ -488,9 +531,24 @@ function renderNodeInterfaces(
     for (const method of [...node.methods].sort((a, b) =>
       a.officialMethod.localeCompare(b.officialMethod),
     )) {
-      members.push(
-        `  readonly ${method.officialMethod}: ${alias}["${method.officialMethod}"];`,
-      );
+      if (
+        method.operation ===
+        "POST /accounts/{account_id}/workers/scripts/{script_name}/versions"
+      ) {
+        members.push(
+          `  readonly create: (scriptName: string, params: OpenComputeWorkerVersionCreateParams, options?: OpenComputeRequestOptions) => ReturnType<${alias}["create"]>;`,
+        );
+      } else if (
+        method.operation === "POST /accounts/{account_id}/workers/assets/upload"
+      ) {
+        members.push(
+          `  readonly create: (params: OpenComputeAssetsUploadCreateParams, options?: OpenComputeRequestOptions) => ReturnType<${alias}["create"]>;`,
+        );
+      } else {
+        members.push(
+          `  readonly ${method.officialMethod}: ${alias}["${method.officialMethod}"];`,
+        );
+      }
     }
   }
   lines.unshift(
@@ -511,9 +569,24 @@ function renderRuntimeTree(node: TreeNode, indent: string): string {
   for (const method of [...node.methods].sort((a, b) =>
     a.officialMethod.localeCompare(b.officialMethod),
   )) {
-    lines.push(
-      `${inner}${method.officialMethod}: ${method.variable}.${method.officialMethod}.bind(${method.variable}),`,
-    );
+    if (
+      method.operation ===
+      "POST /accounts/{account_id}/workers/scripts/{script_name}/versions"
+    ) {
+      lines.push(
+        `${inner}create: (scriptName, params, options) => ${method.variable}.create(scriptName, params as VersionCreateParams, options),`,
+      );
+    } else if (
+      method.operation === "POST /accounts/{account_id}/workers/assets/upload"
+    ) {
+      lines.push(
+        `${inner}create: (params, options) => ${method.variable}.create(params as UploadCreateParams, options),`,
+      );
+    } else {
+      lines.push(
+        `${inner}${method.officialMethod}: ${method.variable}.${method.officialMethod}.bind(${method.variable}),`,
+      );
+    }
   }
   return lines.join("\n");
 }
@@ -527,6 +600,7 @@ interface VendorMethod {
   arguments: string;
   resultType: string;
   hasBody: boolean;
+  bodyType?: string;
 }
 
 function collectVendorMethods(authority: Authority): VendorMethod[] {
@@ -536,7 +610,7 @@ function collectVendorMethods(authority: Authority): VendorMethod[] {
   for (const [path, pathItem] of Object.entries(authority.extension.paths)) {
     for (const [verb, operation] of Object.entries(pathItem)) {
       if (verb === "parameters") continue;
-      if (verb !== "get" && verb !== "post")
+      if (verb !== "get" && verb !== "post" && verb !== "put")
         throw new Error(
           `unsupported vendor verb ${verb} on ${operation.operationId}`,
         );
@@ -580,12 +654,24 @@ function collectVendorMethods(authority: Authority): VendorMethod[] {
       const resultName = result.$ref?.split("/").at(-1);
       const resultType = resultName ?? typeForSchema(result);
       const hasBody = operation.requestBody !== undefined;
+      const bodySchema = hasBody
+        ? (
+            operation.requestBody as {
+              content: Record<string, { schema: Schema }>;
+            }
+          ).content["application/json"]?.schema
+        : undefined;
+      const bodyType = bodySchema?.$ref?.split("/").at(-1);
+      if (hasBody && bodyType === undefined)
+        throw new Error(
+          `vendor operation ${operation.operationId} must use a named JSON request schema`,
+        );
       const parameters = (operation.parameters ?? []).map((parameter) => ({
         argument: lowerCamelParameter(parameter.name),
       }));
       const argumentList = [
         ...parameters.map((parameter) => `${parameter.argument}: string`),
-        ...(hasBody ? ["body: RestoreRequest"] : []),
+        ...(bodyType === undefined ? [] : [`body: ${bodyType}`]),
         `options?: OpenComputeRequestOptions`,
       ].join(", ");
       const template = path
@@ -604,6 +690,7 @@ function collectVendorMethods(authority: Authority): VendorMethod[] {
         arguments: argumentList,
         resultType,
         hasBody,
+        ...(bodyType === undefined ? {} : { bodyType }),
       });
     }
   }
@@ -635,9 +722,9 @@ function renderVendorTree(methods: VendorMethod[], indent: string): string {
     current.method = method;
   }
   const renderMethod = (method: VendorMethod, depth: string): string => {
-    const withBody = method.verb === "post" && method.hasBody;
+    const withBody = method.hasBody;
     const call = withBody
-      ? `transport.post<V4Envelope<${method.resultType}>>(
+      ? `transport.${method.verb}<V4Envelope<${method.resultType}>>(
 ${depth}  \`${method.template}\`,
 ${depth}  { ...options, body },
 ${depth})`
@@ -861,6 +948,9 @@ function renderGenerated(input: {
   const importStatements: string[] = [
     `import type { APIPromise } from "cloudflare";`,
     `import type { BaseCloudflare, Cloudflare } from "cloudflare/client";`,
+    `import type { VersionCreateParams } from "cloudflare/resources/workers/scripts/versions";`,
+    `import type { UploadCreateParams } from "cloudflare/resources/workers/assets/upload";`,
+    `import { Artifacts } from "./artifacts.ts";`,
   ];
   for (const node of [...delegates.keys()].sort()) {
     const delegate = delegates.get(node);
@@ -914,6 +1004,37 @@ ${importStatements.join("\n")}
 /** Official transport request options reused by vendor operations. */
 export type OpenComputeRequestOptions = Cloudflare.RequestOptions;
 
+/** Native Dynamic Worker Loader binding accepted by open-compute and Wrangler. */
+export type OpenComputeWorkerLoaderBinding = {
+  readonly type: "worker_loader";
+  readonly name: string;
+};
+
+type OfficialWorkerVersionBinding = NonNullable<
+  VersionCreateParams["metadata"]["bindings"]
+>[number];
+
+/** Official Version upload parameters plus the runtime-supported Worker Loader binding. */
+export type OpenComputeWorkerVersionCreateParams = Omit<
+  VersionCreateParams,
+  "metadata"
+> & {
+  readonly metadata: Omit<VersionCreateParams["metadata"], "bindings"> & {
+    readonly bindings?: readonly (
+      | OfficialWorkerVersionBinding
+      | OpenComputeWorkerLoaderBinding
+    )[];
+  };
+};
+
+/** Official Static Assets upload parameters with browser-native File parts. */
+export type OpenComputeAssetsUploadCreateParams = Omit<
+  UploadCreateParams,
+  "body"
+> & {
+  readonly body: Record<string, string | File>;
+};
+
 /** The Cloudflare v4 success envelope returned by every vendor operation. */
 export interface V4Envelope<T> {
   readonly success: true;
@@ -950,6 +1071,7 @@ ${vendorTree.rootMembers}
  */
 export interface OpenComputeSurface {
 ${surfaceMembers}
+  readonly artifacts: Artifacts;
   readonly openCompute: OpenComputeVendorNode;
 }
 
@@ -962,6 +1084,7 @@ export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
 ${instantiationLines.join("\n")}
   return {
 ${renderRuntimeTree(input.tree, "    ")}
+    artifacts: new Artifacts(transport),
     openCompute: buildOpenCompute(transport),
   };
 }
@@ -975,6 +1098,7 @@ function canonicalDigest(value: unknown): string {
 }
 
 function renderSurfaceReport(input: {
+  authority: Authority;
   packageVersion: string;
   lock: LockAuthority;
   mapped: MappedOperation[];
@@ -994,6 +1118,7 @@ function renderSurfaceReport(input: {
       cloudflareSdkNpmIntegrity: input.lock.cloudflareSdk.npmIntegrity,
       subsetSha256: input.lock.subsetSha256,
       extensionSha256: input.lock.extensionSha256,
+      observedStandardSha256: input.lock.observedStandardSha256,
     },
     operations: input.mapped
       .map((operation) => ({
@@ -1008,14 +1133,30 @@ function renderSurfaceReport(input: {
         officialMethod: operation.officialMethod,
         delegateModule: operation.delegateModule,
         delegateClass: operation.delegateClass,
+        source: "official",
       }))
       .sort((left, right) => left.operation.localeCompare(right.operation)),
     excludedOperations: input.excluded,
     openComputeOperations: input.vendorMethods.map((method) => ({
+      source: "open_compute_extension",
       node: `openCompute.${method.tree.join(".")}`,
       method: method.verb.toUpperCase(),
       path: method.openapiPath,
     })),
+    observedStandardOperations: Object.entries(
+      input.authority.observed.paths,
+    ).flatMap(([path, methods]) =>
+      Object.entries(methods).map(([method, operation]) => ({
+        source: "observed_standard",
+        node: operation["x-open-compute-sdk-method"],
+        operationId: operation.operationId,
+        operationSha256: sha256(JSON.stringify(operation)),
+        method: method.toUpperCase(),
+        path,
+        delegateModule: "src/artifacts.ts",
+        delegateClass: "Artifacts",
+      })),
+    ),
   };
   return `${JSON.stringify(report, null, 2)}\n`;
 }
@@ -1078,6 +1219,31 @@ function renderCombinedOpenAPI(input: {
     authority.extension.paths,
     "OpenCompute",
   ) as Record<string, Record<string, unknown>>;
+  const observedPaths = deepRewriteRefs(
+    authority.observed.paths,
+    "Artifacts",
+  ) as Record<
+    string,
+    Record<string, { operationId: string; "x-open-compute-sdk-method": string }>
+  >;
+  for (const [path, pathItem] of Object.entries(observedPaths)) {
+    if (paths[path] !== undefined)
+      throw new Error(
+        `observed-standard path collides with the selected surface: ${path}`,
+      );
+    const copied: Record<string, unknown> = {};
+    for (const [verb, operation] of Object.entries(pathItem)) {
+      if (operationIds.has(operation.operationId))
+        throw new Error(`duplicate operationId: ${operation.operationId}`);
+      operationIds.add(operation.operationId);
+      copied[verb] = {
+        ...operation,
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": operation["x-open-compute-sdk-method"],
+      };
+    }
+    paths[path] = copied;
+  }
   for (const [path, pathItem] of Object.entries(vendorPaths)) {
     if (paths[path] !== undefined)
       throw new Error(
@@ -1107,6 +1273,16 @@ function renderCombinedOpenAPI(input: {
       throw new Error(`component name collision: ${prefixed}`);
     schemas[prefixed] = deepRewriteRefs(schema, "OpenCompute");
   }
+  for (const [name, schema] of Object.entries(
+    authority.observed.components.schemas,
+  )) {
+    const prefixed = `Artifacts${name}`;
+    if (schemas[prefixed] !== undefined)
+      throw new Error(
+        `observed-standard component name collision: ${prefixed}`,
+      );
+    schemas[prefixed] = deepRewriteRefs(schema, "Artifacts");
+  }
   const document = {
     openapi: "3.0.3",
     info: {
@@ -1125,7 +1301,21 @@ function renderCombinedOpenAPI(input: {
       cloudflareSdk: authority.lock.cloudflareSdk.version,
     },
     paths,
-    components: { schemas },
+    components: {
+      parameters: deepRewriteRefs(
+        authority.observed.components.parameters,
+        "Artifacts",
+      ),
+      schemas,
+      requestBodies: deepRewriteRefs(
+        authority.observed.components.requestBodies,
+        "Artifacts",
+      ),
+      responses: deepRewriteRefs(
+        authority.observed.components.responses,
+        "Artifacts",
+      ),
+    },
   };
   return `${JSON.stringify(document, null, 2)}\n`;
 }
@@ -1171,6 +1361,7 @@ async function main(): Promise<void> {
       arguments: method.arguments,
       resultType: method.resultType,
     })),
+    observedStandardOperations: authority.observed.paths,
   });
   const rawGenerated = renderGenerated({
     mapped,
@@ -1184,6 +1375,7 @@ async function main(): Promise<void> {
     writeFileSync(process.env.OPEN_COMPUTE_SDK_RAW_GENERATED, rawGenerated);
   const generated = formatGenerated(rawGenerated);
   const surface = renderSurfaceReport({
+    authority,
     packageVersion: packageJson.version,
     lock: authority.lock,
     mapped,

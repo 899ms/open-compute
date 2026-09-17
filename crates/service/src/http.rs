@@ -52,12 +52,17 @@ pub use state::HttpState;
 /// Public routes only.
 pub fn public_router(state: HttpState) -> Router {
     let middleware_state = state.clone();
+    let host_state = state.clone();
     Router::new()
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
         .merge(crate::artifact_git_http::router())
         .merge(removed_management_router(true))
         .fallback(workers_http::public_ingress)
+        .layer(middleware::from_fn_with_state(
+            host_state,
+            local_worker_host_first,
+        ))
         .layer(middleware::from_fn_with_state(
             middleware_state,
             bounds_middleware,
@@ -111,6 +116,7 @@ pub fn merged_router(state: HttpState) -> Router {
     let metrics_enabled = state.metrics_enabled;
     let middleware_state = state.clone();
     let v4_state = state.clone();
+    let host_state = state.clone();
     let mut router = Router::new()
         .route("/health/live", get(live))
         .route("/health/ready", get(ready))
@@ -140,6 +146,10 @@ pub fn merged_router(state: HttpState) -> Router {
         .route("/operator/{*rest}", any(operator_surface))
         .merge(test_control_router())
         .fallback(workers_http::public_ingress)
+        .layer(middleware::from_fn_with_state(
+            host_state,
+            local_worker_host_first,
+        ))
         .layer(middleware::from_fn_with_state(
             middleware_state,
             bounds_middleware,
@@ -500,6 +510,32 @@ async fn bounds_middleware(
     Ok(response)
 }
 
+async fn local_worker_host_first(
+    State(state): State<HttpState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let managed = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(':')
+                .next()
+                .unwrap_or(value)
+                .trim()
+                .trim_end_matches('.')
+                .to_ascii_lowercase()
+                .ends_with(".localhost")
+        });
+    if managed {
+        workers_http::public_ingress(State(state), request).await
+    } else {
+        next.run(request).await
+    }
+}
+
 fn product_operation(path: &str) -> Option<OperationClass> {
     if path.contains("/workers") {
         Some(OperationClass::Workers)
@@ -525,7 +561,6 @@ fn bound_route(path: &str) -> &'static str {
         "/metrics" => "/metrics",
         _ if path.starts_with("/client/v4/accounts/") => "/client/v4/accounts/:account/*",
         _ if path.starts_with("/client/v4/open-compute/") => "/client/v4/open-compute/*",
-        _ if path.starts_with("/__workers/") => "/__workers/:account/:worker/*",
         _ => "/other",
     }
 }

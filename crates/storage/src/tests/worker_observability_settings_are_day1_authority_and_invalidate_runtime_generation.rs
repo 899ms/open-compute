@@ -1,4 +1,5 @@
 use super::*;
+use crate::{DeploymentSource, WorkerObservabilityPatch};
 
 #[test]
 fn worker_observability_settings_are_day1_authority_and_invalidate_runtime_generation() {
@@ -38,5 +39,63 @@ fn worker_observability_settings_are_day1_authority_and_invalidate_runtime_gener
             .unwrap()
             .route_generation,
         2
+    );
+
+    let version = insert_ready(&repo, account, worker.id, [7; 32], request, 3);
+    let patch = WorkerObservabilityPatch {
+        logs_enabled: Some(false),
+        persist: Some(false),
+        ..WorkerObservabilityPatch::default()
+    };
+    let (published, _) = repo
+        .create_deployment_checked(
+            account,
+            worker.id,
+            version,
+            None,
+            Some(2),
+            DeploymentSource::ScriptUpload,
+            &BTreeMap::new(),
+            Some(&patch),
+            request,
+            5,
+            open_compute_core::StartupId::generate(),
+        )
+        .unwrap();
+    assert_eq!(published.route_generation, 3);
+    let published_settings = repo.get_observability_settings(account, worker.id).unwrap();
+    assert_eq!(published_settings.generation, 3);
+    assert!(!published_settings.logs_enabled);
+    assert!(!published_settings.persist);
+
+    let rejected = WorkerObservabilityPatch {
+        enabled: Some(false),
+        ..WorkerObservabilityPatch::default()
+    };
+    assert!(
+        repo.create_deployment_checked(
+            account,
+            worker.id,
+            version,
+            Some(version),
+            Some(2),
+            DeploymentSource::ScriptUpload,
+            &BTreeMap::new(),
+            Some(&rejected),
+            request,
+            6,
+            open_compute_core::StartupId::generate(),
+        )
+        .is_err()
+    );
+    assert_eq!(
+        repo.get_observability_settings(account, worker.id).unwrap(),
+        published_settings
+    );
+    assert_eq!(
+        repo.get_worker(account, worker.id)
+            .unwrap()
+            .route_generation,
+        3
     );
 }

@@ -45,8 +45,14 @@ pub(super) async fn wait_ready(
                 String::from_utf8_lossy(&log)
             );
         }
-        if let Ok(response) =
-            platform_process::response(client, admin_addr, "/health/ready", "GET").await
+        if let Ok(response) = platform_process::response(
+            client,
+            admin_addr,
+            &admin_addr.to_string(),
+            "/health/ready",
+            "GET",
+        )
+        .await
         {
             if response.status() == 200 {
                 return;
@@ -86,6 +92,10 @@ pub(super) fn append_resource_config(
         r#"
 [observability]
 external_control_origin = "http://{}"
+
+[durable_objects]
+disk_high_watermark_percent = 98
+disk_stop_writes_percent = 99
 
 {}"#,
         admin_addr,

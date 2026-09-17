@@ -151,8 +151,8 @@ HTTP 字段；S3 provider 自行补入的默认 header 不成为 R2 用户 metad
 
 ### 租户请求体预算
 
-控制面已注册路由的 4 KiB（v4 为 64 MiB）声明长度检查不作用于 tenant ingress fallback，
-包括 `/__workers/` 和自定义域名路由。租户 body 始终由 `WorkerdTransport` 按
+控制面已注册路由的 4 KiB（v4 为 64 MiB）声明长度检查不作用于 Host-first tenant ingress。
+租户 body 始终由 `WorkerdTransport` 按
 固定的 `100000000` bytes 流式限额，旧 `workers.max_request_body_bytes` 配置已删除。
 这个十进制 100 MB 值来自 [Cloudflare account-plan 请求大小最低 baseline](https://developers.cloudflare.com/workers/platform/limits/#request-and-response-limits)，
 不代表复刻商业 plan。声明长度与 chunked overflow 的 413 定向回归已在缩小预算下通过；生产 100 MB 边界、最终
@@ -161,6 +161,14 @@ stock-workerd/Wrangler Gate 与 hosted differential 尚未通过，不能把配�
 现有 30 秒 host response-header deadline 仍是尚未资格化的本地 transport policy，其失败归类为
 runtime unavailable，不宣称执行 CPU limit 或产生 `exceededCpu`。原生 limits、isolate 摘除、公开 API 与
 supervisor 自恢复已经资格化，见 [workerd W2](../implemented/w2-standard-limits.md)。
+
+### 本机 Worker origin
+
+tenant Worker 使用 `http://<worker>.<account-id>.localhost:<port>/` 的 exact-host origin，path 从 `/` 开始。它与 Cloudflare
+[`workers.dev`](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
+`<worker>.<account-subdomain>.workers.dev` 的 Worker/account host identity 同形，但 `.localhost`、本机 HTTP、单机 SQLite authority
+和只在 loopback listener 可达时发布 endpoint 都是自托管拓扑差异，不宣称提供 Cloudflare 公共 DNS、TLS、preview URL 或全球路由。
+Host-first dispatch、canonical authority 拒绝、V5→V6 route migration、endpoint OpenAPI/SDK shape 和真实进程调用均有回归覆盖。
 
 ### 固定客户端的 Worker upload wire
 
@@ -231,9 +239,14 @@ producer 文档文字推翻 pinned CLI，也不能把本地无效果行为写成
 普通 Worker 的 public Loader namespace 由 account / Script / binding 的不可变身份派生，跨 Version
 回滚保持一致；删除重建同名 Script 使用新身份。原生 cache 有界且可撤销，命中不是公共保证。
 平台对已执行 Version 保留保守的 background-work hold，直到监督器证明 workerd generation 已退出；
-期间 Script DELETE 返回 409，而不是把响应结束当作全部工作结束。退出后删除走正常 drain、SQLite
-删除与 namespace revoke；不自动重启其他 Worker 来完成删除。专用产品用例验证拒绝后仍可调用、
-重启后删除、独立 Script 可用及同名重建。`force=true` 仍不支持。
+普通 Script DELETE 在 hold 或真实在途执行存在时返回 409。`force=true` 持久化删除 intent 并 fence 新 admission，
+必要时受控轮换单一 workerd generation，再原子 tombstone Worker authority 与释放全部历史 Version referrer；
+进程在轮换与提交之间退出时，下一次启动在 runtime admission 前幂等完成删除。轮换会短暂影响同机其他 Worker，
+但外部 D1/KV/R2/Queue 资源不会随 Worker 删除。
+
+`WorkerCode.env` 的 transfer boundary 只接受 structured-clone value 与 Service Binding。D1、KV、R2、Queue
+binding 不直接转移，原生 clone 失败保持 `DataCloneError`；Loader Worker 必须通过 `ctx.exports` wrapper 暴露最小方法，
+使资源授权、tenant scope 与 audit 继续归宿主 Worker 所有。
 
 ### Durable Object nested facets
 

@@ -201,18 +201,6 @@ pub(super) fn require_no_query(request: &Request) -> Result<(), V4Error> {
     }
 }
 
-pub(super) fn require_query_fields(request: &Request, allowed: &[&str]) -> Result<(), V4Error> {
-    let values = strict_query(request)?;
-    if values
-        .keys()
-        .all(|key| allowed.iter().any(|allowed| key == allowed))
-    {
-        Ok(())
-    } else {
-        Err(V4Error::InvalidRequest)
-    }
-}
-
 fn decode_query_component(value: &str) -> Result<String, V4Error> {
     let bytes = value.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());

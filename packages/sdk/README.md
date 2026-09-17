@@ -29,6 +29,9 @@ const client = createOpenComputeClient({
 
 await client.workers.scripts.versions.list("app", { account_id });
 await client.d1.database.list({ account_id });
+await client.r2.buckets.objects.list("assets", { account_id });
+await client.artifacts.namespaces.list({ account_id });
+await client.openCompute.d1.migrations.list(account_id, database_id);
 await client.openCompute.system.status();
 ```
 
@@ -42,11 +45,14 @@ requests to `api.cloudflare.com`.
 - The complete operation inventory (including deviations and the delegate
   mapping to official SDK methods) is recorded in the repository surface
   report committed next to the generator under `packages/sdk/surface.json`.
-- open-compute-only operations (scheduler, cache, backups, upgrade checks,
-  durable object inventory, worker endpoints) are available under
+- Cloudflare Artifacts operations are standard methods under `client.artifacts`;
+  their pinned observed-standard schema and first-party delegate use the same
+  official transport while the upstream SDK has no Artifacts resource.
+- open-compute-only operations (scheduler, cache, backups, D1 migrations,
+  upgrade checks, durable object inventory, worker endpoints) are available under
   `client.openCompute` only.
-- Operations that `ocd` supports but the pinned official SDK does not
-  implement are deliberately not exposed.
+- Other operations that `ocd` supports but the pinned official SDK does not
+  implement remain deliberately unexposed.
 
 ## Errors
 

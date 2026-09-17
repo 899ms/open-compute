@@ -22,13 +22,14 @@ pub(crate) type Client =
 pub(crate) async fn response(
     client: &Client,
     address: SocketAddr,
+    host: &str,
     path: &str,
     method: &str,
 ) -> Result<axum::http::Response<hyper::body::Incoming>, ()> {
     let request = Request::builder()
         .method(method)
         .uri(format!("http://{address}{path}"))
-        .header("host", "workflow.example")
+        .header("host", host)
         .header("content-type", "application/json")
         .body(Body::from("{}"))
         .unwrap();
@@ -41,9 +42,10 @@ pub(crate) async fn response(
 pub(crate) async fn tenant_json(
     client: &Client,
     address: SocketAddr,
+    host: &str,
     path: &str,
 ) -> serde_json::Value {
-    let response = response(client, address, path, "POST").await.unwrap();
+    let response = response(client, address, host, path, "POST").await.unwrap();
     assert_eq!(response.status(), 200);
     let bytes = to_bytes(Body::new(response.into_body()), 65536)
         .await
@@ -232,7 +234,7 @@ pub(crate) async fn ready(client: &Client, admin: SocketAddr, child: &mut Proces
         if let Some(status) = child.0.try_wait().unwrap() {
             panic!("ocd exited before readiness: {status}");
         }
-        if response(client, admin, "/health/ready", "GET")
+        if response(client, admin, &admin.to_string(), "/health/ready", "GET")
             .await
             .is_ok_and(|r| r.status() == 200)
         {

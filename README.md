@@ -81,37 +81,37 @@ Write standard module workers (`export default { fetch }`) with the bindings you
 
 ### Runtime & bindings
 
-| Module                  | Status             |
-| ----------------------- | ------------------ |
-| Workers                 | ██████████ 100% ✅ |
-| Workers Standard limits | ██████████ 100% ✅ |
-| KV                      | ██████████ 100% ✅ |
-| R2                      | ██████████ 100% ✅ |
-| D1                      | ██████████ 100% ✅ |
-| Durable Objects         | ██████████ 100% ✅ |
-| Alarms                  | ██████████ 100% ✅ |
-| Queues                  | ██████████ 100% ✅ |
-| Cron                    | ██████████ 100% ✅ |
-| Workflows               | ██████████ 100% ✅ |
-| Static Assets           | ██████████ 100% ✅ |
-| Service Bindings        | ██████████ 100% ✅ |
-| Cache                   | ██████████ 100% ✅ |
-| Images                  | ██████████ 100% ✅ |
-| Version Metadata        | ██████████ 100% ✅ |
-| WebSocket Hibernation   | ██████████ 100% ✅ |
-| Vectorize               | ██████████ 100% ✅ |
-| Markdown Conversion     | ██████████ 100% ✅ |
-| AI Search               | ██████████ 100% ✅ |
-| Artifacts               | ██████████ 100% ✅ |
+| Module                  | Status            |
+| ----------------------- | ----------------- |
+| Workers                 | █████████▉ 99% ✅ |
+| Workers Standard limits | █████████▉ 99% ✅ |
+| KV                      | █████████▉ 99% ✅ |
+| R2                      | █████████▉ 99% ✅ |
+| D1                      | █████████▉ 99% ✅ |
+| Durable Objects         | █████████▉ 99% ✅ |
+| Alarms                  | █████████▉ 99% ✅ |
+| Queues                  | █████████▉ 99% ✅ |
+| Cron                    | █████████▉ 99% ✅ |
+| Workflows               | █████████▉ 99% ✅ |
+| Static Assets           | █████████▉ 99% ✅ |
+| Service Bindings        | █████████▉ 99% ✅ |
+| Cache                   | █████████▉ 99% ✅ |
+| Images                  | █████████▉ 99% ✅ |
+| Version Metadata        | █████████▉ 99% ✅ |
+| WebSocket Hibernation   | █████████▉ 99% ✅ |
+| Vectorize               | █████████▉ 99% ✅ |
+| Markdown Conversion     | █████████▉ 99% ✅ |
+| AI Search               | █████████▉ 99% ✅ |
+| Artifacts               | █████████▉ 99% ✅ |
 
 ### Management
 
-| Surface                      | Status                                                                             |
-| ---------------------------- | ---------------------------------------------------------------------------------- |
-| Cloudflare v4 API            | █████████░ 90% — local `/client/v4` works with Wrangler and the official SDK       |
-| Wrangler                     | ██████████ 100% ✅ — Wrangler `4.127.1` deploys and manages the supported products |
-| Dashboard                    | ████████░░ 80% — operator UI built on the same `/client/v4` API                    |
-| Workers Logs / realtime tail | █████████░ 90% — logs, queries, `wrangler tail`, and live tail on one node         |
+| Surface                      | Status                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| Cloudflare v4 API            | █████████░ 90% — local `/client/v4` works with Wrangler and the official SDK      |
+| Wrangler                     | █████████▉ 99% ✅ — Wrangler `4.127.1` deploys and manages the supported products |
+| Dashboard                    | ████████░░ 80% — operator UI built on the same `/client/v4` API                   |
+| Workers Logs / realtime tail | █████████░ 90% — logs, queries, `wrangler tail`, and live tail on one node        |
 
 ### Partial
 
@@ -144,7 +144,7 @@ Uploads or configuration that require these capabilities fail closed.
 | mTLS certificates               | ░░░░░░░░░░ 0% — Not yet. |
 | Tail Workers / traces / Logpush | ░░░░░░░░░░ 0% — Not yet. |
 
-100% ✅ means the documented Worker or product API has no missing methods. Single-node differences are listed in the [compatibility guide](https://open-compute.dev/docs/platform/compatibility/). Live surface: `ocd capabilities --json`.
+Cloudflare's APIs are broad and intricate. **99% ✅ means the documented public API surface is fully aligned; it does not promise that every behavioral detail is identical to Cloudflare.** open-compute is still at an early stage. If you find behavior that does not match Cloudflare, please [open an issue](https://github.com/elliothux/open-compute/issues/new). Single-node differences are listed in the [compatibility guide](https://open-compute.dev/docs/platform/compatibility/). Live surface: `ocd capabilities --json`.
 
 ## Quick start
 

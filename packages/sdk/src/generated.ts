@@ -22,7 +22,10 @@ import { BaseTokens as BaseTokens2 } from "cloudflare/resources/user/tokens/toke
 import { BaseUser } from "cloudflare/resources/user/user";
 import { BaseIndexes } from "cloudflare/resources/vectorize/indexes/indexes";
 import { BaseMetadataIndex } from "cloudflare/resources/vectorize/indexes/metadata-index";
-import { BaseUpload } from "cloudflare/resources/workers/assets/upload";
+import {
+  BaseUpload,
+  type UploadCreateParams,
+} from "cloudflare/resources/workers/assets/upload";
 import { BaseTelemetry } from "cloudflare/resources/workers/observability/telemetry";
 import { BaseUpload as BaseUpload2 } from "cloudflare/resources/workers/scripts/assets/upload";
 import { BaseDeployments } from "cloudflare/resources/workers/scripts/deployments";
@@ -33,16 +36,50 @@ import { BaseSecrets } from "cloudflare/resources/workers/scripts/secrets";
 import { BaseSettings } from "cloudflare/resources/workers/scripts/settings";
 import { BaseSubdomain } from "cloudflare/resources/workers/scripts/subdomain";
 import { BaseTail } from "cloudflare/resources/workers/scripts/tail";
-import { BaseVersions } from "cloudflare/resources/workers/scripts/versions";
+import {
+  BaseVersions,
+  type VersionCreateParams,
+} from "cloudflare/resources/workers/scripts/versions";
 import { BaseSubdomains } from "cloudflare/resources/workers/subdomains";
 import { BaseEvents } from "cloudflare/resources/workflows/instances/events";
 import { BaseInstances as BaseInstances2 } from "cloudflare/resources/workflows/instances/instances";
 import { BaseStatus } from "cloudflare/resources/workflows/instances/status";
 import { BaseVersions as BaseVersions2 } from "cloudflare/resources/workflows/versions";
 import { BaseWorkflows } from "cloudflare/resources/workflows/workflows";
+import { Artifacts } from "./artifacts.ts";
 
 /** Official transport request options reused by vendor operations. */
 export type OpenComputeRequestOptions = Cloudflare.RequestOptions;
+
+/** Native Dynamic Worker Loader binding accepted by open-compute and Wrangler. */
+export type OpenComputeWorkerLoaderBinding = {
+  readonly type: "worker_loader";
+  readonly name: string;
+};
+
+type OfficialWorkerVersionBinding = NonNullable<
+  VersionCreateParams["metadata"]["bindings"]
+>[number];
+
+/** Official Version upload parameters plus the runtime-supported Worker Loader binding. */
+export type OpenComputeWorkerVersionCreateParams = Omit<
+  VersionCreateParams,
+  "metadata"
+> & {
+  readonly metadata: Omit<VersionCreateParams["metadata"], "bindings"> & {
+    readonly bindings?: readonly (
+      OfficialWorkerVersionBinding | OpenComputeWorkerLoaderBinding
+    )[];
+  };
+};
+
+/** Official Static Assets upload parameters with browser-native File parts. */
+export type OpenComputeAssetsUploadCreateParams = Omit<
+  UploadCreateParams,
+  "body"
+> & {
+  readonly body: Record<string, string | File>;
+};
 
 /** The Cloudflare v4 success envelope returned by every vendor operation. */
 export interface V4Envelope<T> {
@@ -84,6 +121,22 @@ export type Capabilities = {
   >;
   readonly deviations: readonly string[];
 };
+
+export type D1Migration = {
+  readonly id: number;
+  readonly name: string;
+  readonly sha256: string;
+  readonly applied_at_ms: number;
+};
+
+export type D1MigrationInput = {
+  readonly id: number;
+  readonly name: string;
+  readonly sha256: string;
+  readonly sql: string;
+};
+
+export type D1MigrationRequest = readonly D1MigrationInput[];
 
 export type DurableObjectNamespace = {
   readonly id: string;
@@ -162,7 +215,9 @@ export type UpgradeCheck = {
 
 export type WorkerEndpoint = {
   readonly id: string;
-  readonly path: string;
+  readonly kind: "local_origin";
+  readonly url: string;
+  readonly scope: "local_machine";
   readonly created_on: string;
 };
 
@@ -262,6 +317,33 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
         transport
           .get<V4Envelope<Capabilities>>(`/open-compute/capabilities`, options)
           ._thenUnwrap((envelope) => envelope.result),
+    },
+    d1: {
+      migrations: {
+        apply: (
+          accountId: string,
+          databaseId: string,
+          body: D1MigrationRequest,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<readonly D1Migration[]> =>
+          transport
+            .put<V4Envelope<readonly D1Migration[]>>(
+              `/accounts/${segment(accountId)}/open-compute/d1/databases/${segment(databaseId)}/migrations`,
+              { ...options, body },
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+        list: (
+          accountId: string,
+          databaseId: string,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<readonly D1Migration[]> =>
+          transport
+            .get<V4Envelope<readonly D1Migration[]>>(
+              `/accounts/${segment(accountId)}/open-compute/d1/databases/${segment(databaseId)}/migrations`,
+              options,
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+      },
     },
     durableObjects: {
       list: (
@@ -522,6 +604,7 @@ export interface OpenComputeR2BucketsNode {
 export interface OpenComputeR2BucketsObjectsNode {
   readonly delete: BaseObjects["delete"];
   readonly get: BaseObjects["get"];
+  readonly list: BaseObjects["list"];
   readonly upload: BaseObjects["upload"];
 }
 
@@ -571,7 +654,10 @@ export interface OpenComputeWorkersAssetsNode {
 }
 
 export interface OpenComputeWorkersAssetsUploadNode {
-  readonly create: BaseUpload["create"];
+  readonly create: (
+    params: OpenComputeAssetsUploadCreateParams,
+    options?: OpenComputeRequestOptions,
+  ) => ReturnType<BaseUpload["create"]>;
 }
 
 export interface OpenComputeWorkersObservabilityNode {
@@ -653,7 +739,11 @@ export interface OpenComputeWorkersScriptsTailNode {
 }
 
 export interface OpenComputeWorkersScriptsVersionsNode {
-  readonly create: BaseVersions["create"];
+  readonly create: (
+    scriptName: string,
+    params: OpenComputeWorkerVersionCreateParams,
+    options?: OpenComputeRequestOptions,
+  ) => ReturnType<BaseVersions["create"]>;
   readonly get: BaseVersions["get"];
   readonly list: BaseVersions["list"];
 }
@@ -751,6 +841,24 @@ export interface OpenComputeVendorCapabilitiesNode {
   ) => APIPromise<Capabilities>;
 }
 
+export interface OpenComputeVendorD1MigrationsNode {
+  readonly apply: (
+    accountId: string,
+    databaseId: string,
+    body: D1MigrationRequest,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<readonly D1Migration[]>;
+  readonly list: (
+    accountId: string,
+    databaseId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<readonly D1Migration[]>;
+}
+
+export interface OpenComputeVendorD1Node {
+  readonly migrations: OpenComputeVendorD1MigrationsNode;
+}
+
 export interface OpenComputeVendorDurableObjectsNode {
   readonly list: (
     accountId: string,
@@ -808,6 +916,7 @@ export interface OpenComputeVendorNode {
   readonly backups: OpenComputeVendorBackupsNode;
   readonly cache: OpenComputeVendorCacheNode;
   readonly capabilities: OpenComputeVendorCapabilitiesNode;
+  readonly d1: OpenComputeVendorD1Node;
   readonly durableObjects: OpenComputeVendorDurableObjectsNode;
   readonly images: OpenComputeVendorImagesNode;
   readonly scheduler: OpenComputeVendorSchedulerNode;
@@ -832,6 +941,7 @@ export interface OpenComputeSurface {
   readonly vectorize: OpenComputeVectorizeNode;
   readonly workers: OpenComputeWorkersNode;
   readonly workflows: OpenComputeWorkflowsNode;
+  readonly artifacts: Artifacts;
   readonly openCompute: OpenComputeVendorNode;
 }
 
@@ -1039,6 +1149,7 @@ export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
         objects: {
           delete: r2bucketsobjects.delete.bind(r2bucketsobjects),
           get: r2bucketsobjects.get.bind(r2bucketsobjects),
+          list: r2bucketsobjects.list.bind(r2bucketsobjects),
           upload: r2bucketsobjects.upload.bind(r2bucketsobjects),
         },
         create: r2buckets.create.bind(r2buckets),
@@ -1082,7 +1193,8 @@ export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
     workers: {
       assets: {
         upload: {
-          create: workersassetsupload.create.bind(workersassetsupload),
+          create: (params, options) =>
+            workersassetsupload.create(params as UploadCreateParams, options),
         },
       },
       observability: {
@@ -1159,7 +1271,12 @@ export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
           get: workersscriptstail.get.bind(workersscriptstail),
         },
         versions: {
-          create: workersscriptsversions.create.bind(workersscriptsversions),
+          create: (scriptName, params, options) =>
+            workersscriptsversions.create(
+              scriptName,
+              params as VersionCreateParams,
+              options,
+            ),
           get: workersscriptsversions.get.bind(workersscriptsversions),
           list: workersscriptsversions.list.bind(workersscriptsversions),
         },
@@ -1196,6 +1313,7 @@ export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
       list: workflows.list.bind(workflows),
       update: workflows.update.bind(workflows),
     },
+    artifacts: new Artifacts(transport),
     openCompute: buildOpenCompute(transport),
   };
 }
@@ -1379,6 +1497,9 @@ export type {
   ObjectDeleteParams,
   ObjectDeleteResponse,
   ObjectGetParams,
+  ObjectListParams,
+  ObjectListResponse,
+  ObjectListResponsesCursorPagination,
   ObjectUploadParams,
   ObjectUploadResponse,
 } from "cloudflare/resources/r2/buckets/objects";

@@ -10,7 +10,7 @@ use axum::extract::Request;
 use axum::http::{HeaderValue, header};
 use bytes::Bytes;
 use futures::{StreamExt as _, stream};
-use open_compute_core::PlatformError;
+use open_compute_core::{ErrorCode, PlatformError};
 use serde_json::{Map, Number, Value};
 
 const MAX_METADATA_DEPTH: usize = 32;
@@ -269,6 +269,74 @@ impl MetadataBuilder {
                     Value::Bool(parse_bool(&raw)?),
                 )
             }
+            [observability, rate]
+                if observability == "observability" && rate == "head_sampling_rate" =>
+            {
+                insert_nested(
+                    &mut self.root,
+                    observability,
+                    &["head_sampling_rate"],
+                    Value::Number(parse_number(&raw)?),
+                )
+            }
+            [observability, logs, field]
+                if observability == "observability"
+                    && logs == "logs"
+                    && matches!(field.as_str(), "enabled" | "invocation_logs" | "persist") =>
+            {
+                insert_nested(
+                    &mut self.root,
+                    observability,
+                    &["logs", field],
+                    Value::Bool(parse_bool(&raw)?),
+                )
+            }
+            [observability, logs, rate]
+                if observability == "observability"
+                    && logs == "logs"
+                    && rate == "head_sampling_rate" =>
+            {
+                insert_nested(
+                    &mut self.root,
+                    observability,
+                    &["logs", "head_sampling_rate"],
+                    Value::Number(parse_number(&raw)?),
+                )
+            }
+            [observability, traces, field]
+                if observability == "observability"
+                    && traces == "traces"
+                    && matches!(field.as_str(), "enabled" | "persist") =>
+            {
+                insert_nested(
+                    &mut self.root,
+                    observability,
+                    &["traces", field],
+                    Value::Bool(parse_bool(&raw)?),
+                )
+            }
+            [observability, traces, rate]
+                if observability == "observability"
+                    && traces == "traces"
+                    && rate == "head_sampling_rate" =>
+            {
+                insert_nested(
+                    &mut self.root,
+                    observability,
+                    &["traces", "head_sampling_rate"],
+                    Value::Number(parse_number(&raw)?),
+                )
+            }
+            [observability, branch, destinations, ..]
+                if observability == "observability"
+                    && matches!(branch.as_str(), "logs" | "traces")
+                    && destinations == "destinations" =>
+            {
+                Err(PlatformError::new(
+                    ErrorCode::BindingCapabilityUnsupported,
+                    "Workers observability destinations are unsupported",
+                ))
+            }
             [cache, field]
                 if cache == "cache_options"
                     && matches!(field.as_str(), "enabled" | "cross_version_cache") =>
@@ -501,6 +569,10 @@ fn parse_bool(raw: &str) -> Result<bool, PlatformError> {
         "false" => Ok(false),
         _ => Err(invalid()),
     }
+}
+
+fn parse_number(raw: &str) -> Result<Number, PlatformError> {
+    raw.parse::<Number>().map_err(|_| invalid())
 }
 
 fn unambiguous_json_string(raw: String) -> Result<Value, PlatformError> {

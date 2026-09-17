@@ -5,6 +5,7 @@ mod control;
 mod logs;
 mod owner;
 mod probe;
+mod rotation;
 mod spawn;
 mod state;
 mod token;
@@ -335,6 +336,10 @@ enum Command {
         startup_id: StartupId,
         healthy: bool,
     },
+    /// Explicit operator-requested generation rotation.
+    RotateGeneration {
+        ack: oneshot::Sender<Result<(), PlatformError>>,
+    },
     /// Immediate teardown and restart. Test-support only: it simulates a runtime crash and
     /// must not be reachable from production suspicion paths.
     #[cfg(any(test, feature = "test-support"))]
@@ -504,6 +509,37 @@ impl WorkerdSupervisor {
         });
     }
 
+    /// Replace the running workerd generation and wait until its successor is ready.
+    pub async fn rotate_generation(&self, timeout: Duration) -> Result<(), PlatformError> {
+        let previous = self.snapshot().startup_id;
+        let mut snapshots = self.subscribe();
+        let (ack, received) = oneshot::channel();
+        self.tx
+            .send(Command::RotateGeneration { ack })
+            .map_err(|_| runtime_rotation_failed())?;
+        received.await.map_err(|_| runtime_rotation_failed())??;
+        tokio::time::timeout(timeout, async move {
+            loop {
+                let snapshot = snapshots.borrow().clone();
+                if snapshot.state == SupervisorState::Running
+                    && snapshot.startup_id.is_some()
+                    && snapshot.startup_id != previous
+                {
+                    return Ok(());
+                }
+                if snapshot.state == SupervisorState::Failed {
+                    return Err(runtime_rotation_failed());
+                }
+                snapshots
+                    .changed()
+                    .await
+                    .map_err(|_| runtime_rotation_failed())?;
+            }
+        })
+        .await
+        .map_err(|_| runtime_rotation_failed())?
+    }
+
     /// Immediate teardown and restart for crash-simulation fixtures. Test-support only.
     #[cfg(any(test, feature = "test-support"))]
     pub fn force_restart_for_test(&self) {
@@ -558,6 +594,13 @@ impl WorkerdSupervisor {
     pub fn owner_registry_len(&self) -> usize {
         self.owners.active_count()
     }
+}
+
+fn runtime_rotation_failed() -> PlatformError {
+    PlatformError::new(
+        ErrorCode::RuntimeUnavailable,
+        "workerd generation rotation did not complete",
+    )
 }
 
 impl Drop for WorkerdSupervisor {

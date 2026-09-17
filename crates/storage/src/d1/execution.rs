@@ -342,13 +342,11 @@ impl D1Engine {
         if migrations.is_empty() || migrations.len() > D1_MAX_MIGRATIONS {
             return Err(sql_invalid());
         }
-        let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();
-        for migration in migrations {
-            if migration.id == 0
+        for (index, migration) in migrations.iter().enumerate() {
+            if migration.id != u32::try_from(index + 1).map_err(|_| migration_drift())?
                 || migration.name.is_empty()
                 || migration.name.len() > 255
-                || !ids.insert(migration.id)
                 || !names.insert(migration.name.as_str())
                 || Sha256::digest(migration.sql.as_bytes()).as_slice() != migration.sha256
             {
@@ -359,6 +357,19 @@ impl D1Engine {
 
         let connection = self.open()?;
         let mut applied = read_migration_map(&connection)?;
+        if applied.len() > migrations.len()
+            || applied.iter().any(|(id, existing)| {
+                migrations
+                    .get(usize::try_from(id.saturating_sub(1)).unwrap_or(usize::MAX))
+                    .is_none_or(|migration| {
+                        migration.id != *id
+                            || migration.name != existing.name
+                            || hex::encode(migration.sha256) != existing.sha256
+                    })
+            })
+        {
+            return Err(migration_drift());
+        }
         let mut pending = Vec::new();
         for migration in migrations {
             if let Some(existing) = applied.get(&migration.id) {

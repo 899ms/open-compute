@@ -1,0 +1,925 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Cloudflare observed-standard Artifacts API",
+    "version": "2026-08-13",
+    "description": "Pinned Artifacts REST overlay observed from Cloudflare documentation and Wrangler 4.127.1; it is not an upstream OpenAPI snapshot."
+  },
+  "x-open-compute-evidence": {
+    "capturedAt": "2026-08-13",
+    "wranglerVersion": "4.127.1",
+    "wranglerPackageSha256": "f076e0a2cbff001c064a584f1abbde0dd2a58002ab38db5f57abaa2224bab043",
+    "scope": "artifacts",
+    "schemaSha256": {
+      "ApiMessage": "ac79d5f21b24bc32782380d222adfb19224f8c68945623ee78496c56c56d870e",
+      "Commit": "59fc6d2ed147513f8591074c2845d5925ac94c1dd64b3e43a1651fe2c809dad7",
+      "CommitListEnvelope": "f1a8309977631887cdcd59020332c456f80d3e636b255776ce39e63bcc87ea71",
+      "CreateNamespaceRequest": "762f57858bea8389ec39acb731c0993ed81a561d98ce295e97401d56b10e7c59",
+      "CreateRepositoryRequest": "57f9ef1f9174efbcc3dc0d3675334b6fb8288d20bae177b1b946383cdf02db73",
+      "CreatedRepository": "eb5dbc73fc4018503fb94b14517db4449e504c019175767ee43c8ba990dff47f",
+      "CreatedRepositoryEnvelope": "2480070fc42e67d039bfce6a3d8a5c1cd6fd7cda44c336d51707e2476a5531d3",
+      "CursorResultInfo": "38cc6da9b69a2cebbe864a6d1b7cd9a107ae2b350d4d2d403aae1245db7849e3",
+      "EnvelopeBase": "09afe220c290f88d7a1faddac3004eb8b572e66ab2328c3c39093753537461e8",
+      "ForkRepositoryRequest": "35cb2a07e95e50237d72e20839bacb6c96200a37d749ad09182ace26f5a9236c",
+      "ForkedRepository": "11f19fb6551c324031918bf83ce70cd20ae4f3ea00bd400ee2b097e29c211153",
+      "ForkedRepositoryEnvelope": "c2d72e33867a96eb6833e7a60b9b1df9bb441d58613c0e9aa4123a7e86dc69ec",
+      "GitObject": "98ef400329ae0e9ddcce0481da1cecfa222fc8283605dc15ec97002e40388a17",
+      "GitObjectEnvelope": "6614af64b0882e99c1cc0e02b783f910d24c075ba2c47c2cf59c3e45e23777df",
+      "Identifier": "fc3926abfd4f2a4a74bb85f4d814d607affd293dd0cb139687604a6f87b74dc2",
+      "IdentifierEnvelope": "ade413ed6250f8c2c17e1e80b8f7bcb8474d4d0a9391ec0e84acc32afb4f185e",
+      "ImportRepositoryRequest": "e2f0f6606411c243681cd12414297312134dea5c686b9d84f52cf47e0b43608b",
+      "IssueTokenRequest": "d99a4f3e03a3967f99d0d81b84ea5fde9331ed28f3c643b26397ed11319bfb8c",
+      "IssuedToken": "fa5dc892aa00fb547c5007da7eb89ca6bea77af57b42a4e8def28e172b4292d8",
+      "IssuedTokenEnvelope": "24c9164f472ca6af1d3ba13a45f0a0dbf48b28cea090db13d39c9dd764780a0e",
+      "Namespace": "4c764c2f072d8ebbaf38d1f50a43ec5d023a5a800a0b5d4abbd089e0fa047ab2",
+      "NamespaceEnvelope": "79ed005cdf9d28309bf86eff9003e4baa96959bf053fe639d978872c95f36c6d",
+      "NamespaceListEnvelope": "76c49cc2982888a3fd95474275a95c532030168f9d99e53ee3f61c39b510ec15",
+      "PageResultInfo": "46700cee20aa27b8130bc7b9b5810bd95f70ed04ba9f9967aedb3aced64563f5",
+      "Repository": "c83dd46fb4daa53a8302566a9531c9002ca0ce34ca2247bc9a44b31d6581d8ff",
+      "RepositoryEnvelope": "c2ff37cd571f0f5e0503032d34621b34ffe64ac4668013498833f157efbc9f51",
+      "RepositoryListEnvelope": "5674e759fc95a6b8aa9c4baa439a4c91c2331059b22be0f2558b94a041146155",
+      "Token": "e9af992a4af00911bcea78e3f4c86c6760d782da284fbdd4c96cf06c9cc0e040",
+      "TokenListEnvelope": "bcca7a7b20da284f1924044f228827cb7185160cbd06871d4003701da837910c"
+    }
+  },
+  "paths": {
+    "/accounts/{account_id}/artifacts/namespaces": {
+      "post": {
+        "operationId": "artifacts-namespaces-create",
+        "x-open-compute-sdk-method": "artifacts.namespaces.create",
+        "parameters": [{ "$ref": "#/components/parameters/AccountId" }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateNamespace" },
+        "responses": { "200": { "$ref": "#/components/responses/Namespace" } }
+      },
+      "get": {
+        "operationId": "artifacts-namespaces-list",
+        "x-open-compute-sdk-method": "artifacts.namespaces.list",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Cursor" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/NamespaceList" }
+        }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}": {
+      "get": {
+        "operationId": "artifacts-namespaces-get",
+        "x-open-compute-sdk-method": "artifacts.namespaces.get",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/Namespace" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos": {
+      "post": {
+        "operationId": "artifacts-repositories-create",
+        "x-open-compute-sdk-method": "artifacts.repositories.create",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateRepository"
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/CreatedRepository" }
+        }
+      },
+      "get": {
+        "operationId": "artifacts-repositories-list",
+        "x-open-compute-sdk-method": "artifacts.repositories.list",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/Search" },
+          { "$ref": "#/components/parameters/Sort" },
+          { "$ref": "#/components/parameters/Direction" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/RepositoryList" }
+        }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}": {
+      "get": {
+        "operationId": "artifacts-repositories-get",
+        "x-open-compute-sdk-method": "artifacts.repositories.get",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/Repository" } }
+      },
+      "delete": {
+        "operationId": "artifacts-repositories-delete",
+        "x-open-compute-sdk-method": "artifacts.repositories.delete",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" }
+        ],
+        "responses": { "202": { "$ref": "#/components/responses/Identifier" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/fork": {
+      "post": {
+        "operationId": "artifacts-repositories-fork",
+        "x-open-compute-sdk-method": "artifacts.repositories.fork",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/ForkRepository" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/ForkedRepository" }
+        }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/import": {
+      "post": {
+        "operationId": "artifacts-repositories-import",
+        "x-open-compute-sdk-method": "artifacts.repositories.import",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ImportRepository"
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/CreatedRepository" }
+        }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/tokens": {
+      "post": {
+        "operationId": "artifacts-tokens-issue",
+        "x-open-compute-sdk-method": "artifacts.tokens.issue",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/IssueToken" },
+        "responses": { "200": { "$ref": "#/components/responses/IssuedToken" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tokens": {
+      "get": {
+        "operationId": "artifacts-tokens-list",
+        "x-open-compute-sdk-method": "artifacts.tokens.list",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" },
+          { "$ref": "#/components/parameters/TokenState" },
+          { "$ref": "#/components/parameters/PerPage" },
+          { "$ref": "#/components/parameters/Page" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/TokenList" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/tokens/{token}": {
+      "delete": {
+        "operationId": "artifacts-tokens-revoke",
+        "x-open-compute-sdk-method": "artifacts.tokens.revoke",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Token" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/Identifier" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/log": {
+      "get": {
+        "operationId": "artifacts-repositories-log",
+        "x-open-compute-sdk-method": "artifacts.repositories.log",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" },
+          { "$ref": "#/components/parameters/Ref" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/Offset" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/CommitList" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/commit/{oid}": {
+      "get": {
+        "operationId": "artifacts-repositories-commit",
+        "x-open-compute-sdk-method": "artifacts.repositories.commit",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" },
+          { "$ref": "#/components/parameters/ObjectId" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/GitObject" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tree/{oid}": {
+      "get": {
+        "operationId": "artifacts-repositories-tree",
+        "x-open-compute-sdk-method": "artifacts.repositories.tree",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" },
+          { "$ref": "#/components/parameters/ObjectId" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/GitObject" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/blob/{oid}": {
+      "get": {
+        "operationId": "artifacts-repositories-blob",
+        "x-open-compute-sdk-method": "artifacts.repositories.blob",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" },
+          { "$ref": "#/components/parameters/ObjectId" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/Binary" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/file": {
+      "get": {
+        "operationId": "artifacts-repositories-file",
+        "x-open-compute-sdk-method": "artifacts.repositories.file",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" },
+          { "$ref": "#/components/parameters/RequiredRef" },
+          { "$ref": "#/components/parameters/FilePath" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/Binary" } }
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/raw/{reference}/{path}": {
+      "get": {
+        "operationId": "artifacts-repositories-raw",
+        "x-open-compute-sdk-method": "artifacts.repositories.raw",
+        "parameters": [
+          { "$ref": "#/components/parameters/AccountId" },
+          { "$ref": "#/components/parameters/Namespace" },
+          { "$ref": "#/components/parameters/Repository" },
+          { "$ref": "#/components/parameters/Reference" },
+          { "$ref": "#/components/parameters/RawPath" }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/Binary" } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "AccountId": {
+        "name": "account_id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "Namespace": {
+        "name": "namespace",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "Repository": {
+        "name": "repository",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "Token": {
+        "name": "token",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "ObjectId": {
+        "name": "oid",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "Reference": {
+        "name": "reference",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "RawPath": {
+        "name": "path",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 1 }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "schema": { "type": "string" }
+      },
+      "Search": {
+        "name": "search",
+        "in": "query",
+        "schema": { "type": "string" }
+      },
+      "Sort": {
+        "name": "sort",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": ["name", "created_at", "updated_at", "last_push_at"]
+        }
+      },
+      "Direction": {
+        "name": "direction",
+        "in": "query",
+        "schema": { "type": "string", "enum": ["asc", "desc"] }
+      },
+      "TokenState": {
+        "name": "state",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": ["active", "expired", "revoked", "all"]
+        }
+      },
+      "PerPage": {
+        "name": "per_page",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 1 }
+      },
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 1 }
+      },
+      "Ref": { "name": "ref", "in": "query", "schema": { "type": "string" } },
+      "RequiredRef": {
+        "name": "ref",
+        "in": "query",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 0 }
+      },
+      "FilePath": {
+        "name": "path",
+        "in": "query",
+        "required": true,
+        "schema": { "type": "string" }
+      }
+    },
+    "requestBodies": {
+      "CreateNamespace": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/CreateNamespaceRequest" }
+          }
+        }
+      },
+      "CreateRepository": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/CreateRepositoryRequest" }
+          }
+        }
+      },
+      "ForkRepository": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ForkRepositoryRequest" }
+          }
+        }
+      },
+      "ImportRepository": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ImportRepositoryRequest" }
+          }
+        }
+      },
+      "IssueToken": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/IssueTokenRequest" }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Namespace": {
+        "description": "Artifact namespace",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/NamespaceEnvelope" }
+          }
+        }
+      },
+      "NamespaceList": {
+        "description": "Artifact namespaces",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/NamespaceListEnvelope" }
+          }
+        }
+      },
+      "Repository": {
+        "description": "Artifact repository",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RepositoryEnvelope" }
+          }
+        }
+      },
+      "CreatedRepository": {
+        "description": "Created artifact repository and one-time token",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreatedRepositoryEnvelope"
+            }
+          }
+        }
+      },
+      "ForkedRepository": {
+        "description": "Forked artifact repository",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ForkedRepositoryEnvelope"
+            }
+          }
+        }
+      },
+      "RepositoryList": {
+        "description": "Artifact repositories",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/RepositoryListEnvelope" }
+          }
+        }
+      },
+      "IssuedToken": {
+        "description": "Issued artifact token; plaintext is returned once",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/IssuedTokenEnvelope" }
+          }
+        }
+      },
+      "TokenList": {
+        "description": "Artifact token metadata",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/TokenListEnvelope" }
+          }
+        }
+      },
+      "Identifier": {
+        "description": "Deleted or revoked resource identifier",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/IdentifierEnvelope" }
+          }
+        }
+      },
+      "CommitList": {
+        "description": "Repository commit log",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/CommitListEnvelope" }
+          }
+        }
+      },
+      "GitObject": {
+        "description": "Git commit or tree object",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/GitObjectEnvelope" }
+          }
+        }
+      },
+      "Binary": {
+        "description": "Streaming object bytes",
+        "content": {
+          "application/octet-stream": {
+            "schema": { "type": "string", "format": "binary" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "EnvelopeBase": {
+        "type": "object",
+        "required": ["success", "errors", "messages"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "errors": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ApiMessage" }
+          },
+          "messages": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ApiMessage" }
+          }
+        }
+      },
+      "ApiMessage": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "CreateNamespaceRequest": {
+        "type": "object",
+        "required": ["namespace"],
+        "additionalProperties": false,
+        "properties": {
+          "namespace": { "type": "string" },
+          "jurisdiction": { "type": "string", "enum": ["eu", "us"] }
+        }
+      },
+      "CreateRepositoryRequest": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "default_branch": { "type": "string" },
+          "read_only": { "type": "boolean" }
+        }
+      },
+      "ForkRepositoryRequest": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "read_only": { "type": "boolean" },
+          "default_branch_only": { "type": "boolean" }
+        }
+      },
+      "ImportRepositoryRequest": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "branch": { "type": "string" },
+          "depth": { "type": "integer", "minimum": 1 },
+          "read_only": { "type": "boolean" }
+        }
+      },
+      "IssueTokenRequest": {
+        "type": "object",
+        "required": ["repo"],
+        "additionalProperties": false,
+        "properties": {
+          "repo": { "type": "string" },
+          "scope": { "type": "string", "enum": ["read", "write"] },
+          "ttl": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "Namespace": {
+        "type": "object",
+        "required": ["namespace", "repo_count", "created_at", "updated_at"],
+        "additionalProperties": false,
+        "properties": {
+          "namespace": { "type": "string" },
+          "repo_count": { "type": "integer", "minimum": 0 },
+          "jurisdiction": { "type": "string", "enum": ["eu", "us"] },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Repository": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "default_branch",
+          "remote",
+          "read_only",
+          "created_at",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "default_branch": { "type": "string" },
+          "remote": { "type": "string", "format": "uri" },
+          "read_only": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "last_push_at": { "type": "string", "format": "date-time" },
+          "source": { "type": "string" }
+        }
+      },
+      "CreatedRepository": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "default_branch",
+          "remote",
+          "token"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "default_branch": { "type": "string" },
+          "remote": { "type": "string", "format": "uri" },
+          "token": {
+            "type": "string",
+            "format": "password",
+            "x-open-compute-secret": true
+          }
+        }
+      },
+      "ForkedRepository": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "default_branch",
+          "remote",
+          "token",
+          "objects"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "default_branch": { "type": "string" },
+          "remote": { "type": "string", "format": "uri" },
+          "token": {
+            "type": "string",
+            "format": "password",
+            "x-open-compute-secret": true
+          },
+          "objects": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "Token": {
+        "type": "object",
+        "required": ["id", "scope", "expires_at"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "scope": { "type": "string", "enum": ["read", "write"] },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "state": {
+            "type": "string",
+            "enum": ["active", "expired", "revoked"]
+          },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "IssuedToken": {
+        "type": "object",
+        "required": ["id", "scope", "expires_at", "plaintext"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "scope": { "type": "string", "enum": ["read", "write"] },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "plaintext": {
+            "type": "string",
+            "format": "password",
+            "x-open-compute-secret": true
+          }
+        }
+      },
+      "Identifier": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": { "id": { "type": "string" } }
+      },
+      "Commit": {
+        "type": "object",
+        "required": ["id", "content"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "content": { "type": "string" }
+        }
+      },
+      "GitObject": {
+        "type": "object",
+        "required": ["id", "type", "content"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "enum": ["commit", "tree"] },
+          "content": { "type": "string" }
+        }
+      },
+      "CursorResultInfo": {
+        "type": "object",
+        "required": ["cursor", "per_page", "count"],
+        "additionalProperties": false,
+        "properties": {
+          "cursor": { "type": "string" },
+          "per_page": { "type": "integer", "minimum": 1 },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "PageResultInfo": {
+        "type": "object",
+        "required": ["page", "per_page", "count", "total_count", "total_pages"],
+        "additionalProperties": false,
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "per_page": { "type": "integer", "minimum": 1 },
+          "count": { "type": "integer", "minimum": 0 },
+          "total_count": { "type": "integer", "minimum": 0 },
+          "total_pages": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "NamespaceEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "$ref": "#/components/schemas/Namespace" }
+            }
+          }
+        ]
+      },
+      "NamespaceListEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result", "result_info"],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Namespace" }
+              },
+              "result_info": { "$ref": "#/components/schemas/CursorResultInfo" }
+            }
+          }
+        ]
+      },
+      "RepositoryEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "$ref": "#/components/schemas/Repository" }
+            }
+          }
+        ]
+      },
+      "CreatedRepositoryEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "$ref": "#/components/schemas/CreatedRepository" }
+            }
+          }
+        ]
+      },
+      "ForkedRepositoryEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "$ref": "#/components/schemas/ForkedRepository" }
+            }
+          }
+        ]
+      },
+      "RepositoryListEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result", "result_info"],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Repository" }
+              },
+              "result_info": { "$ref": "#/components/schemas/CursorResultInfo" }
+            }
+          }
+        ]
+      },
+      "IssuedTokenEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "$ref": "#/components/schemas/IssuedToken" }
+            }
+          }
+        ]
+      },
+      "TokenListEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result", "result_info"],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Token" }
+              },
+              "result_info": { "$ref": "#/components/schemas/PageResultInfo" }
+            }
+          }
+        ]
+      },
+      "IdentifierEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "$ref": "#/components/schemas/Identifier" }
+            }
+          }
+        ]
+      },
+      "CommitListEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Commit" }
+              }
+            }
+          }
+        ]
+      },
+      "GitObjectEnvelope": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EnvelopeBase" },
+          {
+            "type": "object",
+            "required": ["result"],
+            "properties": {
+              "result": { "$ref": "#/components/schemas/GitObject" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -3,19 +3,27 @@ title: "开发应用"
 description: "使用 Wrangler 项目、本地开发、open-compute target、部署、日志与 CI。"
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 
 每个应用保持为标准 Wrangler 项目：`wrangler.jsonc`、TypeScript 源码、项目内 Wrangler 依赖和提交的 lockfile。
 
 ## 开发流程
 
 <Tabs syncKey="package-manager">
-  <TabItem label="npm">```sh npm ci npm exec -- wrangler dev ```</TabItem>
+  <TabItem label="npm">
+    <Code code={`npm ci\nnpm exec -- wrangler dev`} lang="sh" />
+  </TabItem>
   <TabItem label="pnpm">
-    ```sh pnpm install --frozen-lockfile pnpm exec wrangler dev ```
+    <Code
+      code={`pnpm install --frozen-lockfile\npnpm exec wrangler dev`}
+      lang="sh"
+    />
   </TabItem>
   <TabItem label="bun">
-    ```sh bun install --frozen-lockfile bun run wrangler dev ```
+    <Code
+      code={`bun install --frozen-lockfile\nbun run wrangler dev`}
+      lang="sh"
+    />
   </TabItem>
 </Tabs>
 

@@ -728,18 +728,16 @@ async fn exercise_settings_and_delete(
         assert!(!envelope["errors"].as_array().unwrap().is_empty());
     }
 
-    for query in ["?force=true", "?force=invalid"] {
-        let response = app
-            .clone()
-            .oneshot(request(
-                Method::DELETE,
-                &format!("{prefix}{query}"),
-                Body::empty(),
-            ))
-            .await
-            .unwrap();
-        assert!(!response.status().is_success());
-    }
+    let response = app
+        .clone()
+        .oneshot(request(
+            Method::DELETE,
+            &format!("{prefix}?force=invalid"),
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let deleted_subdomain = app
         .clone()
         .oneshot(request(

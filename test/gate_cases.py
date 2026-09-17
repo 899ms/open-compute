@@ -143,6 +143,7 @@ TIMING = {
         'begin_drain_stops_a_running_generation_gracefully',
         'compile_failure_does_not_inherit_prior_exit',
         'control_faults_reap_pid_and_pgid',
+        'controlled_generation_rotation',
         'drop_does_not_signal_or_double_wait_reaped_pid',
         'drop_reaps_child',
         'ignore_term_then_kill',

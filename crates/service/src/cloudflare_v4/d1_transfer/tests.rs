@@ -1,7 +1,7 @@
 use super::*;
 use axum::body::Body;
 use axum::body::to_bytes;
-use axum::http::{Method, Request};
+use axum::http::{Method, Request, StatusCode};
 use md5::Digest as _;
 use open_compute_artifacts::{ArtifactStore, MapEnv, ObjectBackend, resolve_s3_credentials_with};
 use open_compute_core::{D1Config, PlatformConfig, PlatformId, SecretString};
@@ -376,6 +376,89 @@ fn local_uri(absolute: &str) -> String {
         Some(query) => format!("{}?{query}", url.path()),
         None => url.path().to_owned(),
     }
+}
+
+#[tokio::test]
+async fn vendor_migrations_apply_list_and_reject_drift() {
+    let (_temp, mock, state, account, storage) =
+        crate::tests::initialized_worker_http_fixture().await;
+    let database = create_database(&storage, account, "vendor-migrations-http", 10);
+    let backend = Arc::new(crate::D1BindingService::new(
+        storage.clone(),
+        ResourcePins::new(),
+        D1Config::default(),
+    ));
+    let api = crate::D1ApiState::new(
+        storage.clone(),
+        artifact_store(&mock),
+        ResourcePins::new(),
+        backend,
+        D1Config::default(),
+        100,
+        Duration::from_millis(10),
+    );
+    let authority =
+        super::super::accounts::AccountAuthority::new(PlatformId::generate(), account, 1);
+    let uri = format!(
+        "/client/v4/accounts/{}/open-compute/d1/databases/{}/migrations",
+        authority.public_id(),
+        authority.public_resource_id(V4ResourceKind::D1Database, database),
+    );
+    let app = crate::http::admin_router(
+        state
+            .with_d1_api(api)
+            .with_platform_storage(storage)
+            .with_v4_tokens(
+                SecretString::new("deployer-token"),
+                SecretString::new("read-token"),
+            )
+            .with_cloudflare_v4_account(authority),
+    );
+    let sql = "CREATE TABLE items(id INTEGER PRIMARY KEY);";
+    let sha256 = hex::encode(sha2::Sha256::digest(sql));
+    let migration = serde_json::json!([{
+        "id": 1,
+        "name": "0001_items.sql",
+        "sha256": sha256,
+        "sql": sql,
+    }]);
+    let applied = app
+        .clone()
+        .oneshot(transfer_request(
+            Method::PUT,
+            &uri,
+            Body::from(migration.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(applied.status(), StatusCode::OK);
+    let applied = response_json(applied).await;
+    assert_eq!(applied["result"][0]["name"], "0001_items.sql");
+    assert_eq!(applied["result"][0]["sha256"], sha256);
+
+    let listed = app
+        .clone()
+        .oneshot(transfer_request(Method::GET, &uri, Body::empty()))
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    assert_eq!(response_json(listed).await["result"][0]["id"], 1);
+
+    let drift = serde_json::json!([{
+        "id": 1,
+        "name": "0001_changed.sql",
+        "sha256": hex::encode(sha2::Sha256::digest("SELECT 1")),
+        "sql": "SELECT 1",
+    }]);
+    let rejected = app
+        .oneshot(transfer_request(
+            Method::PUT,
+            &uri,
+            Body::from(drift.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
 }
 
 #[tokio::test]

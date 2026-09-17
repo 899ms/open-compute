@@ -72,36 +72,20 @@ pub(crate) fn idempotency_ref_id(account_id: AccountId, scope: &str, key: &str) 
     hex::encode(hasher.finalize())
 }
 
-pub(crate) fn validate_exact_route(
-    hostname: &str,
-    path: &str,
-    entrypoint: Option<&str>,
-) -> Result<(), PlatformError> {
-    if hostname.is_empty()
-        || hostname.len() > 253
-        || hostname.bytes().any(|byte| {
-            !byte.is_ascii_lowercase()
-                && !byte.is_ascii_digit()
-                && !matches!(byte, b'.' | b'-' | b':' | b'[' | b']')
-        })
-        || path.is_empty()
-        || path.len() > 2048
-        || !path.starts_with('/')
-        || path.contains(['?', '#', '\0'])
-        || entrypoint.is_some_and(|value| {
-            value.is_empty()
-                || value.len() > 128
-                || value
-                    .bytes()
-                    .any(|byte| !byte.is_ascii_alphanumeric() && !matches!(byte, b'_' | b'$'))
-        })
-    {
+/// Build the canonical local Worker hostname persisted by route authority.
+pub fn local_worker_hostname(
+    account_id: AccountId,
+    worker_name: &str,
+) -> Result<String, PlatformError> {
+    validate_worker_name(worker_name)?;
+    let hostname = format!("{worker_name}.{account_id}.localhost");
+    if hostname.len() > 253 {
         return Err(PlatformError::new(
             ErrorCode::ConfigInvalid,
-            "exact route input is invalid",
+            "local Worker hostname is too long",
         ));
     }
-    Ok(())
+    Ok(hostname)
 }
 
 fn require_account(tx: &Transaction<'_>, account_id: AccountId) -> Result<(), PlatformError> {
@@ -378,17 +362,16 @@ fn read_version_annotations(
 fn map_route(row: &rusqlite::Row<'_>) -> rusqlite::Result<RouteRecord> {
     let account: String = row.get(1)?;
     let worker: String = row.get(2)?;
-    let kind: String = row.get(3)?;
-    let generation: i64 = row.get(7)?;
+    let generation: i64 = row.get(6)?;
     Ok(RouteRecord {
         id: row.get(0)?,
         account_id: AccountId::from_str(&account).map_err(|_| rusqlite::Error::InvalidQuery)?,
         worker_id: WorkerId::from_str(&worker).map_err(|_| rusqlite::Error::InvalidQuery)?,
-        kind: RouteKind::parse(&kind).map_err(|_| rusqlite::Error::InvalidQuery)?,
-        hostname_ascii: row.get(4)?,
-        path_prefix: row.get(5)?,
-        entrypoint: row.get(6)?,
+        hostname_ascii: row.get(3)?,
+        path_prefix: row.get(4)?,
+        entrypoint: row.get(5)?,
         generation: u64::try_from(generation).map_err(|_| rusqlite::Error::InvalidQuery)?,
+        created_at_ms: row.get(7)?,
     })
 }
 

@@ -28,6 +28,7 @@ pub(super) struct Fixture {
     pub definition: WorkflowId,
     pub frozen: VersionId,
     pub future: VersionId,
+    pub host: String,
 }
 
 pub(super) async fn prepare() -> Fixture {
@@ -61,7 +62,7 @@ pub(super) async fn prepare() -> Fixture {
     .await;
     let account = storage.identity().default_account_id;
     let workers = WorkerRepository::new(storage.db());
-    let worker = workers
+    let (worker, local_route) = workers
         .create_worker(
             account,
             "p2-chain",
@@ -69,8 +70,7 @@ pub(super) async fn prepare() -> Fixture {
             now_ms(),
             1_000_000,
         )
-        .unwrap()
-        .0;
+        .unwrap();
     let mut bindings = BTreeMap::new();
     for (name, kind, resource_name) in [
         ("KV", BindingKind::KvNamespace, "chain-kv"),
@@ -191,6 +191,7 @@ pub(super) async fn prepare() -> Fixture {
                 vec![]
             },
             crons: Vec::new(),
+            observability: None,
             deployment_source: (index != 2)
                 .then_some(open_compute_storage::DeploymentSource::VersionsApi),
             request_id: RequestId::generate(),
@@ -238,19 +239,6 @@ pub(super) async fn prepare() -> Fixture {
         }
         versions.push(version.id);
     }
-    workers
-        .create_exact_route(
-            account,
-            worker.id,
-            "workflow.example",
-            "/",
-            None,
-            None,
-            RequestId::generate(),
-            now_ms(),
-            1_000_000,
-        )
-        .unwrap();
     stack.stop().await;
     Fixture {
         evidence,
@@ -261,6 +249,7 @@ pub(super) async fn prepare() -> Fixture {
         definition,
         frozen: versions[1],
         future: versions[2],
+        host: local_route.hostname_ascii,
     }
 }
 

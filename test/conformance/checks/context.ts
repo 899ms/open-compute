@@ -74,19 +74,33 @@ export function sourceIdentity(): string {
     .split("\0")
     .filter(Boolean)
     .sort();
+  const regularNames = names.filter((name) => {
+    if (sourceIdentityExcluded(name)) return false;
+    try {
+      return lstatSync(join(ROOT, name)).isFile();
+    } catch {
+      return false;
+    }
+  });
+  const objectIds = execFileSync("git", ["hash-object", "--stdin-paths"], {
+    cwd: ROOT,
+    input: `${regularNames.join("\n")}\n`,
+  })
+    .toString("utf8")
+    .trim()
+    .split("\n");
+  if (objectIds.length !== regularNames.length) {
+    throw new Error("source identity object count differs from file count");
+  }
+  const objects = new Map(
+    regularNames.map((name, index) => [name, objectIds[index]!]),
+  );
   const output = createHash("sha256");
   for (const name of names) {
     if (sourceIdentityExcluded(name)) continue;
     output.update(name);
     output.update("\0");
-    const path = join(ROOT, name);
-    let regular = false;
-    try {
-      regular = lstatSync(path).isFile();
-    } catch {
-      regular = false;
-    }
-    output.update(regular ? digest(name) : "deleted");
+    output.update(objects.get(name) ?? "deleted");
   }
   return output.digest("hex");
 }

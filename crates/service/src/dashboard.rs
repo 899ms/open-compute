@@ -143,6 +143,7 @@ async fn create_dashboard_version(
             queue_consumers: Vec::new(),
             crons: Default::default(),
             deployment_source: Some(open_compute_storage::DeploymentSource::VersionsApi),
+            observability: None,
             request_id: RequestId::generate(),
             now_ms: open_compute_core::wall_time_ms(),
         })

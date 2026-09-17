@@ -616,10 +616,32 @@ impl R2BindingService {
         input: ListRequest,
         timeout: Duration,
     ) -> Result<Response, PlatformError> {
+        let page = self.list_page(binding, locator, &input, timeout).await?;
+        let include_mask = include_mask(&input.include)?;
+        let objects = page
+            .objects
+            .into_iter()
+            .map(|metadata| list_object_json(metadata, include_mask))
+            .collect();
+        Ok(json_response(ListResponse {
+            objects,
+            truncated: page.truncated,
+            cursor: page.cursor,
+            delimited_prefixes: page.delimited_prefixes,
+        }))
+    }
+
+    pub(super) async fn list_page(
+        &self,
+        binding: &AuthorizedBinding,
+        locator: &open_compute_artifacts::R2BucketLocator,
+        input: &ListRequest,
+        timeout: Duration,
+    ) -> Result<R2ManagementListPage, PlatformError> {
         input.validate()?;
         let include_mask = include_mask(&input.include)?;
         let cursor_after = match input.cursor.as_deref() {
-            Some(cursor) => Some(self.decode_cursor(binding, &input, include_mask, cursor)?),
+            Some(cursor) => Some(self.decode_cursor(binding, input, include_mask, cursor)?),
             None => None,
         };
         let limit = input.limit.max(1);
@@ -638,16 +660,14 @@ impl R2BindingService {
         if input.limit == 0 {
             let truncated = !page.entries.is_empty();
             let cursor = truncated
-                .then(|| {
-                    self.encode_cursor(binding, &input, include_mask, after.map(str::to_owned))
-                })
+                .then(|| self.encode_cursor(binding, input, include_mask, after.map(str::to_owned)))
                 .transpose()?;
-            return Ok(json_response(ListResponse {
+            return Ok(R2ManagementListPage {
                 objects: Vec::new(),
                 truncated,
                 cursor,
                 delimited_prefixes: Vec::new(),
-            }));
+            });
         }
         let (objects, delimited_prefixes) = page.entries.into_iter().fold(
             (Vec::new(), Vec::new()),
@@ -665,20 +685,16 @@ impl R2BindingService {
         let headed = self
             .head_list_objects(binding, locator, &objects, timeout)
             .await?;
-        let objects = headed
-            .into_iter()
-            .map(|metadata| list_object_json(metadata, include_mask))
-            .collect::<Vec<_>>();
         let cursor = page
             .next_after
-            .map(|after_key| self.encode_cursor(binding, &input, include_mask, Some(after_key)))
+            .map(|after_key| self.encode_cursor(binding, input, include_mask, Some(after_key)))
             .transpose()?;
-        Ok(json_response(ListResponse {
-            objects,
+        Ok(R2ManagementListPage {
+            objects: headed,
             truncated: cursor.is_some(),
             cursor,
             delimited_prefixes,
-        }))
+        })
     }
 
     async fn head_list_objects(

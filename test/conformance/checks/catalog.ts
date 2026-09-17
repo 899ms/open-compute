@@ -17,7 +17,7 @@ import {
 export function baselineIdentity(): void {
   const value = baseline();
   if (value.schemaVersion !== 1) throw new Error("unsupported baseline schema");
-  const hash = string(value.openComputeRevision, "openComputeRevision");
+  const hash = string(value.sourceDigest, "sourceDigest");
   const actualSource = sourceIdentity();
   if (!/^[0-9a-f]{64}$/.test(hash) || hash !== actualSource) {
     throw new Error(

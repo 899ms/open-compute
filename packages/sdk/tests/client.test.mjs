@@ -16,7 +16,9 @@ async function mockClient(overrides = {}) {
     baseURL: "https://compute.example/client/v4",
     maxRetries: 0,
     fetch: async (url, init) => {
-      requests.push({ url: String(url), init });
+      const request =
+        url instanceof Request ? url.clone() : new Request(url, init);
+      requests.push({ url: request.url, init, request });
       const response = responses.shift();
       if (response !== undefined) return response;
       return new Response(
@@ -61,7 +63,8 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
   assert.equal(surface.schemaVersion, 1);
   assert.equal(surface.package, "@open-compute/sdk");
   assert.equal(surface.packageVersion, packageJson.version);
-  assert.equal(surface.operations.length, 140);
+  assert.equal(surface.operations.length, 141);
+  assert.equal(surface.observedStandardOperations.length, 18);
   assert.equal(surface.excludedOperations.length, 1);
   const byNode = (list) =>
     [...list].sort((left, right) => left.node.localeCompare(right.node));
@@ -69,6 +72,7 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
     byNode(surface.openComputeOperations),
     byNode(
       vendorOperations.map(({ method, path, sdkMethod }) => ({
+        source: "open_compute_extension",
         node: `openCompute.${sdkMethod}`,
         method,
         path,
@@ -89,6 +93,9 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
     combinedStandard.sort(),
     [
       ...surface.operations.map((operation) => operation.operation),
+      ...surface.observedStandardOperations.map(
+        ({ method, path }) => `${method} ${path}`,
+      ),
       ...vendorOperations.map(({ method, path }) => `${method} ${path}`),
     ].sort(),
   );
@@ -112,9 +119,52 @@ test("runtime surface walk equals the generated surface graph", async () => {
     ...surface.operations.map(
       (operation) => `.${operation.node}.${operation.officialMethod}`,
     ),
+    ...surface.observedStandardOperations.map(
+      (operation) => `.${operation.node}`,
+    ),
     ...surface.openComputeOperations.map((operation) => `.${operation.node}`),
   ].sort();
   assert.deepEqual(runtime.sort(), expected);
+});
+
+test("Artifacts delegate paginates, streams binary responses, and preserves raw path segments", async () => {
+  const { client, requests } = await mockClient({
+    responses: [
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: [],
+          result_info: { cursor: "", per_page: 50, count: 0 },
+          errors: [],
+          messages: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+      new Response("bytes", {
+        status: 200,
+        headers: { "content-type": "application/octet-stream" },
+      }),
+    ],
+  });
+  const page = await client.artifacts.namespaces.list({ account_id: "acc/1" });
+  assert.deepEqual(page.result, []);
+  const response = await client.artifacts.repositories.raw(
+    "space",
+    "repo",
+    "main",
+    "dir/a b.txt",
+    { account_id: "acc/1" },
+  );
+  assert.equal(await response.text(), "bytes");
+  assert.equal(
+    requests[1].url,
+    "https://compute.example/client/v4/accounts/acc%2F1/artifacts/namespaces/space/repos/repo/raw/main/dir/a%20b.txt",
+  );
+  assert.throws(() =>
+    client.artifacts.repositories.raw("space", "repo", "main", "../secret", {
+      account_id: "acc",
+    }),
+  );
 });
 
 test("standard and vendor methods issue official transport requests", async () => {
@@ -147,9 +197,9 @@ test("standard and vendor methods issue official transport requests", async () =
   const status = await client.openCompute.system.status();
   assert.equal(status.state, "running");
   assert.deepEqual(
-    requests.map(({ url, init }) => ({
+    requests.map(({ url, request }) => ({
       url,
-      authorization: new Headers(init?.headers).get("authorization"),
+      authorization: request.headers.get("authorization"),
     })),
     [
       {
@@ -167,12 +217,60 @@ test("standard and vendor methods issue official transport requests", async () =
 test("vendor methods encode path segments and unwrap the v4 envelope", async () => {
   const { client, requests } = await mockClient();
   await client.openCompute.backups.kv.create("acc/1", "ns");
+  await client.openCompute.d1.migrations.apply("acc/1", "db", [
+    { id: 1, name: "0001.sql", sha256: "a".repeat(64), sql: "SELECT 1" },
+  ]);
   assert.equal(
     requests[0].url.endsWith(
       "/accounts/acc%2F1/open-compute/kv/namespaces/ns/backups",
     ),
     true,
   );
+  assert.equal(requests[1].request.method, "PUT");
+  assert.deepEqual(await requests[1].request.json(), [
+    { id: 1, name: "0001.sql", sha256: "a".repeat(64), sql: "SELECT 1" },
+  ]);
+});
+
+test("signature overrides preserve worker_loader metadata and asset File parts", async () => {
+  const { client, requests } = await mockClient();
+  const module = new File(["export default {}"], "index.js", {
+    type: "application/javascript",
+  });
+  await client.workers.scripts.versions.create("app", {
+    account_id: "account",
+    metadata: {
+      main_module: "index.js",
+      bindings: [{ type: "worker_loader", name: "LOADER" }],
+    },
+    files: [module],
+  });
+  const versionRequest = requests.find(({ url }) =>
+    url.endsWith("/workers/scripts/app/versions"),
+  ).request;
+  const versionForm = await versionRequest.formData();
+  assert.equal(versionForm.get("metadata[main_module]"), "index.js");
+  assert.equal(versionForm.get("metadata[bindings][][type]"), "worker_loader");
+  assert.equal(versionForm.get("metadata[bindings][][name]"), "LOADER");
+
+  const html = new File(["PGgxPm9rPC9oMT4="], "index.html", {
+    type: "text/html",
+  });
+  await client.workers.assets.upload.create({
+    account_id: "account",
+    base64: true,
+    body: { "index.html": html, "plain.txt": "dGV4dA==" },
+  });
+  const assetsRequest = requests.find(({ url }) =>
+    url.includes("/workers/assets/upload?base64=true"),
+  ).request;
+  const assetsForm = await assetsRequest.formData();
+  const part = assetsForm.get("index.html");
+  assert.ok(part instanceof File);
+  assert.equal(part.name, "index.html");
+  assert.match(part.type, /^text\/html(?:;charset=utf-8)?$/);
+  assert.equal(await part.text(), "PGgxPm9rPC9oMT4=");
+  assert.equal(assetsForm.get("plain.txt"), "dGV4dA==");
 });
 
 test("official APIError envelope is preserved", async () => {
@@ -337,5 +435,35 @@ test(
       );
       assert.match(`${result.stderr}${result.stdout}`, new RegExp(symbol));
     }
+  },
+);
+
+test(
+  "signature overrides compile without consumer casts",
+  { timeout: 300_000 },
+  () => {
+    const tsc =
+      process.env.OPEN_COMPUTE_SDK_TSC ??
+      join(repoRoot, "node_modules", ".bin", "tsc");
+    const result = spawnSync(
+      tsc,
+      [
+        "--ignoreConfig",
+        "--noEmit",
+        "--strict",
+        "--target",
+        "es2024",
+        "--module",
+        "preserve",
+        "--moduleResolution",
+        "bundler",
+        "--allowImportingTsExtensions",
+        "--types",
+        "node",
+        `${repoRoot}packages/sdk/tests/positive/signature-overrides.ts`,
+      ],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, `${result.stderr}${result.stdout}`);
   },
 );

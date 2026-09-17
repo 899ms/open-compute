@@ -5,15 +5,16 @@ import { dirname, join } from "node:path";
 import { verifyReleaseExecutable } from "./verify-release-executable.ts";
 import {
   absoluteDestination,
+  cargoTargetDirectory,
   command,
   prepareWorkerd,
-  repository,
   sha256,
   sourceArguments,
 } from "./workerd-archive.ts";
 
 const input = sourceArguments(process.argv.slice(2));
 const destination = await absoluteDestination(input.destination);
+const buildDirectory = cargoTargetDirectory(process.env.CARGO_TARGET_DIR);
 if (command("git", ["status", "--porcelain", "--untracked-files=all"]).trim()) {
   throw new Error("release packaging requires a clean checkout");
 }
@@ -50,11 +51,12 @@ try {
       ...process.env,
       OPEN_COMPUTE_BUILD_WORKERD_ARCHIVE: pin.archive,
       OPEN_COMPUTE_GIT_REVISION: revision,
-      // One native target and one fresh build directory contract; never select arbitrary stale output.
-      CARGO_TARGET_DIR: join(repository, "target"),
+      // CI may isolate release dependencies from debug/test artifacts. The
+      // exact native target below still prevents selecting unrelated output.
+      CARGO_TARGET_DIR: buildDirectory,
     },
   );
-  const source = join(repository, "target", target, "release/ocd");
+  const source = join(buildDirectory, target, "release/ocd");
   const bytes = await readFile(source);
   const file = await open(temporary, "wx", 0o500);
   ownsTemporary = true;

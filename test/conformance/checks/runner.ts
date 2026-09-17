@@ -82,14 +82,10 @@ export async function cloudflareRunnerSafety(): Promise<void> {
     throw new Error("Wrangler transient failure classification differs");
   }
   if (
-    observationUrl(
-      "http://127.0.0.1:8787/__workers/account/worker/",
-      "/reset",
-    ) !== "http://127.0.0.1:8787/__workers/account/worker/reset"
+    observationUrl("http://worker.account.localhost:8787/", "/reset") !==
+    "http://worker.account.localhost:8787/reset"
   ) {
-    throw new Error(
-      "open-compute differential URL lost its Worker route prefix",
-    );
+    throw new Error("open-compute differential URL escaped its Worker origin");
   }
   const differentialDirectory = join(ROOT, "test/conformance/differential");
   const source = [

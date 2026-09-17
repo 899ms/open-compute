@@ -97,7 +97,7 @@ async fn serve(composed: composition::ComposedPlatform) -> Result<(), PlatformEr
             return Err(err);
         }
     };
-    remember_bind(&opts, public_listener.local_addr().ok());
+    let state = publish_public_bind(state, &opts, &public_listener);
     let admin_listener = if let Some(admin_addr) = distinct_admin_addr {
         match http::bind(admin_addr).await {
             Ok(l) => Some(l),
@@ -311,4 +311,17 @@ async fn serve(composed: composition::ComposedPlatform) -> Result<(), PlatformEr
         maintenance_task,
     })
     .await
+}
+
+fn publish_public_bind(
+    state: HttpState,
+    opts: &RunInner,
+    listener: &tokio::net::TcpListener,
+) -> HttpState {
+    let address = listener.local_addr().ok();
+    remember_bind(opts, address);
+    match address {
+        Some(address) => state.with_local_origin_addr(address),
+        None => state,
+    }
 }

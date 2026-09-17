@@ -3,7 +3,7 @@ title: "Get started"
 description: "Install open-compute, start one local instance, and deploy a TypeScript Worker."
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 
 This path installs the current formal release, starts one local instance, and deploys a minimal Worker. Formal binaries are available for macOS on Apple silicon and Linux on ARM64 or x86-64.
 
@@ -62,16 +62,22 @@ cd hello-worker
 
 <Tabs syncKey="package-manager">
   <TabItem label="npm">
-    ```sh npm init -y npm install --save-dev wrangler@4.127.1
-    @open-compute/workers-types ```
+    <Code
+      code={`npm init -y\nnpm install --save-dev wrangler@4.127.1 @cloudflare/workers-types@5.20260830.1`}
+      lang="sh"
+    />
   </TabItem>
   <TabItem label="pnpm">
-    ```sh pnpm init pnpm add --save-dev wrangler@4.127.1
-    @open-compute/workers-types ```
+    <Code
+      code={`pnpm init\npnpm add --save-dev wrangler@4.127.1 @cloudflare/workers-types@5.20260830.1`}
+      lang="sh"
+    />
   </TabItem>
   <TabItem label="bun">
-    ```sh bun init -y bun add --dev wrangler@4.127.1 @open-compute/workers-types
-    ```
+    <Code
+      code={`bun init -y\nbun add --dev wrangler@4.127.1 @cloudflare/workers-types@5.20260830.1`}
+      lang="sh"
+    />
   </TabItem>
 </Tabs>
 
@@ -109,9 +115,15 @@ Create `wrangler.jsonc`:
 Use Wrangler directly for the fast local loop:
 
 <Tabs syncKey="package-manager">
-  <TabItem label="npm">```sh npm exec -- wrangler dev ```</TabItem>
-  <TabItem label="pnpm">```sh pnpm exec wrangler dev ```</TabItem>
-  <TabItem label="bun">```sh bun run wrangler dev ```</TabItem>
+  <TabItem label="npm">
+    <Code code="npm exec -- wrangler dev" lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm">
+    <Code code="pnpm exec wrangler dev" lang="sh" />
+  </TabItem>
+  <TabItem label="bun">
+    <Code code="bun run wrangler dev" lang="sh" />
+  </TabItem>
 </Tabs>
 
 Then deploy through the selected open-compute instance:
@@ -120,7 +132,7 @@ Then deploy through the selected open-compute instance:
 ocd wrangler deploy
 ```
 
-Use the platform path printed by Wrangler to call the Worker. To inspect live logs:
+Use the canonical `.localhost` origin printed by Wrangler to call the Worker. To inspect live logs:
 
 ```sh
 ocd wrangler tail

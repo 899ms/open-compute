@@ -150,7 +150,7 @@ fn owned_child_wait_failure_is_retained_while_the_child_is_still_reaped() {
     wait_reaped(pid, Duration::from_secs(2)).unwrap();
 
     let stderr_panics = std::thread::spawn(|| panic!("stderr reader panic"));
-    assert!(join_readers(None, Some(stderr_panics), std::time::Instant::now()).is_err());
+    assert!(join_readers(None, Some(stderr_panics), None, std::time::Instant::now()).is_err());
 }
 
 #[test]
@@ -167,8 +167,11 @@ fn owner_wait_hard_deadline_reaps_without_waiting_for_the_soft_deadline() {
         owned: OwnedChild::new(child, pid),
         stdout,
         stderr,
+        stdin: None,
+        stdin_bytes: Vec::new(),
         stdout_file: None,
         max_stdout: 1024,
+        max_stderr: 1024,
         cancel: Arc::new(AtomicBool::new(false)),
         deadline_at: now + Duration::from_secs(30),
         hard_deadline: now,
@@ -176,6 +179,46 @@ fn owner_wait_hard_deadline_reaps_without_waiting_for_the_soft_deadline() {
     .unwrap();
     assert!(output.timed_out);
     wait_reaped(pid, Duration::from_secs(2)).unwrap();
+}
+
+#[tokio::test]
+async fn host_process_uses_explicit_cwd_environment_and_bounded_stdio() {
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("host-process.sh");
+    fs::write(
+        &executable,
+        b"#!/bin/sh\nread value\nprintf '%s|%s|%s' \"$PWD\" \"${HOME-unset}\" \"$value\"\nprintf 'diagnostic' >&2\n",
+    )
+    .unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+    let image = VerifiedLaunchImage::from_verified_file(File::open(&executable).unwrap());
+    let output = run_host_process(
+        &image,
+        HostProcessSpec {
+            args: Vec::new(),
+            environment: vec![("ONLY".into(), "set".into())],
+            working_directory: directory.path().to_owned(),
+            stdin: b"payload\n".to_vec(),
+            deadline: Duration::from_secs(2),
+            max_stdout: 4096,
+            max_stderr: 4,
+            redactor: Redactor::new(),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(output.status.unwrap().success());
+    assert_eq!(
+        output.stdout,
+        format!(
+            "{}|unset|payload",
+            directory.path().canonicalize().unwrap().display()
+        )
+        .as_bytes()
+    );
+    assert_eq!(output.stderr, b"diag");
+    assert!(output.stderr_overflow);
+    assert!(!output.stdin_error);
 }
 
 #[cfg(target_os = "macos")]

@@ -2,7 +2,7 @@
 title: "绑定"
 ---
 
-import { TabItem, Tabs } from "@astrojs/starlight/components";
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 
 使用 Wrangler 的标准分产品字段；所有名称共享 Worker `env` namespace。
 
@@ -44,13 +44,13 @@ import { TabItem, Tabs } from "@astrojs/starlight/components";
 
 <Tabs syncKey="package-manager">
   <TabItem label="npm">
-    ```sh npm exec -- wrangler types --config wrangler.jsonc ```
+    <Code code="npm exec -- wrangler types --config wrangler.jsonc" lang="sh" />
   </TabItem>
   <TabItem label="pnpm">
-    ```sh pnpm exec wrangler types --config wrangler.jsonc ```
+    <Code code="pnpm exec wrangler types --config wrangler.jsonc" lang="sh" />
   </TabItem>
   <TabItem label="bun">
-    ```sh bun run wrangler types --config wrangler.jsonc ```
+    <Code code="bun run wrangler types --config wrangler.jsonc" lang="sh" />
   </TabItem>
 </Tabs>
 

@@ -10,11 +10,19 @@ fn migration_ledger_is_atomic_idempotent_and_detects_drift() {
         sha256: Sha256::digest(sql.as_bytes()).into(),
         sql: sql.to_owned(),
     };
-    let applied = fixture
+    let second_sql = "ALTER TABLE migrated ADD COLUMN name TEXT; PRAGMA user_version = 2;";
+    let second = D1Migration {
+        id: 2,
+        name: "0002_name.sql".to_owned(),
+        sha256: Sha256::digest(second_sql.as_bytes()).into(),
+        sql: second_sql.to_owned(),
+    };
+    let chain = [migration.clone(), second];
+    let first = fixture
         .engine
         .apply_migrations(std::slice::from_ref(&migration), limits(), 101)
         .unwrap();
-    assert_eq!(applied.len(), 1);
+    assert_eq!(first.len(), 1);
     assert_eq!(fixture.engine.session_version().unwrap(), 1);
     assert_eq!(fixture.engine.user_version().unwrap(), 1);
     assert_eq!(
@@ -22,9 +30,23 @@ fn migration_ledger_is_atomic_idempotent_and_detects_drift() {
             .engine
             .apply_migrations(std::slice::from_ref(&migration), limits(), 202)
             .unwrap(),
-        applied
+        first
     );
     assert_eq!(fixture.engine.session_version().unwrap(), 1);
+    let applied = fixture
+        .engine
+        .apply_migrations(&chain, limits(), 250)
+        .unwrap();
+    assert_eq!(applied.len(), 2);
+    assert_eq!(fixture.engine.user_version().unwrap(), 2);
+    assert_eq!(
+        fixture
+            .engine
+            .apply_migrations(std::slice::from_ref(&migration), limits(), 251)
+            .unwrap_err()
+            .code(),
+        ErrorCode::D1MigrationDrift,
+    );
     let mut drift = migration;
     drift.sql = "CREATE TABLE different(id INTEGER)".to_owned();
     drift.sha256 = Sha256::digest(drift.sql.as_bytes()).into();

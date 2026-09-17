@@ -16,7 +16,7 @@ fn metrics() -> Arc<MetricsRegistry> {
 async fn control_body_bounds_do_not_cap_tenant_fallbacks() {
     let state = HttpState::for_test(HealthCoordinator::new(), metrics(), true, None);
     for router in [public_router(state.clone()), merged_router(state.clone())] {
-        for path in ["/__workers/account/worker/upload", "/custom-host/upload"] {
+        for path in ["/upload", "/custom-host/upload"] {
             let response = router
                 .clone()
                 .oneshot(
@@ -68,6 +68,29 @@ async fn control_body_bounds_do_not_cap_tenant_fallbacks() {
 }
 
 #[tokio::test]
+async fn localhost_worker_authority_precedes_platform_paths() {
+    let state = HttpState::for_test(HealthCoordinator::new(), metrics(), false, None);
+    for host in [
+        "app.account.localhost",
+        "APP.ACCOUNT.LOCALHOST",
+        "app.account.localhost.",
+        "app.account.localhost:not-a-port",
+    ] {
+        let response = merged_router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/health/live")
+                    .header(header::HOST, host)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{host}");
+    }
+}
+
+#[tokio::test]
 async fn metrics_auth_state_conversion_and_bounded_route_labels_are_covered() {
     for (path, expected) in [
         ("/health/live", "/health/live"),
@@ -81,7 +104,6 @@ async fn metrics_auth_state_conversion_and_bounded_route_labels_are_covered() {
             "/client/v4/accounts/a/workers/scripts",
             "/client/v4/accounts/:account/*",
         ),
-        ("/__workers/a/w", "/__workers/:account/:worker/*"),
         ("/tenant-controlled", "/other"),
     ] {
         assert_eq!(bound_route(path), expected);
@@ -90,7 +112,7 @@ async fn metrics_auth_state_conversion_and_bounded_route_labels_are_covered() {
         product_operation("/client/v4/accounts/a/storage/kv/namespaces"),
         Some(OperationClass::Kv)
     );
-    assert_eq!(product_operation("/__workers/a/w"), None);
+    assert_eq!(product_operation("/tenant/request"), None);
 
     let health = HealthCoordinator::new();
     let authenticated = HttpState::for_test(

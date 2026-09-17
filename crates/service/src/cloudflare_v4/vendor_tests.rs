@@ -245,3 +245,45 @@ async fn vendor_backup_routes_fail_closed_without_storage() {
         response.status()
     );
 }
+
+#[tokio::test]
+async fn d1_migration_routes_authenticate_and_resolve_authority_before_body_parsing() {
+    let router = app(state());
+    let uri = "/accounts/account/open-compute/d1/databases/db/migrations";
+    let unauthenticated = Request::builder()
+        .method(Method::PUT)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("not-json"))
+        .unwrap();
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(unauthenticated)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+
+    let unresolved = Request::builder()
+        .method(Method::PUT)
+        .uri(uri)
+        .header(header::AUTHORIZATION, "Bearer deployer-token")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("not-json"))
+        .unwrap();
+    assert_eq!(
+        router.clone().oneshot(unresolved).await.unwrap().status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+
+    assert_eq!(
+        router
+            .oneshot(authed(&format!("{uri}?unexpected=true")))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+}

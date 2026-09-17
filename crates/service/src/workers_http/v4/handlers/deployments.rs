@@ -181,6 +181,7 @@ pub(super) async fn create_deployment(
                 version_id: target,
                 source: DeploymentSource::VersionsApi,
                 annotations: body.annotations.clone(),
+                observability: None,
                 request_id: context.request_id(),
                 now_ms: now,
             })

@@ -81,6 +81,7 @@
     "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects/{object_key}",
     "PUT /accounts/{account_id}/r2/buckets/{bucket_name}/objects/{object_key}",
     "DELETE /accounts/{account_id}/r2/buckets/{bucket_name}/objects/{object_key}",
+    "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
     "GET /accounts/{account_id}/vectorize/v2/indexes",
     "POST /accounts/{account_id}/vectorize/v2/indexes",
     "GET /accounts/{account_id}/vectorize/v2/indexes/{index_name}",
@@ -150,13 +151,7 @@
     "POST /accounts/{account_id}/workflows/{workflow_name}/instances/{instance_id}/events/{event_type}"
   ],
   "deferredOperations": [],
-  "unsupportedOperations": [
-    {
-      "operation": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
-      "status": "unsupported",
-      "reason": "P6 Day 1 object surface only qualifies exact object get/put/delete; bucket object listing must fail closed"
-    }
-  ],
+  "unsupportedOperations": [],
   "sdkExcludedOperations": [
     {
       "operation": "PUT /accounts/{account_id}/r2/buckets/{bucket_name}",
@@ -164,6 +159,11 @@
     }
   ],
   "supportedWithDeviationOperations": [
+    {
+      "operation": "DELETE /accounts/{account_id}/workers/scripts/{script_name}",
+      "deviations": ["OC-DEPLOY-001"],
+      "reason": "force=true bypasses retained Version and inbound Service references and may rotate the single workerd generation, but external D1, KV, R2, Queue, Workflow, and Durable Object resources remain independent authorities rather than being cascade-deleted with the Script"
+    },
     {
       "operation": "GET /accounts/{account_id}/workers/subdomain",
       "deviations": ["OC-ACCOUNT-SUBDOMAIN-001"],

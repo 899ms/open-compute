@@ -7,6 +7,7 @@ pub struct HttpState {
     pub(super) metrics: Arc<MetricsRegistry>,
     pub(super) metrics_enabled: bool,
     pub(super) dashboard_enabled: bool,
+    pub(super) local_origin_port: Option<u16>,
     pub(super) admin_secret: Option<Arc<SecretString>>,
     pub(super) deployer_secret: Option<Arc<SecretString>>,
     pub(super) read_only_secret: Option<Arc<SecretString>>,
@@ -33,6 +34,7 @@ impl std::fmt::Debug for HttpState {
         f.debug_struct("HttpState")
             .field("metrics_enabled", &self.metrics_enabled)
             .field("dashboard_enabled", &self.dashboard_enabled)
+            .field("local_origin_available", &self.local_origin_port.is_some())
             .field("admin_auth", &self.admin_secret.is_some())
             .field("deployer_auth", &self.deployer_secret.is_some())
             .field("read_only_auth", &self.read_only_secret.is_some())
@@ -87,6 +89,7 @@ impl HttpState {
             metrics,
             metrics_enabled,
             dashboard_enabled,
+            local_origin_port: None,
             admin_secret: Some(admin_secret),
             deployer_secret: Some(deployer_secret),
             read_only_secret: Some(read_only_secret),
@@ -145,6 +148,7 @@ impl HttpState {
             metrics,
             metrics_enabled,
             dashboard_enabled: false,
+            local_origin_port: None,
             admin_secret: admin_secret.map(Arc::new),
             deployer_secret: None,
             read_only_secret: None,
@@ -179,6 +183,19 @@ impl HttpState {
     pub fn with_worker_api(mut self, worker_api: WorkerApiState) -> Self {
         self.worker_api = Some(Arc::new(worker_api));
         self
+    }
+
+    /// Publish local Worker origins for an actually bound loopback listener.
+    #[must_use]
+    pub fn with_local_origin_addr(mut self, address: std::net::SocketAddr) -> Self {
+        self.local_origin_port = address.ip().is_loopback().then_some(address.port());
+        self
+    }
+
+    /// Return the bound local-origin port when this listener is loopback-reachable.
+    #[must_use]
+    pub(crate) const fn local_origin_port(&self) -> Option<u16> {
+        self.local_origin_port
     }
 
     /// Attach a generic supervised-runtime restart hook to test-support builds.

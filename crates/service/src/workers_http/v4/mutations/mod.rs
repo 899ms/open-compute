@@ -24,11 +24,10 @@ pub(super) async fn delete_script(
         Ok(value) => value,
         Err(response) => return response.into_response(),
     };
-    match delete_force_query(request.uri().query()) {
-        Ok(false) => {}
-        Ok(true) => return error_response(V4Error::Unsupported, context.request_id()),
+    let force = match delete_force_query(request.uri().query()) {
+        Ok(value) => value,
         Err(error) => return error_response(error, context.request_id()),
-    }
+    };
     let account = match domain::resolve_account(&state, &account) {
         Ok(value) => value,
         Err(error) => return error_response(error, context.request_id()),
@@ -42,6 +41,11 @@ pub(super) async fn delete_script(
     };
     let repo = WorkerRepository::new(api.storage.db());
     let now = now_ms();
+    if force
+        && let Err(error) = repo.begin_force_delete(account, worker.id, context.request_id(), now)
+    {
+        return platform_error(context.request_id(), &error);
+    }
     let versions = match repo.list_versions(account, worker.id) {
         Ok(values) => values
             .into_iter()
@@ -58,11 +62,26 @@ pub(super) async fn delete_script(
         Ok(value) => value,
         Err(error) => return platform_error(context.request_id(), &error),
     };
-    if let Err(error) = api
+    let drained = api
         .pins
         .fence_many_and_wait(&versions, api.delete_drain_timeout)
-        .await
-    {
+        .await;
+    if drained.is_err() && force {
+        if let Err(error) = api
+            .transport
+            .rotate_generation(api.delete_drain_timeout)
+            .await
+        {
+            return platform_error(context.request_id(), &error);
+        }
+        if let Err(error) = api
+            .pins
+            .fence_many_and_wait(&versions, api.delete_drain_timeout)
+            .await
+        {
+            return platform_error(context.request_id(), &error);
+        }
+    } else if let Err(error) = drained {
         for version in &versions {
             api.pins.unfence(*version);
         }
@@ -71,15 +90,23 @@ pub(super) async fn delete_script(
     if let Some(cache) = &api.response_cache
         && let Err(error) = cache.purge_worker(account, worker.id, now)
     {
-        for version in &versions {
-            api.pins.unfence(*version);
+        if !force {
+            for version in &versions {
+                api.pins.unfence(*version);
+            }
         }
         return platform_error(context.request_id(), &error);
     }
-    if let Err(error) = repo.delete_worker(account, worker.id, &versions, context.request_id(), now)
-    {
-        for version in &versions {
-            api.pins.unfence(*version);
+    let deletion = if force {
+        repo.finish_force_delete(account, worker.id, &versions, context.request_id(), now)
+    } else {
+        repo.delete_worker(account, worker.id, &versions, context.request_id(), now)
+    };
+    if let Err(error) = deletion {
+        if !force {
+            for version in &versions {
+                api.pins.unfence(*version);
+            }
         }
         return platform_error(context.request_id(), &error);
     }

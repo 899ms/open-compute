@@ -1,15 +1,16 @@
 {
   "schemaVersion": 1,
   "package": "@open-compute/sdk",
-  "packageVersion": "0.1.9",
-  "surfaceDigest": "a945e2aa720245e4f91020cea65e6f2ea4e7742524048ae6f9dc9de1105804b1",
+  "packageVersion": "0.1.10",
+  "surfaceDigest": "a68c48dee1f07831c66de0e14bcf5993b193f150f4c3da7fee5b21602ec6999f",
   "authority": {
     "openapiRevision": "b8687f42e28fbfcb296a350f7dbf16349ea900af",
     "openapiSha256": "2ffedbbf8b25361a3be2062b7793946e7b9efc0e48b462da68f3195f12ab052b",
     "cloudflareSdkVersion": "7.1.0",
     "cloudflareSdkNpmIntegrity": "sha512-eb6WtiAbhuqdWmBdVo6fuXQgEBkYjhOeujRDYLEUWEZIECuABvDLz2DUYTwpN/4KyFecM4JtMHgZn5prlFUjLg==",
-    "subsetSha256": "58bccfcedcb201ec2e3683db9b7c815a54ba70d0af966c8d20707358855ea4a4",
-    "extensionSha256": "ba0c05e7d89f2b57e4987a89c3ac909db2d45fa181b171e201add5e41147e17f"
+    "subsetSha256": "593f79ffce80c4d73fec2c66c42a72e342555c4f2daa5a6ff4eae6e1e50ae621",
+    "extensionSha256": "ed0f3d9634c7c435054f2e349118f8291819a2f9609e2d37021764ed301294a9",
+    "observedStandardSha256": "90c947ac657f45a8a183c251413dcaa1d3f1b49782796bc9929610e883316cbb"
   },
   "operations": [
     {
@@ -23,7 +24,8 @@
       "node": "aiSearch.namespaces",
       "officialMethod": "delete",
       "delegateModule": "resources/aisearch/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}",
@@ -36,7 +38,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "delete",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items/{item_id}",
@@ -49,7 +52,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "delete",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/d1/database/{database_id}",
@@ -62,7 +66,8 @@
       "node": "d1.database",
       "officialMethod": "delete",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/queues/{queue_id}",
@@ -75,7 +80,8 @@
       "node": "queues",
       "officialMethod": "delete",
       "delegateModule": "resources/queues/queues",
-      "delegateClass": "BaseQueues"
+      "delegateClass": "BaseQueues",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/queues/{queue_id}/consumers/{consumer_id}",
@@ -88,7 +94,8 @@
       "node": "queues.consumers",
       "officialMethod": "delete",
       "delegateModule": "resources/queues/consumers",
-      "delegateClass": "BaseConsumers"
+      "delegateClass": "BaseConsumers",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/r2/buckets/{bucket_name}",
@@ -101,7 +108,8 @@
       "node": "r2.buckets",
       "officialMethod": "delete",
       "delegateModule": "resources/r2/buckets/buckets",
-      "delegateClass": "BaseBuckets"
+      "delegateClass": "BaseBuckets",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/r2/buckets/{bucket_name}/objects/{object_key}",
@@ -114,7 +122,8 @@
       "node": "r2.buckets.objects",
       "officialMethod": "delete",
       "delegateModule": "resources/r2/buckets/objects",
-      "delegateClass": "BaseObjects"
+      "delegateClass": "BaseObjects",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/storage/kv/namespaces/{namespace_id}",
@@ -127,7 +136,8 @@
       "node": "kv.namespaces",
       "officialMethod": "delete",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/values/{key_name}",
@@ -140,7 +150,8 @@
       "node": "kv.namespaces.values",
       "officialMethod": "delete",
       "delegateModule": "resources/kv/namespaces/values",
-      "delegateClass": "BaseValues"
+      "delegateClass": "BaseValues",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/vectorize/v2/indexes/{index_name}",
@@ -153,20 +164,24 @@
       "node": "vectorize.indexes",
       "officialMethod": "delete",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/workers/scripts/{script_name}",
       "operationId": "worker-script-delete-worker",
       "method": "DELETE",
       "path": "/accounts/{account_id}/workers/scripts/{script_name}",
-      "status": "supported",
-      "deviations": [],
+      "status": "supported_with_deviation",
+      "deviations": [
+        "OC-DEPLOY-001"
+      ],
       "operationSha256": "8b1a92fddc4539c0640d07653ca6d2d295ce2c66bdd80c1ba7b5753bddeb83ca",
       "node": "workers.scripts",
       "officialMethod": "delete",
       "delegateModule": "resources/workers/scripts/scripts",
-      "delegateClass": "BaseScripts"
+      "delegateClass": "BaseScripts",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/workers/scripts/{script_name}/deployments/{deployment_id}",
@@ -179,7 +194,8 @@
       "node": "workers.scripts.deployments",
       "officialMethod": "delete",
       "delegateModule": "resources/workers/scripts/deployments",
-      "delegateClass": "BaseDeployments"
+      "delegateClass": "BaseDeployments",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/workers/scripts/{script_name}/secrets/{secret_name}",
@@ -192,7 +208,8 @@
       "node": "workers.scripts.secrets",
       "officialMethod": "delete",
       "delegateModule": "resources/workers/scripts/secrets",
-      "delegateClass": "BaseSecrets"
+      "delegateClass": "BaseSecrets",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/workers/scripts/{script_name}/subdomain",
@@ -205,7 +222,8 @@
       "node": "workers.scripts.subdomain",
       "officialMethod": "delete",
       "delegateModule": "resources/workers/scripts/subdomain",
-      "delegateClass": "BaseSubdomain"
+      "delegateClass": "BaseSubdomain",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/workers/scripts/{script_name}/tails/{id}",
@@ -220,7 +238,8 @@
       "node": "workers.scripts.tail",
       "officialMethod": "delete",
       "delegateModule": "resources/workers/scripts/tail",
-      "delegateClass": "BaseTail"
+      "delegateClass": "BaseTail",
+      "source": "official"
     },
     {
       "operation": "DELETE /accounts/{account_id}/workflows/{workflow_name}",
@@ -233,7 +252,8 @@
       "node": "workflows",
       "officialMethod": "delete",
       "delegateModule": "resources/workflows/workflows",
-      "delegateClass": "BaseWorkflows"
+      "delegateClass": "BaseWorkflows",
+      "source": "official"
     },
     {
       "operation": "GET /accounts",
@@ -246,7 +266,8 @@
       "node": "accounts",
       "officialMethod": "list",
       "delegateModule": "resources/accounts/accounts",
-      "delegateClass": "BaseAccounts"
+      "delegateClass": "BaseAccounts",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}",
@@ -259,7 +280,8 @@
       "node": "accounts",
       "officialMethod": "get",
       "delegateModule": "resources/accounts/accounts",
-      "delegateClass": "BaseAccounts"
+      "delegateClass": "BaseAccounts",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces",
@@ -272,7 +294,8 @@
       "node": "aiSearch.namespaces",
       "officialMethod": "list",
       "delegateModule": "resources/aisearch/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}",
@@ -285,7 +308,8 @@
       "node": "aiSearch.namespaces",
       "officialMethod": "read",
       "delegateModule": "resources/aisearch/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances",
@@ -298,7 +322,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "list",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}",
@@ -311,7 +336,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "read",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items",
@@ -324,7 +350,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "list",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items/{item_id}",
@@ -337,7 +364,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "get",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items/{item_id}/chunks",
@@ -350,7 +378,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "chunks",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items/{item_id}/download",
@@ -363,7 +392,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "download",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items/{item_id}/logs",
@@ -376,7 +406,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "logs",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/jobs",
@@ -389,7 +420,8 @@
       "node": "aiSearch.namespaces.instances.jobs",
       "officialMethod": "list",
       "delegateModule": "resources/aisearch/namespaces/instances/jobs",
-      "delegateClass": "BaseJobs"
+      "delegateClass": "BaseJobs",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/jobs/{job_id}",
@@ -402,7 +434,8 @@
       "node": "aiSearch.namespaces.instances.jobs",
       "officialMethod": "get",
       "delegateModule": "resources/aisearch/namespaces/instances/jobs",
-      "delegateClass": "BaseJobs"
+      "delegateClass": "BaseJobs",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/jobs/{job_id}/logs",
@@ -415,7 +448,8 @@
       "node": "aiSearch.namespaces.instances.jobs",
       "officialMethod": "logs",
       "delegateModule": "resources/aisearch/namespaces/instances/jobs",
-      "delegateClass": "BaseJobs"
+      "delegateClass": "BaseJobs",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/stats",
@@ -428,7 +462,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "stats",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/ai-search/tokens",
@@ -443,7 +478,8 @@
       "node": "aiSearch.tokens",
       "officialMethod": "list",
       "delegateModule": "resources/aisearch/tokens",
-      "delegateClass": "BaseTokens"
+      "delegateClass": "BaseTokens",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/d1/database",
@@ -456,7 +492,8 @@
       "node": "d1.database",
       "officialMethod": "list",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/d1/database/{database_id}",
@@ -469,7 +506,8 @@
       "node": "d1.database",
       "officialMethod": "get",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/d1/database/{database_id}/time_travel/bookmark",
@@ -484,7 +522,8 @@
       "node": "d1.database.timeTravel",
       "officialMethod": "getBookmark",
       "delegateModule": "resources/d1/database/time-travel",
-      "delegateClass": "BaseTimeTravel"
+      "delegateClass": "BaseTimeTravel",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/queues",
@@ -497,7 +536,8 @@
       "node": "queues",
       "officialMethod": "list",
       "delegateModule": "resources/queues/queues",
-      "delegateClass": "BaseQueues"
+      "delegateClass": "BaseQueues",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/queues/{queue_id}",
@@ -510,7 +550,8 @@
       "node": "queues",
       "officialMethod": "get",
       "delegateModule": "resources/queues/queues",
-      "delegateClass": "BaseQueues"
+      "delegateClass": "BaseQueues",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/queues/{queue_id}/consumers",
@@ -523,7 +564,8 @@
       "node": "queues.consumers",
       "officialMethod": "list",
       "delegateModule": "resources/queues/consumers",
-      "delegateClass": "BaseConsumers"
+      "delegateClass": "BaseConsumers",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/queues/{queue_id}/consumers/{consumer_id}",
@@ -536,7 +578,8 @@
       "node": "queues.consumers",
       "officialMethod": "get",
       "delegateModule": "resources/queues/consumers",
-      "delegateClass": "BaseConsumers"
+      "delegateClass": "BaseConsumers",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/queues/{queue_id}/metrics",
@@ -549,7 +592,8 @@
       "node": "queues",
       "officialMethod": "getMetrics",
       "delegateModule": "resources/queues/queues",
-      "delegateClass": "BaseQueues"
+      "delegateClass": "BaseQueues",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/r2/buckets",
@@ -562,7 +606,8 @@
       "node": "r2.buckets",
       "officialMethod": "list",
       "delegateModule": "resources/r2/buckets/buckets",
-      "delegateClass": "BaseBuckets"
+      "delegateClass": "BaseBuckets",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/r2/buckets/{bucket_name}",
@@ -575,7 +620,22 @@
       "node": "r2.buckets",
       "officialMethod": "get",
       "delegateModule": "resources/r2/buckets/buckets",
-      "delegateClass": "BaseBuckets"
+      "delegateClass": "BaseBuckets",
+      "source": "official"
+    },
+    {
+      "operation": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects",
+      "operationId": "r2-list-objects",
+      "method": "GET",
+      "path": "/accounts/{account_id}/r2/buckets/{bucket_name}/objects",
+      "status": "supported",
+      "deviations": [],
+      "operationSha256": "66bd9d8366e8a419a534dd084f03c49a6cb56924b1da88e2b53209563979fbb4",
+      "node": "r2.buckets.objects",
+      "officialMethod": "list",
+      "delegateModule": "resources/r2/buckets/objects",
+      "delegateClass": "BaseObjects",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/r2/buckets/{bucket_name}/objects/{object_key}",
@@ -588,7 +648,8 @@
       "node": "r2.buckets.objects",
       "officialMethod": "get",
       "delegateModule": "resources/r2/buckets/objects",
-      "delegateClass": "BaseObjects"
+      "delegateClass": "BaseObjects",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/storage/kv/namespaces",
@@ -601,7 +662,8 @@
       "node": "kv.namespaces",
       "officialMethod": "list",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/storage/kv/namespaces/{namespace_id}",
@@ -614,7 +676,8 @@
       "node": "kv.namespaces",
       "officialMethod": "get",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/keys",
@@ -627,7 +690,8 @@
       "node": "kv.namespaces.keys",
       "officialMethod": "list",
       "delegateModule": "resources/kv/namespaces/keys",
-      "delegateClass": "BaseKeys"
+      "delegateClass": "BaseKeys",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/metadata/{key_name}",
@@ -640,7 +704,8 @@
       "node": "kv.namespaces.metadata",
       "officialMethod": "get",
       "delegateModule": "resources/kv/namespaces/metadata",
-      "delegateClass": "BaseMetadata"
+      "delegateClass": "BaseMetadata",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/values/{key_name}",
@@ -653,7 +718,8 @@
       "node": "kv.namespaces.values",
       "officialMethod": "get",
       "delegateModule": "resources/kv/namespaces/values",
-      "delegateClass": "BaseValues"
+      "delegateClass": "BaseValues",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/vectorize/v2/indexes",
@@ -666,7 +732,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "list",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/vectorize/v2/indexes/{index_name}",
@@ -679,7 +746,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "get",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/vectorize/v2/indexes/{index_name}/info",
@@ -692,7 +760,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "info",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/vectorize/v2/indexes/{index_name}/list",
@@ -705,7 +774,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "listVectors",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/vectorize/v2/indexes/{index_name}/metadata_index/list",
@@ -718,7 +788,8 @@
       "node": "vectorize.indexes.metadataIndex",
       "officialMethod": "list",
       "delegateModule": "resources/vectorize/indexes/metadata-index",
-      "delegateClass": "BaseMetadataIndex"
+      "delegateClass": "BaseMetadataIndex",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts",
@@ -731,7 +802,8 @@
       "node": "workers.scripts",
       "officialMethod": "list",
       "delegateModule": "resources/workers/scripts/scripts",
-      "delegateClass": "BaseScripts"
+      "delegateClass": "BaseScripts",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}",
@@ -744,7 +816,8 @@
       "node": "workers.scripts",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/scripts",
-      "delegateClass": "BaseScripts"
+      "delegateClass": "BaseScripts",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/deployments",
@@ -757,7 +830,8 @@
       "node": "workers.scripts.deployments",
       "officialMethod": "list",
       "delegateModule": "resources/workers/scripts/deployments",
-      "delegateClass": "BaseDeployments"
+      "delegateClass": "BaseDeployments",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/deployments/{deployment_id}",
@@ -770,7 +844,8 @@
       "node": "workers.scripts.deployments",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/deployments",
-      "delegateClass": "BaseDeployments"
+      "delegateClass": "BaseDeployments",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/schedules",
@@ -783,7 +858,8 @@
       "node": "workers.scripts.schedules",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/schedules",
-      "delegateClass": "BaseSchedules"
+      "delegateClass": "BaseSchedules",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/script-settings",
@@ -796,7 +872,8 @@
       "node": "workers.scripts.settings",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/settings",
-      "delegateClass": "BaseSettings"
+      "delegateClass": "BaseSettings",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/secrets",
@@ -809,7 +886,8 @@
       "node": "workers.scripts.secrets",
       "officialMethod": "list",
       "delegateModule": "resources/workers/scripts/secrets",
-      "delegateClass": "BaseSecrets"
+      "delegateClass": "BaseSecrets",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/secrets/{secret_name}",
@@ -822,7 +900,8 @@
       "node": "workers.scripts.secrets",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/secrets",
-      "delegateClass": "BaseSecrets"
+      "delegateClass": "BaseSecrets",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/settings",
@@ -835,7 +914,8 @@
       "node": "workers.scripts.scriptAndVersionSettings",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/script-and-version-settings",
-      "delegateClass": "BaseScriptAndVersionSettings"
+      "delegateClass": "BaseScriptAndVersionSettings",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/subdomain",
@@ -848,7 +928,8 @@
       "node": "workers.scripts.subdomain",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/subdomain",
-      "delegateClass": "BaseSubdomain"
+      "delegateClass": "BaseSubdomain",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/tails",
@@ -863,7 +944,8 @@
       "node": "workers.scripts.tail",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/tail",
-      "delegateClass": "BaseTail"
+      "delegateClass": "BaseTail",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/versions",
@@ -876,7 +958,8 @@
       "node": "workers.scripts.versions",
       "officialMethod": "list",
       "delegateModule": "resources/workers/scripts/versions",
-      "delegateClass": "BaseVersions"
+      "delegateClass": "BaseVersions",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/scripts/{script_name}/versions/{version_id}",
@@ -889,7 +972,8 @@
       "node": "workers.scripts.versions",
       "officialMethod": "get",
       "delegateModule": "resources/workers/scripts/versions",
-      "delegateClass": "BaseVersions"
+      "delegateClass": "BaseVersions",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workers/subdomain",
@@ -904,7 +988,8 @@
       "node": "workers.subdomains",
       "officialMethod": "get",
       "delegateModule": "resources/workers/subdomains",
-      "delegateClass": "BaseSubdomains"
+      "delegateClass": "BaseSubdomains",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workflows",
@@ -917,7 +1002,8 @@
       "node": "workflows",
       "officialMethod": "list",
       "delegateModule": "resources/workflows/workflows",
-      "delegateClass": "BaseWorkflows"
+      "delegateClass": "BaseWorkflows",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workflows/{workflow_name}",
@@ -930,7 +1016,8 @@
       "node": "workflows",
       "officialMethod": "get",
       "delegateModule": "resources/workflows/workflows",
-      "delegateClass": "BaseWorkflows"
+      "delegateClass": "BaseWorkflows",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workflows/{workflow_name}/instances",
@@ -943,7 +1030,8 @@
       "node": "workflows.instances",
       "officialMethod": "list",
       "delegateModule": "resources/workflows/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workflows/{workflow_name}/instances/{instance_id}",
@@ -956,7 +1044,8 @@
       "node": "workflows.instances",
       "officialMethod": "get",
       "delegateModule": "resources/workflows/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workflows/{workflow_name}/versions",
@@ -969,7 +1058,8 @@
       "node": "workflows.versions",
       "officialMethod": "list",
       "delegateModule": "resources/workflows/versions",
-      "delegateClass": "BaseVersions"
+      "delegateClass": "BaseVersions",
+      "source": "official"
     },
     {
       "operation": "GET /accounts/{account_id}/workflows/{workflow_name}/versions/{version_id}",
@@ -982,7 +1072,8 @@
       "node": "workflows.versions",
       "officialMethod": "get",
       "delegateModule": "resources/workflows/versions",
-      "delegateClass": "BaseVersions"
+      "delegateClass": "BaseVersions",
+      "source": "official"
     },
     {
       "operation": "GET /memberships",
@@ -995,7 +1086,8 @@
       "node": "memberships",
       "officialMethod": "list",
       "delegateModule": "resources/memberships/memberships",
-      "delegateClass": "BaseMemberships"
+      "delegateClass": "BaseMemberships",
+      "source": "official"
     },
     {
       "operation": "GET /user",
@@ -1008,7 +1100,8 @@
       "node": "user",
       "officialMethod": "get",
       "delegateModule": "resources/user/user",
-      "delegateClass": "BaseUser"
+      "delegateClass": "BaseUser",
+      "source": "official"
     },
     {
       "operation": "GET /user/tokens/verify",
@@ -1021,7 +1114,8 @@
       "node": "user.tokens",
       "officialMethod": "verify",
       "delegateModule": "resources/user/tokens/tokens",
-      "delegateClass": "BaseTokens"
+      "delegateClass": "BaseTokens",
+      "source": "official"
     },
     {
       "operation": "PATCH /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items/{item_id}",
@@ -1034,7 +1128,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "sync",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "PATCH /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/jobs/{job_id}",
@@ -1047,7 +1142,8 @@
       "node": "aiSearch.namespaces.instances.jobs",
       "officialMethod": "update",
       "delegateModule": "resources/aisearch/namespaces/instances/jobs",
-      "delegateClass": "BaseJobs"
+      "delegateClass": "BaseJobs",
+      "source": "official"
     },
     {
       "operation": "PATCH /accounts/{account_id}/d1/database/{database_id}",
@@ -1060,7 +1156,8 @@
       "node": "d1.database",
       "officialMethod": "edit",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "PATCH /accounts/{account_id}/workers/scripts/{script_name}/script-settings",
@@ -1073,7 +1170,8 @@
       "node": "workers.scripts.settings",
       "officialMethod": "edit",
       "delegateModule": "resources/workers/scripts/settings",
-      "delegateClass": "BaseSettings"
+      "delegateClass": "BaseSettings",
+      "source": "official"
     },
     {
       "operation": "PATCH /accounts/{account_id}/workers/scripts/{script_name}/secrets-bulk",
@@ -1086,7 +1184,8 @@
       "node": "workers.scripts.secrets",
       "officialMethod": "bulkUpdate",
       "delegateModule": "resources/workers/scripts/secrets",
-      "delegateClass": "BaseSecrets"
+      "delegateClass": "BaseSecrets",
+      "source": "official"
     },
     {
       "operation": "PATCH /accounts/{account_id}/workers/scripts/{script_name}/settings",
@@ -1099,7 +1198,8 @@
       "node": "workers.scripts.scriptAndVersionSettings",
       "officialMethod": "edit",
       "delegateModule": "resources/workers/scripts/script-and-version-settings",
-      "delegateClass": "BaseScriptAndVersionSettings"
+      "delegateClass": "BaseScriptAndVersionSettings",
+      "source": "official"
     },
     {
       "operation": "PATCH /accounts/{account_id}/workflows/{workflow_name}/instances/{instance_id}/status",
@@ -1112,7 +1212,8 @@
       "node": "workflows.instances.status",
       "officialMethod": "edit",
       "delegateModule": "resources/workflows/instances/status",
-      "delegateClass": "BaseStatus"
+      "delegateClass": "BaseStatus",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces",
@@ -1125,7 +1226,8 @@
       "node": "aiSearch.namespaces",
       "officialMethod": "create",
       "delegateModule": "resources/aisearch/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces/{name}/chat/completions",
@@ -1138,7 +1240,8 @@
       "node": "aiSearch.namespaces",
       "officialMethod": "chatCompletions",
       "delegateModule": "resources/aisearch/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces/{name}/instances",
@@ -1151,7 +1254,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "create",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/chat/completions",
@@ -1164,7 +1268,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "chatCompletions",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items",
@@ -1177,7 +1282,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "upload",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/jobs",
@@ -1190,7 +1296,8 @@
       "node": "aiSearch.namespaces.instances.jobs",
       "officialMethod": "create",
       "delegateModule": "resources/aisearch/namespaces/instances/jobs",
-      "delegateClass": "BaseJobs"
+      "delegateClass": "BaseJobs",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/search",
@@ -1203,7 +1310,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "search",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/ai-search/namespaces/{name}/search",
@@ -1216,7 +1324,8 @@
       "node": "aiSearch.namespaces",
       "officialMethod": "search",
       "delegateModule": "resources/aisearch/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/d1/database",
@@ -1229,7 +1338,8 @@
       "node": "d1.database",
       "officialMethod": "create",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/d1/database/{database_id}/export",
@@ -1242,7 +1352,8 @@
       "node": "d1.database",
       "officialMethod": "export",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/d1/database/{database_id}/import",
@@ -1255,7 +1366,8 @@
       "node": "d1.database",
       "officialMethod": "import",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/d1/database/{database_id}/query",
@@ -1268,7 +1380,8 @@
       "node": "d1.database",
       "officialMethod": "query",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/d1/database/{database_id}/raw",
@@ -1281,7 +1394,8 @@
       "node": "d1.database",
       "officialMethod": "raw",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/d1/database/{database_id}/time_travel/restore",
@@ -1296,7 +1410,8 @@
       "node": "d1.database.timeTravel",
       "officialMethod": "restore",
       "delegateModule": "resources/d1/database/time-travel",
-      "delegateClass": "BaseTimeTravel"
+      "delegateClass": "BaseTimeTravel",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/queues",
@@ -1309,7 +1424,8 @@
       "node": "queues",
       "officialMethod": "create",
       "delegateModule": "resources/queues/queues",
-      "delegateClass": "BaseQueues"
+      "delegateClass": "BaseQueues",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/queues/{queue_id}/consumers",
@@ -1322,7 +1438,8 @@
       "node": "queues.consumers",
       "officialMethod": "create",
       "delegateModule": "resources/queues/consumers",
-      "delegateClass": "BaseConsumers"
+      "delegateClass": "BaseConsumers",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/r2/buckets",
@@ -1335,7 +1452,8 @@
       "node": "r2.buckets",
       "officialMethod": "create",
       "delegateModule": "resources/r2/buckets/buckets",
-      "delegateClass": "BaseBuckets"
+      "delegateClass": "BaseBuckets",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/storage/kv/namespaces",
@@ -1348,7 +1466,8 @@
       "node": "kv.namespaces",
       "officialMethod": "create",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/bulk/delete",
@@ -1361,7 +1480,8 @@
       "node": "kv.namespaces",
       "officialMethod": "bulkDelete",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/bulk/get",
@@ -1374,7 +1494,8 @@
       "node": "kv.namespaces",
       "officialMethod": "bulkGet",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes",
@@ -1387,7 +1508,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "create",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes/{index_name}/delete_by_ids",
@@ -1400,7 +1522,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "deleteByIDs",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes/{index_name}/get_by_ids",
@@ -1413,7 +1536,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "getByIDs",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes/{index_name}/insert",
@@ -1426,7 +1550,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "insert",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes/{index_name}/metadata_index/create",
@@ -1439,7 +1564,8 @@
       "node": "vectorize.indexes.metadataIndex",
       "officialMethod": "create",
       "delegateModule": "resources/vectorize/indexes/metadata-index",
-      "delegateClass": "BaseMetadataIndex"
+      "delegateClass": "BaseMetadataIndex",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes/{index_name}/metadata_index/delete",
@@ -1452,7 +1578,8 @@
       "node": "vectorize.indexes.metadataIndex",
       "officialMethod": "delete",
       "delegateModule": "resources/vectorize/indexes/metadata-index",
-      "delegateClass": "BaseMetadataIndex"
+      "delegateClass": "BaseMetadataIndex",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes/{index_name}/query",
@@ -1465,7 +1592,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "query",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/vectorize/v2/indexes/{index_name}/upsert",
@@ -1478,7 +1606,8 @@
       "node": "vectorize.indexes",
       "officialMethod": "upsert",
       "delegateModule": "resources/vectorize/indexes/indexes",
-      "delegateClass": "BaseIndexes"
+      "delegateClass": "BaseIndexes",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/assets/upload",
@@ -1491,7 +1620,8 @@
       "node": "workers.assets.upload",
       "officialMethod": "create",
       "delegateModule": "resources/workers/assets/upload",
-      "delegateClass": "BaseUpload"
+      "delegateClass": "BaseUpload",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/observability/telemetry/keys",
@@ -1506,7 +1636,8 @@
       "node": "workers.observability.telemetry",
       "officialMethod": "keys",
       "delegateModule": "resources/workers/observability/telemetry",
-      "delegateClass": "BaseTelemetry"
+      "delegateClass": "BaseTelemetry",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/observability/telemetry/live-tail",
@@ -1521,7 +1652,8 @@
       "node": "workers.observability.telemetry",
       "officialMethod": "liveTail",
       "delegateModule": "resources/workers/observability/telemetry",
-      "delegateClass": "BaseTelemetry"
+      "delegateClass": "BaseTelemetry",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/observability/telemetry/live-tail/heartbeat",
@@ -1536,7 +1668,8 @@
       "node": "workers.observability.telemetry",
       "officialMethod": "liveTailHeartbeat",
       "delegateModule": "resources/workers/observability/telemetry",
-      "delegateClass": "BaseTelemetry"
+      "delegateClass": "BaseTelemetry",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/observability/telemetry/query",
@@ -1551,7 +1684,8 @@
       "node": "workers.observability.telemetry",
       "officialMethod": "query",
       "delegateModule": "resources/workers/observability/telemetry",
-      "delegateClass": "BaseTelemetry"
+      "delegateClass": "BaseTelemetry",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/observability/telemetry/values",
@@ -1566,7 +1700,8 @@
       "node": "workers.observability.telemetry",
       "officialMethod": "values",
       "delegateModule": "resources/workers/observability/telemetry",
-      "delegateClass": "BaseTelemetry"
+      "delegateClass": "BaseTelemetry",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/scripts/{script_name}/assets-upload-session",
@@ -1579,7 +1714,8 @@
       "node": "workers.scripts.assets.upload",
       "officialMethod": "create",
       "delegateModule": "resources/workers/scripts/assets/upload",
-      "delegateClass": "BaseUpload"
+      "delegateClass": "BaseUpload",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/scripts/{script_name}/deployments",
@@ -1592,7 +1728,8 @@
       "node": "workers.scripts.deployments",
       "officialMethod": "create",
       "delegateModule": "resources/workers/scripts/deployments",
-      "delegateClass": "BaseDeployments"
+      "delegateClass": "BaseDeployments",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/scripts/{script_name}/subdomain",
@@ -1605,7 +1742,8 @@
       "node": "workers.scripts.subdomain",
       "officialMethod": "create",
       "delegateModule": "resources/workers/scripts/subdomain",
-      "delegateClass": "BaseSubdomain"
+      "delegateClass": "BaseSubdomain",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/scripts/{script_name}/tails",
@@ -1620,7 +1758,8 @@
       "node": "workers.scripts.tail",
       "officialMethod": "create",
       "delegateModule": "resources/workers/scripts/tail",
-      "delegateClass": "BaseTail"
+      "delegateClass": "BaseTail",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workers/scripts/{script_name}/versions",
@@ -1633,7 +1772,8 @@
       "node": "workers.scripts.versions",
       "officialMethod": "create",
       "delegateModule": "resources/workers/scripts/versions",
-      "delegateClass": "BaseVersions"
+      "delegateClass": "BaseVersions",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workflows/{workflow_name}/instances",
@@ -1646,7 +1786,8 @@
       "node": "workflows.instances",
       "officialMethod": "create",
       "delegateModule": "resources/workflows/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workflows/{workflow_name}/instances/{instance_id}/events/{event_type}",
@@ -1659,7 +1800,8 @@
       "node": "workflows.instances.events",
       "officialMethod": "create",
       "delegateModule": "resources/workflows/instances/events",
-      "delegateClass": "BaseEvents"
+      "delegateClass": "BaseEvents",
+      "source": "official"
     },
     {
       "operation": "POST /accounts/{account_id}/workflows/{workflow_name}/instances/batch",
@@ -1672,7 +1814,8 @@
       "node": "workflows.instances",
       "officialMethod": "bulk",
       "delegateModule": "resources/workflows/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/ai-search/namespaces/{name}",
@@ -1685,7 +1828,8 @@
       "node": "aiSearch.namespaces",
       "officialMethod": "update",
       "delegateModule": "resources/aisearch/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}",
@@ -1698,7 +1842,8 @@
       "node": "aiSearch.namespaces.instances",
       "officialMethod": "update",
       "delegateModule": "resources/aisearch/namespaces/instances/instances",
-      "delegateClass": "BaseInstances"
+      "delegateClass": "BaseInstances",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items",
@@ -1711,7 +1856,8 @@
       "node": "aiSearch.namespaces.instances.items",
       "officialMethod": "createOrUpdate",
       "delegateModule": "resources/aisearch/namespaces/instances/items",
-      "delegateClass": "BaseItems"
+      "delegateClass": "BaseItems",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/d1/database/{database_id}",
@@ -1724,7 +1870,8 @@
       "node": "d1.database",
       "officialMethod": "update",
       "delegateModule": "resources/d1/database/database",
-      "delegateClass": "BaseDatabase"
+      "delegateClass": "BaseDatabase",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/queues/{queue_id}",
@@ -1737,7 +1884,8 @@
       "node": "queues",
       "officialMethod": "update",
       "delegateModule": "resources/queues/queues",
-      "delegateClass": "BaseQueues"
+      "delegateClass": "BaseQueues",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/queues/{queue_id}/consumers/{consumer_id}",
@@ -1750,7 +1898,8 @@
       "node": "queues.consumers",
       "officialMethod": "update",
       "delegateModule": "resources/queues/consumers",
-      "delegateClass": "BaseConsumers"
+      "delegateClass": "BaseConsumers",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/r2/buckets/{bucket_name}/objects/{object_key}",
@@ -1763,7 +1912,8 @@
       "node": "r2.buckets.objects",
       "officialMethod": "upload",
       "delegateModule": "resources/r2/buckets/objects",
-      "delegateClass": "BaseObjects"
+      "delegateClass": "BaseObjects",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/storage/kv/namespaces/{namespace_id}",
@@ -1776,7 +1926,8 @@
       "node": "kv.namespaces",
       "officialMethod": "update",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/bulk",
@@ -1789,7 +1940,8 @@
       "node": "kv.namespaces",
       "officialMethod": "bulkUpdate",
       "delegateModule": "resources/kv/namespaces/namespaces",
-      "delegateClass": "BaseNamespaces"
+      "delegateClass": "BaseNamespaces",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/values/{key_name}",
@@ -1802,7 +1954,8 @@
       "node": "kv.namespaces.values",
       "officialMethod": "update",
       "delegateModule": "resources/kv/namespaces/values",
-      "delegateClass": "BaseValues"
+      "delegateClass": "BaseValues",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/workers/scripts/{script_name}",
@@ -1815,7 +1968,8 @@
       "node": "workers.scripts",
       "officialMethod": "update",
       "delegateModule": "resources/workers/scripts/scripts",
-      "delegateClass": "BaseScripts"
+      "delegateClass": "BaseScripts",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/workers/scripts/{script_name}/schedules",
@@ -1828,7 +1982,8 @@
       "node": "workers.scripts.schedules",
       "officialMethod": "update",
       "delegateModule": "resources/workers/scripts/schedules",
-      "delegateClass": "BaseSchedules"
+      "delegateClass": "BaseSchedules",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/workers/scripts/{script_name}/secrets",
@@ -1841,7 +1996,8 @@
       "node": "workers.scripts.secrets",
       "officialMethod": "update",
       "delegateModule": "resources/workers/scripts/secrets",
-      "delegateClass": "BaseSecrets"
+      "delegateClass": "BaseSecrets",
+      "source": "official"
     },
     {
       "operation": "PUT /accounts/{account_id}/workflows/{workflow_name}",
@@ -1854,7 +2010,8 @@
       "node": "workflows",
       "officialMethod": "update",
       "delegateModule": "resources/workflows/workflows",
-      "delegateClass": "BaseWorkflows"
+      "delegateClass": "BaseWorkflows",
+      "source": "official"
     }
   ],
   "excludedOperations": [
@@ -1865,99 +2022,312 @@
   ],
   "openComputeOperations": [
     {
+      "source": "open_compute_extension",
       "node": "openCompute.backups.d1.create",
       "method": "POST",
       "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/backups"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.backups.d1.list",
       "method": "GET",
       "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/backups"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.backups.d1.restore",
       "method": "POST",
       "path": "/accounts/{account_id}/open-compute/d1/backups/{backup_id}/restore"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.backups.kv.create",
       "method": "POST",
       "path": "/accounts/{account_id}/open-compute/kv/namespaces/{namespace_id}/backups"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.backups.kv.list",
       "method": "GET",
       "path": "/accounts/{account_id}/open-compute/kv/namespaces/{namespace_id}/backups"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.backups.kv.restore",
       "method": "POST",
       "path": "/accounts/{account_id}/open-compute/kv/backups/{backup_id}/restore"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.cache.collectGarbage",
       "method": "POST",
       "path": "/open-compute/cache/garbage-collection"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.cache.get",
       "method": "GET",
       "path": "/open-compute/cache"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.capabilities.get",
       "method": "GET",
       "path": "/open-compute/capabilities"
     },
     {
+      "source": "open_compute_extension",
+      "node": "openCompute.d1.migrations.apply",
+      "method": "PUT",
+      "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.d1.migrations.list",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations"
+    },
+    {
+      "source": "open_compute_extension",
       "node": "openCompute.durableObjects.list",
       "method": "GET",
       "path": "/accounts/{account_id}/open-compute/durable-objects"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.durableObjects.objects",
       "method": "GET",
       "path": "/accounts/{account_id}/open-compute/durable-objects/{namespace_id}/objects"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.images.capacity",
       "method": "GET",
       "path": "/open-compute/images/capacity"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.scheduler.get",
       "method": "GET",
       "path": "/open-compute/scheduler"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.scheduler.pause",
       "method": "POST",
       "path": "/open-compute/scheduler/pause"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.scheduler.repair",
       "method": "POST",
       "path": "/open-compute/scheduler/repair"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.scheduler.resume",
       "method": "POST",
       "path": "/open-compute/scheduler/resume"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.system.status",
       "method": "GET",
       "path": "/open-compute/system/status"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.upgrade.check",
       "method": "GET",
       "path": "/open-compute/upgrade/check"
     },
     {
+      "source": "open_compute_extension",
       "node": "openCompute.workers.endpoints",
       "method": "GET",
       "path": "/accounts/{account_id}/open-compute/workers/{script_name}/endpoints"
+    }
+  ],
+  "observedStandardOperations": [
+    {
+      "source": "observed_standard",
+      "node": "artifacts.namespaces.create",
+      "operationId": "artifacts-namespaces-create",
+      "operationSha256": "6917f89f3f78d95741680a1345f9eb34961480df6763f2def32c21ce56a23dd1",
+      "method": "POST",
+      "path": "/accounts/{account_id}/artifacts/namespaces",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.namespaces.list",
+      "operationId": "artifacts-namespaces-list",
+      "operationSha256": "00cef48c6ed7c3246c587801b4cef1a1adae2f92e6252597af5bd050505764bb",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.namespaces.get",
+      "operationId": "artifacts-namespaces-get",
+      "operationSha256": "5cd4a4dc35d2b9762c4a2cbbe9864bd3aea6eef4b2c1c0638471f67d563c2a7c",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.create",
+      "operationId": "artifacts-repositories-create",
+      "operationSha256": "d01c358f5acb5648260b74f7a40107e3a1dd835839fa71072f6a34a1f9c16711",
+      "method": "POST",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.list",
+      "operationId": "artifacts-repositories-list",
+      "operationSha256": "3cc109ccbe53ec0088a48acca40f024ca5a97ef30e0711c2d6f04843c52a44b5",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.get",
+      "operationId": "artifacts-repositories-get",
+      "operationSha256": "2532580100a03f66c807529cd4f75bc51590a7d3bedd88e61fa50bfab535aea2",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.delete",
+      "operationId": "artifacts-repositories-delete",
+      "operationSha256": "e818141c78e37f20e2e52912b1954c9905f7869e248cc445fcbae5efc96fec2d",
+      "method": "DELETE",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.fork",
+      "operationId": "artifacts-repositories-fork",
+      "operationSha256": "00c5f5d419256fff542a835c018519e6430cb69903117c563df81addefb89d15",
+      "method": "POST",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/fork",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.import",
+      "operationId": "artifacts-repositories-import",
+      "operationSha256": "85af3e0dd439ce086cb1224623b6f8670575c9959e406f0a8fea3259a44992a4",
+      "method": "POST",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/import",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.tokens.issue",
+      "operationId": "artifacts-tokens-issue",
+      "operationSha256": "0240c5179546ef501c91c9a87bc1c7df6bae65e78bc94c55e9824402e6c54e68",
+      "method": "POST",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/tokens",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.tokens.list",
+      "operationId": "artifacts-tokens-list",
+      "operationSha256": "6b19e539d5e33eb2247d90be2e2534d212d1c905398bb7ce38ee42c45df39460",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tokens",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.tokens.revoke",
+      "operationId": "artifacts-tokens-revoke",
+      "operationSha256": "d5216413f9fca4c7efa92f1900e314b8b50a3e7843dd337689ac0f5d86f48811",
+      "method": "DELETE",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/tokens/{token}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.log",
+      "operationId": "artifacts-repositories-log",
+      "operationSha256": "73491f3fd07315a113c4d832ec81d15521afdc87f36e66b491c21ec25eb253a9",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/log",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.commit",
+      "operationId": "artifacts-repositories-commit",
+      "operationSha256": "e77045bcb2403207201abf53ba6b495a7ac21c4ef6fe85800233f793efe8bb0f",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/commit/{oid}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.tree",
+      "operationId": "artifacts-repositories-tree",
+      "operationSha256": "f70445ffd1dfc8e735edc81867e8558977ef8c7c3e911633ae9906dce43d70a6",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tree/{oid}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.blob",
+      "operationId": "artifacts-repositories-blob",
+      "operationSha256": "33b9fcb8cbf015bd6bff4284352792f912c0a133b2b0747e3dc02f033c48a3fe",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/blob/{oid}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.file",
+      "operationId": "artifacts-repositories-file",
+      "operationSha256": "9d12f04781cc1a0b6c98b3548365ed81a4a942b0636a895f063c61c5a5c98a7a",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/file",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
+    },
+    {
+      "source": "observed_standard",
+      "node": "artifacts.repositories.raw",
+      "operationId": "artifacts-repositories-raw",
+      "operationSha256": "d12a52d9f86ba37d6001cae78f5b90ac63f837db08d4374ccdec6cea723b14c4",
+      "method": "GET",
+      "path": "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/raw/{reference}/{path}",
+      "delegateModule": "src/artifacts.ts",
+      "delegateClass": "Artifacts"
     }
   ]
 }

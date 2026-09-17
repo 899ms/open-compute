@@ -23,7 +23,7 @@
     "oc": "bun packages/toolchain/src/bin.ts",
     "test:dashboard:e2e": "bun run --filter @open-compute/dashboard test:e2e",
     "test:js": "node --test 'packages/sdk/tests/**/*.test.mjs' 'packages/runtime/tests/**/*.test.mjs' 'packages/toolchain/tests/**/*.test.mjs' 'test/*.test.mjs' 'test/upstream-review/*.test.mjs' 'test/conformance/*.test.mjs'",
-    "test:js:ci": "node --test 'packages/sdk/tests/**/*.test.mjs' 'packages/runtime/tests/**/*.test.mjs' 'packages/toolchain/tests/**/*.test.mjs' 'test/*.test.mjs' 'test/upstream-review/*.test.mjs' 'test/conformance/adapters.test.mjs' 'test/conformance/case-evidence.test.mjs' 'test/conformance/inventory.test.mjs' 'test/conformance/p6-contract.test.mjs'",
+    "test:js:ci": "node --test 'packages/sdk/tests/**/*.test.mjs' 'packages/runtime/tests/**/*.test.mjs' 'packages/toolchain/tests/**/*.test.mjs' 'test/bundled-workerd.test.mjs' 'test/upstream-review/*.test.mjs' 'test/conformance/adapters.test.mjs' 'test/conformance/case-evidence.test.mjs' 'test/conformance/inventory.test.mjs' 'test/conformance/p6-contract.test.mjs'",
     "typecheck": "bun run --filter @open-compute/sdk typecheck && bun run --filter @open-compute/dashboard typecheck && bun run --filter @open-compute/runtime typecheck && bun run --filter @open-compute/toolchain typecheck && bun run --filter @open-compute/website typecheck && tsc --project examples/hello-worker/tsconfig.json --noEmit && tsc --project scripts/tsconfig.json --noEmit && tsc --project test/conformance/tsconfig.json --noEmit && tsc --project test/conformance/fixtures/tsconfig.json --noEmit",
     "website:build": "bun run --filter @open-compute/website build",
     "website:dev": "bun run --filter @open-compute/website dev",

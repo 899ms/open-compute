@@ -1,26 +1,3 @@
-import {
-  baselineIdentity,
-  capabilityCatalogBijection,
-  catalogSchema,
-} from "./checks/catalog.ts";
-import {
-  caseRegistryMapping,
-  compatibilityCoverage,
-  deviationBijection,
-  inventoryGenerationDrift,
-  inventoryMemberEvidence,
-} from "./checks/inventory.ts";
-import {
-  cloudflareRunnerSafety,
-  portableFixtureInventory,
-} from "./checks/runner.ts";
-import {
-  compileFixtures,
-  conformanceSelfTests,
-  publicTypesSurface,
-  unsupportedConfigRejection,
-} from "./checks/types.ts";
-
 const CASES = [
   "baseline-identity",
   "catalog-schema",
@@ -39,21 +16,37 @@ const CASES = [
 ] as const;
 type CaseId = (typeof CASES)[number];
 
-const checks: Record<CaseId, () => void | Promise<void>> = {
-  "baseline-identity": baselineIdentity,
-  "catalog-schema": catalogSchema,
-  "capability-catalog-bijection": capabilityCatalogBijection,
-  "inventory-generation-drift": inventoryGenerationDrift,
-  "inventory-member-evidence": inventoryMemberEvidence,
-  "case-registry-mapping": caseRegistryMapping,
-  "deviation-bijection": deviationBijection,
-  "compatibility-coverage": compatibilityCoverage,
-  "public-types-surface": publicTypesSurface,
-  "compile-fixtures": compileFixtures,
-  "conformance-self-tests": conformanceSelfTests,
-  "unsupported-config-rejection": unsupportedConfigRejection,
-  "portable-fixture-inventory": portableFixtureInventory,
-  "cloudflare-runner-safety": cloudflareRunnerSafety,
+export {};
+
+const checks: Record<CaseId, () => Promise<void>> = {
+  "baseline-identity": async () =>
+    (await import("./checks/catalog.ts")).baselineIdentity(),
+  "catalog-schema": async () =>
+    (await import("./checks/catalog.ts")).catalogSchema(),
+  "capability-catalog-bijection": async () =>
+    (await import("./checks/catalog.ts")).capabilityCatalogBijection(),
+  "inventory-generation-drift": async () =>
+    (await import("./checks/inventory.ts")).inventoryGenerationDrift(),
+  "inventory-member-evidence": async () =>
+    (await import("./checks/inventory.ts")).inventoryMemberEvidence(),
+  "case-registry-mapping": async () =>
+    (await import("./checks/inventory.ts")).caseRegistryMapping(),
+  "deviation-bijection": async () =>
+    (await import("./checks/inventory.ts")).deviationBijection(),
+  "compatibility-coverage": async () =>
+    (await import("./checks/inventory.ts")).compatibilityCoverage(),
+  "public-types-surface": async () =>
+    (await import("./checks/types.ts")).publicTypesSurface(),
+  "compile-fixtures": async () =>
+    (await import("./checks/types.ts")).compileFixtures(),
+  "conformance-self-tests": async () =>
+    (await import("./checks/types.ts")).conformanceSelfTests(),
+  "unsupported-config-rejection": async () =>
+    (await import("./checks/types.ts")).unsupportedConfigRejection(),
+  "portable-fixture-inventory": async () =>
+    (await import("./checks/runner.ts")).portableFixtureInventory(),
+  "cloudflare-runner-safety": async () =>
+    (await import("./checks/runner.ts")).cloudflareRunnerSafety(),
 };
 
 const args = process.argv.slice(2);

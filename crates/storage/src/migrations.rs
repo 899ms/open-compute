@@ -168,7 +168,8 @@ fn run_invariants(tx: &Transaction<'_>) -> Result<(), PlatformError> {
         "worker_versions",
         "version_vars",
         "version_secrets",
-        "worker_routes",
+        "hostname_claims",
+        "worker_host_routes",
         "control_idempotency",
         "version_referrers",
         "control_audit_events",
@@ -229,8 +230,10 @@ fn run_invariants(tx: &Transaction<'_>) -> Result<(), PlatformError> {
     for (index, fragment) in [
         ("accounts_live_name", "deleted_at_ms"),
         ("workers_live_name", "UNIQUE"),
-        ("live_exact_routes", "UNIQUE"),
-        ("live_platform_routes", "UNIQUE"),
+        ("active_hostname_claims", "UNIQUE"),
+        ("hostname_claim_account_identity", "UNIQUE"),
+        ("workers_account_identity", "UNIQUE"),
+        ("active_worker_host_routes", "UNIQUE"),
         ("resources_live_name", "tombstoned"),
         ("queues_live_name", "tombstoned"),
     ] {

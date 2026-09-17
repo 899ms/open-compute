@@ -39,10 +39,14 @@
 | `I` | GitHub issue 实施批次 | `i1-github-issues-1-3.md`、`i2-github-issue-4-r2-upload.md` |
 | `G` | 一次性调查或 Gate 研究 | `g1-test-repetition.md` |
 | `Q` | 质量专项 | `q0-code-quality-2026-09-08.md` |
+| `R` | 跨既有阶段的架构重构 | `r0-localhost-worker-origins.md` |
 
 子阶段和插入主线之间的补充阶段继续使用所属序列，例如 `P2.6` 写作 `p2-6-*`。同一需求从活动方案移动到
 `implemented/`、`acceptance/` 或 `blocked/` 时编号不变。只有各目录 `README.md`、持续维护的
 `references/` 与 `runbooks/`、以及以 SemVer 命名的 `releases/` 不使用上述编号。
+
+`R` 只用于替换已经横跨多个产品阶段的 authoritative 架构，不用于普通功能、代码整理或质量修复；后者继续归入所属 `P`、`W`、
+`I` 或 `Q`。重构完成后与其他活动方案一样以原编号移入 `implemented/`，不另建旧架构兼容文档。
 
 ## 内容与证据
 
@@ -58,6 +62,7 @@
 
 | 文档 | 用途 |
 | --- | --- |
+| [Host authority](host-authority.md) | 本机与公网 ingress 共用的 hostname ownership、解析和 endpoint projection |
 | [Cloudflare 兼容矩阵](cloudflare-compatibility.md) | 当前支持面和 deviation |
 | [Cloudflare 上游刷新](cloudflare-upstream-refresh.md) | OpenAPI、官方 SDK 与 Wrangler 的定期发现和协调升级 |
 | [能力偏差](p1-deviations.md) | 当前 deviation ID 与边界 |

@@ -193,6 +193,14 @@ export async function absoluteDestination(path: string): Promise<string> {
   throw new Error("destination already exists; overwrite is forbidden");
 }
 
+export function cargoTargetDirectory(path: string | undefined): string {
+  if (path === undefined) return join(repository, "target");
+  if (!isAbsolute(path) || parse(path).root === path) {
+    throw new Error("CARGO_TARGET_DIR must be an absolute non-root path");
+  }
+  return resolve(path);
+}
+
 export function command(
   program: string,
   args: string[],

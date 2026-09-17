@@ -18,6 +18,17 @@ pub enum WorkerOwnership {
     System,
 }
 
+/// Crash-recoverable authority for an admitted force deletion.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkerDeleteIntent {
+    /// Owning account.
+    pub account_id: AccountId,
+    /// Worker being deleted.
+    pub worker_id: WorkerId,
+    /// Original management request identifier.
+    pub request_id: RequestId,
+}
+
 impl WorkerOwnership {
     /// Stable database token.
     #[must_use]
@@ -125,6 +136,24 @@ pub struct UpdateWorkerObservabilitySettings {
     pub invocation_logs: bool,
     /// Whether sampled events are persisted locally.
     pub persist: bool,
+}
+
+/// Fields explicitly supplied by a Script upload for its final publish transaction.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkerObservabilityPatch {
+    /// Optional master observability persistence switch.
+    pub enabled: Option<bool>,
+    /// Optional top-level head sampling rate.
+    pub head_sampling_rate: Option<f64>,
+    /// Optional Workers Logs collection switch.
+    pub logs_enabled: Option<bool>,
+    /// Optional logs-specific head sampling rate.
+    pub logs_head_sampling_rate: Option<f64>,
+    /// Optional invocation-summary persistence switch.
+    pub invocation_logs: Option<bool>,
+    /// Optional sampled-event persistence switch.
+    pub persist: Option<bool>,
 }
 
 /// Content-free management audit for Workers Logs and realtime tail operations.
@@ -539,27 +568,7 @@ pub struct VersionSnapshot {
     pub builtin_bindings: Vec<crate::VersionBuiltinBindingRecord>,
 }
 
-/// Route kind supported by P0.2.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RouteKind {
-    /// Platform-owned account/worker path.
-    PlatformPath,
-    /// Exact canonical hostname plus path prefix.
-    ExactHost,
-}
-
-impl RouteKind {
-    pub(crate) fn parse(value: &str) -> Result<Self, PlatformError> {
-        match value {
-            "platform_path" => Ok(Self::PlatformPath),
-            "exact_host" => Ok(Self::ExactHost),
-            _ => Err(invariant()),
-        }
-    }
-}
-
-/// Active route metadata.
+/// Active local-hostname route metadata.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RouteRecord {
@@ -569,16 +578,16 @@ pub struct RouteRecord {
     pub account_id: AccountId,
     /// Target Worker.
     pub worker_id: WorkerId,
-    /// Route kind.
-    pub kind: RouteKind,
     /// Canonical exact hostname.
-    pub hostname_ascii: Option<String>,
+    pub hostname_ascii: String,
     /// Canonical path prefix.
     pub path_prefix: String,
     /// Optional named entrypoint.
     pub entrypoint: Option<String>,
     /// Route generation at creation/update.
     pub generation: u64,
+    /// Route creation time.
+    pub created_at_ms: i64,
 }
 
 /// Frozen route and active version identity for one request.

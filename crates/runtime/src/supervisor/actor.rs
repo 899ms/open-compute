@@ -173,6 +173,9 @@ impl Actor {
             } => {
                 self.handle_probe_result(startup_id, healthy).await;
             }
+            Command::RotateGeneration { ack } => {
+                let _ = ack.send(self.rotate_generation().await);
+            }
             #[cfg(any(test, feature = "test-support"))]
             Command::ForceRestartForTest => {
                 if self.snap.state == SupervisorState::Running {
@@ -211,7 +214,7 @@ impl Actor {
         }
     }
 
-    fn begin_attempt(&mut self) {
+    pub(super) fn begin_attempt(&mut self) {
         self.last_report = None;
         self.transition(
             SupervisorState::Starting,

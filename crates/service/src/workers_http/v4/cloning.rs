@@ -190,6 +190,7 @@ pub(super) async fn clone_active(
             queue_consumers,
             crons,
             deployment_source: Some(DeploymentSource::VersionsApi),
+            observability: None,
             request_id,
             now_ms,
         })

@@ -529,6 +529,7 @@ pub(super) fn version_request(
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: promote.then_some(DeploymentSource::VersionsApi),
+        observability: None,
         request_id: RequestId::generate(),
         now_ms,
     }

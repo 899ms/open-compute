@@ -1,9 +1,9 @@
-//! Route edits cannot replace the persisted dispatch epoch of Queue or Cron work.
+//! The local-origin route generation cannot replace Queue or Cron execution epochs.
 
 use super::*;
 
 #[tokio::test]
-async fn route_edits_preserve_queue_and_cron_epochs_during_repromotion_and_restart_reconcile() {
+async fn local_origin_route_preserves_queue_and_cron_epochs_during_repromotion_and_reconcile() {
     let (_dir, path, _mock) = initialized_doctor_fixture().await;
     let loaded = load_fixture_platform_config(&path);
     let storage = Arc::new(
@@ -95,6 +95,7 @@ async fn route_edits_preserve_queue_and_cron_epochs_during_repromotion_and_resta
             }],
             crons: vec!["*/5 * * * *".into()],
             deployment_source: Some(open_compute_storage::DeploymentSource::VersionsApi),
+            observability: None,
             request_id: open_compute_core::RequestId::generate(),
             now_ms: 60_000,
         })
@@ -131,22 +132,10 @@ async fn route_edits_preserve_queue_and_cron_epochs_during_repromotion_and_resta
             .unwrap(),
         None
     );
-    workers
-        .create_exact_route(
-            account,
-            worker.id,
-            "epoch.example",
-            "/",
-            None,
-            None,
-            open_compute_core::RequestId::generate(),
-            60_001,
-            1_000_000,
-        )
-        .unwrap();
     let worker = workers.get_worker(account, worker.id).unwrap();
-    assert!(worker.route_generation > queue_epoch);
-    assert!(worker.route_generation > cron_epoch);
+    let route_generation = worker.route_generation;
+    assert!(route_generation >= 1);
+    assert_eq!(workers.list_routes(account, worker.id).unwrap().len(), 1);
     promoter
         .promote(ProductPromotionRequest {
             account_id: account,
@@ -154,11 +143,19 @@ async fn route_edits_preserve_queue_and_cron_epochs_during_repromotion_and_resta
             version_id: result.version.id,
             source: open_compute_storage::DeploymentSource::VersionsApi,
             annotations: std::collections::BTreeMap::new(),
+            observability: None,
             request_id: open_compute_core::RequestId::generate(),
             now_ms: 60_002,
         })
         .await
         .unwrap();
+    assert_eq!(
+        workers
+            .get_worker(account, worker.id)
+            .unwrap()
+            .route_generation,
+        route_generation
+    );
     let reopened = Arc::new(SchedulerStore::open(&scheduler_path, 100, 60_003).unwrap());
     let service = SchedulerService::new(
         reopened.clone(),

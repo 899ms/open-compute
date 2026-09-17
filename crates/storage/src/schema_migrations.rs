@@ -126,6 +126,14 @@ fn runner(kind: DatabaseKind) -> Runner {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn migrate_to_for_test(connection: &mut Connection, kind: DatabaseKind, version: i32) {
+    runner(kind)
+        .set_target(Target::Version(version))
+        .run(connection)
+        .unwrap();
+}
+
 fn install_verified_baseline(
     transaction: &Transaction<'_>,
     runner: &Runner,

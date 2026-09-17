@@ -57,7 +57,7 @@ async fn storage_boundaries_return_cloudflare_errors_before_domain_dispatch() {
     assert_eq!(denied.status(), StatusCode::FORBIDDEN);
     assert_eq!(json(denied).await["errors"][0]["code"], 9_100_002);
 
-    let unsupported = app(state)
+    let unavailable = app(state)
         .oneshot(
             Request::builder()
                 .uri(format!(
@@ -70,6 +70,6 @@ async fn storage_boundaries_return_cloudflare_errors_before_domain_dispatch() {
         )
         .await
         .unwrap();
-    assert_eq!(unsupported.status(), StatusCode::NOT_IMPLEMENTED);
-    assert_eq!(json(unsupported).await["errors"][0]["code"], 9_100_007);
+    assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(json(unavailable).await["errors"][0]["code"], 9_100_005);
 }

@@ -233,6 +233,7 @@ impl<'a> WorkerRepository<'a> {
                 DeploymentSource::VersionsApi
             },
             &BTreeMap::new(),
+            None,
             request_id,
             now_ms,
             open_compute_core::StartupId::generate(),
@@ -254,10 +255,15 @@ impl<'a> WorkerRepository<'a> {
         expected_route_generation: Option<u64>,
         source: DeploymentSource,
         annotations: &BTreeMap<String, String>,
+        observability: Option<&WorkerObservabilityPatch>,
         request_id: RequestId,
         now_ms: i64,
         runtime_startup_id: open_compute_core::StartupId,
     ) -> Result<(WorkerRecord, DeploymentRecord), PlatformError> {
+        if let Some(patch) = observability {
+            validate_sampling_rate(patch.head_sampling_rate)?;
+            validate_sampling_rate(patch.logs_head_sampling_rate)?;
+        }
         let deployment_id = DeploymentId::generate();
         self.db.with_immediate(|tx| {
             let current = require_live_worker(tx, account_id, worker_id)?;
@@ -347,6 +353,55 @@ impl<'a> WorkerRepository<'a> {
                     ErrorCode::IdempotencyConflict,
                     "Deployment compare-and-swap precondition failed",
                 ));
+            }
+            if let Some(patch) = observability {
+                let current = tx
+                    .query_row(
+                        "SELECT generation, enabled, head_sampling_rate, logs_enabled,
+                                logs_head_sampling_rate, invocation_logs, persist, updated_at_ms
+                         FROM worker_observability_settings WHERE worker_id = ?1",
+                        [worker_id.to_string()],
+                        map_observability_settings,
+                    )
+                    .optional()
+                    .map_err(|_| db_error())?
+                    .ok_or_else(invariant)?;
+                let generation = current.generation.checked_add(1).ok_or_else(invariant)?;
+                let updated = tx
+                    .execute(
+                        "UPDATE worker_observability_settings SET generation=?1, enabled=?2,
+                           head_sampling_rate=?3, logs_enabled=?4, logs_head_sampling_rate=?5,
+                           invocation_logs=?6, persist=?7, updated_at_ms=?8
+                         WHERE worker_id=?9 AND generation=?10",
+                        params![
+                            i64::try_from(generation).map_err(|_| invariant())?,
+                            patch.enabled.unwrap_or(current.enabled),
+                            patch.head_sampling_rate.or(current.head_sampling_rate),
+                            patch.logs_enabled.unwrap_or(current.logs_enabled),
+                            patch
+                                .logs_head_sampling_rate
+                                .or(current.logs_head_sampling_rate),
+                            patch.invocation_logs.unwrap_or(current.invocation_logs),
+                            patch.persist.unwrap_or(current.persist),
+                            now_ms,
+                            worker_id.to_string(),
+                            i64::try_from(current.generation).map_err(|_| invariant())?,
+                        ],
+                    )
+                    .map_err(|_| db_error())?;
+                if updated != 1 {
+                    return Err(invariant());
+                }
+                audit(
+                    tx,
+                    account_id,
+                    "worker.observability.update",
+                    "worker",
+                    &worker_id.to_string(),
+                    request_id,
+                    format!(r#"{{"generation":{generation}}}"#).as_bytes(),
+                    now_ms,
+                )?;
             }
             audit(
                 tx,

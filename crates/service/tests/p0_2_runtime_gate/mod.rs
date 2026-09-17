@@ -143,6 +143,7 @@ async fn deploy_egress(
         queue_consumers: Vec::new(),
         crons: vec!["3 * * * *".to_owned()],
         deployment_source: None,
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 20,
     };
@@ -395,6 +396,7 @@ export default { fetch() { return new Response(Buffer.from("node-compat").toStri
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: None,
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 21,
     };
@@ -536,6 +538,7 @@ export default {{
             "2 * * * *".to_owned(),
         ],
         deployment_source: promote.then_some(open_compute_storage::DeploymentSource::ScriptUpload),
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 2,
     }

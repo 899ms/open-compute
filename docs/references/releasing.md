@@ -36,9 +36,18 @@ npm provenance（OIDC trusted publishing）在当前 token 流程下不可用，
 ## 三条工作流
 
 `.github/workflows/ci.yml` 只在 `main` push 和以 `main` 为 base 的 pull request 上执行静态资格：
-显式 runtime/tooling build 与 typecheck、快速 JS/Python 测试、format、clippy、no-default-features、
+所有变更先在同一个只读 `failfast` job 中完成路径分类、`sourceDigest` 和 release-tool contracts；通过后再按路径选择
+runtime/tooling build 与 typecheck、快速 JS/Python 测试、format、clippy、no-default-features、
 Rust 1.98 workspace/all-targets check、production hygiene、metadata 和依赖边界。普通 CI 不执行完整
 workspace Gate、coverage 或发行打包。
+full scope 将 core checks、Clippy 与 production executable hygiene 分成三个并行 matrix leg；每个 Cargo leg
+都先执行完整 `bun run build`，汇总 `ci` 只有在三者全部成功后才通过。
+只修改 release/recovery/dry-run workflow、release assembler/test 和随附文档时使用 `release-tooling`
+scope，只执行 TypeScript、format、文档与 release contract；修改 `ci.yml`、共享 setup action、Rust/runtime
+或未明确归属的路径仍执行 full scope。baseline 只有 `sourceDigest` 字段变化时是随附身份更新，不会单独扩大
+owning change 的 scope；若它作为修复提交单独 push，分类器会回溯到上一次 baseline revision，并对期间所有
+owning files 重新分类。baseline 任何其他字段变化或无法证明来源时仍 fail closed 到 full scope。文档与 frontend
+混合时执行对应 frontend build 和文档检查，不为此启动 Rust。
 release PR 复用其 main head 已通过的 push check，不再重复执行相同检查；tag 触发的 release workflow
 会校验 release merge commit 对应的 main source commit 已通过该 pre-check。各 PR 与分支使用独立
 concurrency group，取消过期运行；汇总 job `ci` 是 `release` 分支的 required check。
@@ -59,6 +68,14 @@ concurrency group，取消过期运行；汇总 job `ci` 是 `release` 分支的
    package/version、official SDK/OpenAPI pins、surface 变化、安装命令与 npm version link）；
    不得保留 TODO、TBD 或 PLACEHOLDER。Workerd 与 Thanks 的内容要求见下文。
 
+上述规则由唯一的 `failfast` job 持有，所有 coverage、integration、package 和 SDK package job 都只在它
+成功后启动。该 job 绑定 `release` environment，并只做秒级检查：tag/release/source identity、版本与干净
+checkout、main CI 证据、release notes 章节和占位符、Workerd 章节的精确 gitlink 或
+`submodule revision is unchanged` 句子、Thanks、`sourceDigest`、release-tool 单元契约、
+`NPM_ACCESS_TOKEN`/`npm whoami` 以及目标 npm 版本尚未发布。SDK report 由 packaging 与 assembler 共用同一个
+parser，producer 在写报告前即调用 consumer parser；schema 漂移不再等到三平台产物完成后才发现。
+`failfast` 不拉取 LFS、不构建 Rust/workerd、不跑 coverage 或完整 Gate。
+
 校验通过后，release workflow 并行执行 90% Rust 行覆盖率、macOS 上完整单轮最终 workspace Gate、
 Linux 上仅 `p0-2` 受控 egress fixture，以及三个正式平台打包。Linux egress 不再夹带第二轮
 `--workspace`；静态资格直接复用 release source commit 已通过的 main `ci`，不在 tag workflow 重跑。
@@ -70,6 +87,10 @@ Linux 上仅 `p0-2` 受控 egress fixture，以及三个正式平台打包。Lin
 不保存失败半成品，package 的 bounded sccache 只作为编译加速，不作为测试通过证据或可信发行物。
 缓存和任务依赖设计见 [CI 构建性能](ci-build-performance.md)。
 
+npm 发布以 `npm publish` 成功退出为完成信号，成功后不轮询 registry，也不等待 eventual-consistency read-back。
+只有 `npm publish` 返回失败时才做一次只读身份查询：若同版本已经存在且 tarball shasum/integrity 与已验证
+artifact 完全一致，则把它视为此前调用结果未知但发布已完成；否则立即失败并交给 `release-recovery`，不自动重发。
+
 只读 `assemble` job 只接受三个精确命名的二进制和对应 package report；它重新核对版本、revision、workerd pin、
 lock SHA-256、文件大小与文件 SHA-256，然后生成 `release.json` 和 `SHA256SUMS`。工作流的默认权限
 是只读，只有 `release` environment 中的最后一个 job 获得 `contents: write`。该 job 只使用随 tag 提交并通过上述结构
@@ -78,9 +99,13 @@ GitHub Release，上传五个公开 assets，再全部下载回来逐字节比�
 后才把 Draft 变成正式 latest release。任一目标或回读校验失败时，不会出现部分公开 release。
 
 `.github/workflows/release-dry-run.yml` 是只读发布预检入口。手动指定 `ref` 和 `target` 后，它构建并验证
-SDK、原生包及 `single-binary` Gate；`target=all` 另外验证三平台 artifact 组装。该 workflow 不创建
+SDK、原生包及 `single-binary` Gate；构建前同样运行 source/release-tool `failfast`，`target=all` 另外验证
+三平台 artifact 组装。该 workflow 不创建
 GitHub Release、不发布 npm、不创建或移动 tag，也不替代正式 tag workflow 的 coverage、workspace Gate、
 受控 egress 和公开资产回读。
+单目标输入只创建对应平台 runner；package 在 cache 可用时只读恢复 main 的 default Rust target cache 来复用
+`single-binary` 测试 harness 依赖（没有对应平台 cache 时正常冷编译），release profile 编译继续使用独立 bounded sccache，且产物仍从当前源码
+按正式 release profile 完整构建和验证。
 
 CI 和 release 都使用 `bun run test:js:ci` 的平台工具/runtime 测试集合。第三方应用 qualification
 独立执行，不属于 workspace Gate 或此次原生二进制发行资格。当前 `test:js` 额外包含的 vinext
@@ -95,7 +120,7 @@ vinext/Next.js 端到端或 hosted Cloudflare differential。其冻结摘要和�
 
 1. 在最新 `main` 修改根 `Cargo.toml` 的 workspace 版本为新的 `X.Y.Z`，并在同一个 version PR 中把
    `packages/sdk/package.json` 的 `version` 改为同一 `X.Y.Z`（`@open-compute/sdk` 与 `ocd` 共享同一
-   stable 版本，没有独立 SDK tag；release workflow 的 validate job 会拒绝 SDK 与 workspace 版本不一致
+   stable 版本，没有独立 SDK tag；release workflow 的 `failfast` job 会拒绝 SDK 与 workspace 版本不一致
    的 tag）；
 2. 运行 Cargo，让它更新 `Cargo.lock` 中所有 workspace package 的版本，不手改 lockfile；
 3. 检查并上传 Git LFS 实体，不能只把 pointer 推到 Git：
@@ -105,8 +130,12 @@ vinext/Next.js 端到端或 hosted Cloudflare differential。其冻结摘要和�
    git lfs push origin --all
    ```
 
-4. 在版本候选源码冻结后，先在本地干净 checkout 完成发布预检。必须显式准备正式 workerd，先运行
-   `bun run build` 和静态检查，再用宿主对应的 `OPEN_COMPUTE_TEST_WORKERD` 依次执行一次
+4. 在版本候选源码冻结后，先刷新 `test/conformance/baseline.json` 的 `sourceDigest`：用
+   `bun -e 'import { sourceIdentity } from "./test/conformance/checks/context.ts"; console.log(sourceIdentity())'`
+   计算当前值并写回 baseline，然后执行一次 `./test/gate.py p3-contract` 确认匹配。它是源码内容摘要，
+   不是 Git commit ID；凡影响摘要范围的源码、测试、工具链、manifest 或 `docs/references/**` 变更，都要一起更新。
+   随后在本地干净 checkout 完成发布预检。必须显式准备正式 workerd，先运行 `bun run build` 和静态检查，
+   再用宿主对应的 `OPEN_COMPUTE_TEST_WORKERD` 依次执行一次
    `./test/coverage.sh --jobs 2` 与一次 `./test/gate.py --workspace --jobs 2`。coverage 的插桩 Gate 和最终
    未插桩 Gate 各有不同验收职责；除此之外不再运行重复 aggregate。90% Rust 行覆盖率和最终 Gate
    必须通过后才能 push/tag。保存失败证据，不自动重试；本地预检用于尽早拦截，不替代 tag workflow
@@ -129,14 +158,16 @@ vinext/Next.js 端到端或 hosted Cloudflare differential。其冻结摘要和�
    维护者自己提出的 issue 写进 Fixed 或 What's new 即可，不要感谢自己。若这段时间没有外部提出者的已完成 issue，
    本章必须写精确句子 `No external issue reports were closed in this release.`，不能省略章节或留空。
 
-6. 提交版本变更与 release notes 到 `main`，等待 main 的静态 `ci` 通过。main CI 完成 build、快速
+6. 提交版本变更与 release notes 到 `main`，等待 main 的静态 `ci` 通过。main CI 先完成 `sourceDigest` 与
+   release-tool contract fail-fast，再完成 build、快速
    JS/Python、fmt、clippy、no-default-features、Rust 1.98 workspace check、production hygiene、metadata
    和边界检查；coverage、完整 workspace Gate、Linux egress、三个正式平台打包和发布验证由 tag
    触发的 release workflow 负责；
 7. 以 `main` 为 head、`release` 为 base 创建并合并一个 version PR。`release` 受保护，不能直接
    推送，也不能通过按版本创建临时分支绕过 PR；
 8. 确认 PR 合并产生的精确 `release` commit 已包含通过的 main pre-check，再在干净的本地 `release`
-   上创建 annotated tag。release 分支不再重复运行同一套轻量 pre-check。
+   上创建 annotated tag。tag workflow 只重验秒级 release identity/environment contracts，不重复 Clippy、
+   MSRV 或其他 main 静态检查。
 
 不要让 GitHub Actions 自动决定版本、修改文件、创建 tag 或把任意 branch HEAD 发布出去。版本是一次
 需要 review 的源码变更，tag 是 maintainer 对已经合入 `release` 的精确 commit 做出的发布决定。

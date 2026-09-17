@@ -194,6 +194,7 @@ async fn exercise(
         queue_consumers: Vec::new(),
         crons: Vec::new(),
         deployment_source: None,
+        observability: None,
         request_id: RequestId::generate(),
         now_ms: 21,
     };

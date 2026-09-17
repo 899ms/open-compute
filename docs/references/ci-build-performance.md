@@ -25,16 +25,79 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 原 composite action 虽然设置 `cache-on-failure: true`，却以 `save-if: main` 排除了 tag 运行。
 旧失败任务没有上传原生二进制，结束后的托管 VM 不能再取回；不能宣称能复用没有保存的 build。
 
+确定性发布错误也曾被发现得过晚：`34939860032` 与 `35001991046` 在 macOS workspace/coverage 跑到末尾后
+才由 `p3-contract` 报 source digest drift；`35001991046` 与 `35008672807` 又在三平台 package 完成后才由
+assemble 报 SDK package report schema 不匹配。`35020012666` 到 publish 才发现 npm 认证缺失；后续 run 的
+`npm publish` 已成功，但紧接着的 registry read-back 因传播延迟返回 E404，继续轮询没有增加发布正确性。
+现在 main CI 与 tag release 都先执行秒级 `failfast`：source identity、release-tool/SDK report contract、
+release environment、npm 认证与目标版本状态任一失败，都不会启动 Rust coverage、Gate 或三平台 package。
+
+`35025974065` 是最近一次 7 分 06 秒的 full main CI，但输入只修改 CI/release workflow 与其分类器。
+其中 setup 78 秒、Clippy 89 秒、production hygiene 80 秒；后两项以及 no-default-features/MSRV 都没有
+读取这次改动的生产 Rust。main 现在把 change classification 与 source/release-tool fail-fast 合并为一个
+job，并为 release workflow、release assembler/test 与随附文档设置 `release-tooling` scope；该 scope 只跑
+TypeScript、format、文档和 release contract 检查。修改 `ci.yml`、共享 setup action、Rust/runtime 或未知路径
+仍跑 full checks，避免改了检查本身却从未执行它。
+full scope 保留全部命令，但拆成三个并行 matrix leg：core 负责 JS/Python、format、no-default-features、
+MSRV、metadata 与 boundaries，Clippy 和 production executable hygiene 各自独立。首次成功实测
+`35065714191` 总墙钟为 4 分 14 秒，较 `35025974065` 的 7 分 06 秒缩短 40%；failfast 13 秒，production、
+Clippy、core 分别为 3 分 09 秒、3 分 27 秒、3 分 53 秒。此前两个 source identity 错误也都在 11 秒内停止，
+没有启动 Rust legs。full run 的三个并行 leg 会增加总 runner 时间，因此不继续拆成更多 runner；路径分类
+负责让这种成本只发生在真正需要 full 资格的改动上。
+
+`35026079295` 的单目标 dry-run 共 35 分 56 秒：正式 release profile 编译 26 分 25 秒，随后
+`single-binary` Gate 的测试 harness 准备又耗时约 7 分 34 秒，而两个测试本身只有 7.25 秒。该 run 的
+sccache 是 0 hits / 2,641 misses，保存又因 configured budget read-only 失败。dry-run 与正式 package
+现在额外只读恢复可用的 main default Rust target cache，复用 debug/test 依赖；release profile 仍由独立
+512 MiB sccache 加速，不把开发产物当发行物。单目标 dispatch 也只创建所选 runner，不再启动另外两个
+立即 skip 的矩阵 job。后续实测 `35066106199` 总墙钟 31 分 14 秒，其中 SDK 50 秒、package 30 分 50 秒、
+release profile 冷编译 27 分 09 秒；`single-binary` 整体准备从约 7 分 34 秒降到 98.96 秒，实际 case 仍为
+7.56 秒。该优化已验收，剩余关键路径是 release 冷编译，不再把 Gate harness 误判为主要瓶颈。
+
+本地完整构建明显更快并不矛盾：当前开发机是 12 核、32 GiB 的 Apple M2 Max，GitHub 标准 Linux
+runner 是 4 vCPU、16 GiB；冷 release 又要处理 1,552 个 sccache 可缓存请求，而本地通常保留 Cargo
+产物。当时正式 profile 还启用 fat LTO 和单 codegen unit，最后的全程序优化不能按 12:4 的核数比例完全
+并行。因此应分别比较 CI 冷缓存、CI 暖缓存和本地已有 target 的重编译，不能拿后一种判断 runner 异常。
+
+依赖审计还发现 `aws-sdk-s3` 默认启用了 SDK 自带 TLS/HTTP client 与 SigV4a，但生产路径始终注入
+平台校验过的 Smithy HTTP client，并且声明的 S3-compatible 范围使用 SigV4。关闭未使用的默认 feature、
+只保留 Tokio 后，lock graph 删除 30 个 package，包括整套 Hyper 0.14/Rustls 0.21 与旧 P-256 栈；不会
+再为没有生产调用者的第二套网络栈付冷编译和 LTO 成本。
+
+`35073942314` 首次保留的 Cargo timing 显示 952 个 dirty unit、4 个 CPU job、26 分 45 秒总编译时间；
+最终 `ocd` binary 单元独占 524.74 秒。此前关键链还有 xberg-tesseract build 315.33 秒、xberg 261.60 秒、
+service library 166.30 秒。最终单元已占全程约三分之一，fat LTO 是缓存无法消除的确定瓶颈；正式 profile
+因此改用 Cargo 文档所述“显著更快且性能收益接近 fat”的 ThinLTO。`codegen-units=1` 暂时保留，避免在
+没有应用 benchmark 时同时引入第二个运行时性能变量。
+
+ThinLTO 后的首次换 key 冷跑 `35077620373` 有 922 个 dirty unit、0 fresh，release 编译为 21 分 45.7 秒，
+比相同 runner 上 fat LTO 的 26 分 45.1 秒缩短 18.7%；最终 `ocd` 单元从 524.74 秒降到 250.88 秒。
+整个 workflow 为 27 分 50 秒，package job 为 27 分 27 秒；该次因 profile 与依赖图都改变，sccache 为
+0 hits / 1,514 misses，所以这是编译策略收益，不是暖缓存收益。
+
+同一 SHA 紧接着的暖跑 `35080400786` 恢复了 release target 与 compiler cache：Cargo 有 904 个 fresh、
+18 个 dirty unit，release 编译只需 4 分 25.9 秒，sccache 为 8 hits / 1 miss（88.89%）；整个 workflow
+为 9 分 01 秒，package job 为 8 分 37 秒，`single-binary` Gate 为 99.80 秒。相对原始冷跑
+`35066106199` 的 31 分 14 秒，完整 dry-run 墙钟缩短 71.2%；冷输入之间则从 31 分 14 秒降到
+27 分 50 秒，缩短 10.9%。暖跑剩余的 245.58 秒几乎全部属于最终 `ocd` ThinLTO/link 单元，不能由
+sccache 缓存；继续提速需要改变正式二进制的 codegen/LTO 性能权衡、付费换更大 runner，或缓存完整
+workspace/final binary。当前没有应用 benchmark，且仓库 cache 已接近 20 GB，因此不做这三种高成本优化。
+
 ## 当前执行分工
 
-- `main` 和普通 PR：同一 runner 完成 build/typecheck、快速工具测试、format、clippy、
-  no-default-features、Rust 1.98 compile check、production hygiene、metadata 和边界检查。release tag
-  校验精确 source commit 已通过该静态资格，不再重跑。
+- `main` 和普通 PR：`failfast` 同时完成变更分类与 source/release-tool contract；full scope 的 core、
+  Clippy、production hygiene 三个职责并行执行，完整覆盖 build/typecheck、快速工具测试、format、
+  no-default-features、Rust 1.98 compile check、metadata 和边界检查；这些任务统一依赖
+  秒级 `failfast`。release-only tooling scope 不启动 Rust。release tag 校验精确 source commit 已通过该静态资格，不再重跑。
 - CI 先按变更路径分类：纯 `docs/**`、README 和 release notes 只执行文档检查；纯 SDK、dashboard、
-  website 或 toolchain 变更只执行对应 JavaScript 检查；Rust、runtime、workerd、测试、脚本、workflow
-  或混合变更仍执行完整静态资格。汇总 job `ci` 保留不变，避免分支保护因跳过具体 job 失效。
-- tag qualification：coverage、一个 macOS 完整最终 workspace Gate 和 Linux `p0-2` 受控 egress
-  在身份校验后并行启动；Linux egress 不再重复 `--workspace`。
+  website 或 toolchain 变更只执行对应 JavaScript 检查；release workflow/assembler/test 使用独立
+  release-tooling 检查；文档与 frontend 混合时在同一个 frontend job 执行两类检查。只有 `sourceDigest`
+  变化的独立修复提交回溯到上一次 baseline revision，按期间全部 owning files 选择检查；baseline 其他字段、
+  Rust、runtime、workerd、`ci.yml`、共享 setup 或未知路径仍执行完整静态资格。汇总 job `ci` 保留不变，
+  避免分支保护因跳过具体 job 失效。
+- tag qualification：`failfast` 先验证 release environment、source/release identity、notes、SDK report
+  contract、npm credential 和目标版本；随后 coverage、一个 macOS 完整最终 workspace Gate 和 Linux
+  `p0-2` 受控 egress 并行启动；Linux egress 不再重复 `--workspace`。
 - 三个正式平台 package：身份验证后即并行构建，和全部 qualification 重叠；publish 等待所有路径成功。macOS Intel 不再进入 package 矩阵。
 - package 与普通 production hygiene 使用同一 executable verifier，生成 mode 0600 临时配置再查询
   capabilities，同时核对 release identity、版本、licenses 和嵌入 docs；不初始化平台数据目录。
@@ -45,12 +108,16 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
 - Rust dependency cache 按工具链、OS/CPU、编译环境和 manifest/lock 分隔；release target 与 coverage
   各自使用 profile key。失败的普通 target cache 不保存，避免把不完整目录当成下一次构建输入；PR
   仍不向共享 Rust cache 写入。
+- package 把正式 profile 隔离在 `.temp/release-target/`，使用每个平台独立的 `v3-release-*`
+  smart cache 保存第三方 release dependency artifacts；普通 `target/` 仍只服务 main 与
+  `single-binary` Gate。两个 profile 不互相覆盖，也不保存 incremental 或把开发产物当作发行物。
 - Cargo registry/index/git 下载使用独立、仅由 OS 与 `Cargo.lock` 定位的缓存，避免 profile-specific
   target cache 未命中时重新下载全部 Rust 依赖。
 - package 使用固定 sccache 0.16.0，512 MiB 本地缓存位于 `.temp/sccache`，整目录通过 Actions
   cache restore/save 复用；主 key 只包含 OS/CPU、Rust/sccache 版本和锁定输入，fallback 可跨源码
   commit 复用内容寻址的编译结果。精确命中不再重复保存，竞争保存失败也不影响构建。它是编译
-  加速缓存，不是测试通过证据或可信发行物。
+  加速缓存，不是测试通过证据或可信发行物。package 完成后先从环境移除 sccache，再执行
+  `single-binary` Gate，避免 debug/test 编译逐出容量有限的 release 编译项。
 - 2026-09-16 inventory 有 22 个条目、约 9.57 GiB，已经贴近 GitHub 每仓库 10 GiB 上限；其中
   8 个旧 package compiler key 含 run/attempt，约 3.9 GiB，几乎没有跨发布复用价值。v2 key
   目标是三个平台各 512 MiB，稳定占用约 1.5 GiB；旧条目由 GitHub 的 LRU 淘汰，不手工删除失败证据。
@@ -59,31 +126,57 @@ package 在编译后执行无 `--config` 的 capabilities 命令失败。两个 
   read-only；Actions API 当时仍列出 23 个条目、11,866,896,013 bytes，且 storage-limit API 为 20 GB，
   所以这次没有产生可复用的 v2 compiler key。保存步骤是非阻断的，不能把这次成功误报为 warm-cache
   效果；待配额实际可写后再用下一次 package run 测量命中率。
+- 2026-09-16 再查 API：repository storage limit 已显示 20 GB，但 23 个 cache 共 11,866,896,013 bytes，
+  仍没有任何 `compiler-v2-*` key；因此不能把配额页面变化当作 cache 已可写的证据。GitHub 的仓库 cache
+  limit 与 `Actions Cache Storage`（`actions_cache_storage`）预算是两个独立开关：预算为零或已触顶时，超过
+  免费 10 GB 后 cache 会保持 read-only。20 GB 上限全部用满时只有额外 10 GB 计费，按当前 $0.07/GB-month
+  最多约 $0.70/月；账户预算应至少设为 $1/月，或先删到 10 GB 以下。repo workflow 的 `cache-mode` 不能绕过
+  这个 billing 限制。
+- `35066106199` 在新增账户级 `Actions Cache Storage` $2/月预算后仍收到 configured budget read-only。
+  预算页面同时存在更宽的账户级 `Actions` 产品预算 `$0`且`Stop usage: Yes`；产品预算会先阻断其下的 cache
+SKU，单独增加 SKU 预算不能覆盖它。要允许 cache 写入，Actions 产品预算也必须非零（可同样设为 $2 并
+保留 stop-usage 总上限），或删除该产品预算。该 run 的 492 MiB sccache 因此仍未保存，不能宣称 warm-cache
+效果；日志中的通用 `another job may be creating this cache` 不是根因，前一行 budget warning 才是根因。
+- Actions 产品与 Cache Storage SKU 都设为 $2 后，`35073942314` 首次成功保存 535,767,092-byte
+  `compiler-v2-*` cache 和 824,260,351-byte `v3-release-*` dependency cache；两次上传合计约 16 秒。
+  该 run 仍是 0 fresh / 952 dirty units 的冷编译，不能当暖缓存结果。独立 stats 步骤在 package 后移除
+  wrapper、执行 Gate 后读到 0 request，与已保存的 535 MB cache 不一致；后续是否复用以 cache restore、
+  Cargo fresh units 和墙钟共同判定，不以该步骤的单个 hit 计数下结论。
+- ThinLTO 首跑 `35077620373` 成功保存 530,519,545-byte compiler cache 与 1,498,593,428-byte release
+  target cache；相同 SHA 的 `35080400786` 精确命中且没有重复保存。此时仓库共 29 个 cache、
+  16,963,407,475 bytes，仍低于 20 GB 上限；旧 fat-LTO key 交给 GitHub LRU 淘汰，不为了回收约 1.36 GB
+  手工删除证据。
 - 不启用逐 crate 的 GHA sccache backend：并行矩阵会增加缓存 API 请求，已存在上游限流与延迟报告。
   最终链接、bin/proc-macro 编译等仍有不可缓存部分；不承诺完全免编译。
 - 保存 Cargo `--timings` 报告、cache statistics、失败时的未验收原生 binary 和现有失败 Gate evidence。
   一般日志显示子命令 stderr，避免长时间只看到一个无输出步骤。
+- 正式 release 和 dry-run 都上传 `.temp/release-target/cargo-timings/`；下一次真实 package run 直接提供
+  crate/编译单元关键路径，不为性能分析单独重复构建。
 - source、formal runtime pin、生成资产和 artifact SHA 校验仍执行；不得通过伪造 mtime 或复用不同
   revision 的发布二进制制造命中。输入发生变化，已有 Gate 结果只证明它原来的输入。
 
 ## 研究取舍
 
-| 候选                                   | 当前决定与依据                                                                                                      |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 同一 runner / 合并重复步骤             | 普通 CI 使用一台 runner、一轮 build，避免重复安装与 fresh-checkout 编译                                             |
-| package 与 qualification 并行          | 已配置；publish 保留所有依赖，提前暴露打包问题                                                                      |
-| Cargo target cache                     | 保留按 profile/平台区分的依赖缓存；不盲目上传整个几十 GiB workspace target 导致缓存驱逐                             |
-| sccache                                | 仅 native package 启用，限制容量并收集命中数据；coverage 保持现有插桩路径                                           |
-| 容器 / cargo-chef                      | 当前三个正式平台原生 runner 不增加一套容器构建；Linux 容器不能证明 macOS 原生行为，镜像不能直接复用所有架构的机器码 |
-| Fat LTO → ThinLTO / 更多 codegen units | 尚未改 release profile；先用 timings 定位实际链接成本，避免未测量的大小/性能变化                                    |
-| nightly 编译参数 / 替换 linker         | 不引入 nightly 或未验证 linker；保持正式 Rust 1.98 和原生链接契约                                                   |
-| 增大 Gate 并发                         | 保持审计后的 `--jobs 2` 和独占目标，不拿资源争抢换取新的时序失败                                                    |
+| 候选                            | 当前决定与依据                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| full CI 并行职责                | 三个 runner 把 89 秒 Clippy 与 80 秒 production link/scan 移出 core 关键路径；不再细拆，控制总 runner 成本          |
+| package 与 qualification 并行   | 已配置；publish 保留所有依赖，提前暴露打包问题                                                                      |
+| Cargo target cache              | 保留按 profile/平台区分的依赖缓存；不盲目上传整个几十 GiB workspace target 导致缓存驱逐                             |
+| sccache                         | 仅 native package 启用，限制容量并收集命中数据；coverage 保持现有插桩路径                                           |
+| S3 SDK 默认 feature             | 生产注入自有 verified HTTP client；只保留 `rt-tokio`，删除未使用的默认 TLS client 与 SigV4a 依赖                    |
+| 容器 / cargo-chef               | 当前三个正式平台原生 runner 不增加一套容器构建；Linux 容器不能证明 macOS 原生行为，镜像不能直接复用所有架构的机器码 |
+| Fat LTO → ThinLTO               | timing 证实最终 binary 单元占 524.74 秒；改 ThinLTO，保留单 codegen unit，暂不叠加未测的运行时权衡                  |
+| 增加 codegen units              | 暖跑剩余 245.58 秒为最终 ThinLTO/link；没有应用 benchmark 前不拿未知运行时退化换几十秒构建时间                      |
+| 缓存完整 workspace/final binary | 当前 target/compiler cache 已证明 9 分钟暖跑；不增加 source-keyed 全量 target 缓存挤占 20 GB 配额                   |
+| nightly 编译参数 / 替换 linker  | 不引入 nightly 或未验证 linker；保持正式 Rust 1.98 和原生链接契约                                                   |
+| 增大 Gate 并发                  | 保持审计后的 `--jobs 2` 和独占目标，不拿资源争抢换取新的时序失败                                                    |
 
 ## 测试与复用边界
 
-- `main` 的静态资格只跑 build/typecheck、JS/Python tooling、fmt、Clippy、no-default-features、
-  MSRV target check、production hygiene、metadata 和边界检查。tag 的 `validate` 只读取对应 main
-  source commit 的成功 run；release 不重复 Clippy 或 MSRV。
+- `main` 的静态资格先跑 source/release-tool `failfast`，再按变更范围执行 build/typecheck、JS/Python
+  tooling、fmt、Clippy、no-default-features、MSRV target check、production hygiene、metadata 和边界检查。
+  tag 的 `failfast` 读取对应 main source commit 的成功 run，并额外验证 release-only environment/notes/npm
+  contracts；release 不重复 Clippy 或 MSRV。
 - release 仍必须保留不同职责的 coverage、macOS 未插桩 workspace Gate、Linux `p0-2` 受控 egress、
   三平台单文件 package、SDK tarball 和最终 bytes/checksum 回读。coverage 与 Gate 使用不同编译
   插桩和宿主，不能拿一个替代另一个；package 的 native binary 也不能由 main 的 `cargo check` 代替。
@@ -127,6 +220,7 @@ gh workflow run release-dry-run.yml --ref main -f ref=main -f target=all
 - [Cargo build cache](https://doc.rust-lang.org/cargo/reference/build-cache.html)：profile/target 布局与共享缓存。
 - [Cargo timings](https://doc.rust-lang.org/cargo/reference/timings.html)：编译单元、并发与关键路径报告。
 - [Cargo profiles](https://doc.rust-lang.org/cargo/reference/profiles.html)：LTO、codegen units 和 incremental 的权衡。
+- [GitHub-hosted runner reference](https://docs.github.com/actions/reference/runners/github-hosted-runners)：标准 runner 的 CPU、内存与磁盘规格。
 - [rust-cache inputs](https://github.com/Swatinem/rust-cache)：save-if、cache-on-failure 与 workspace crate 缓存行为。
 - [GitHub cache scope](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)：分支/tag 可见性与不可覆盖条目。
 - [GitHub artifacts](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts)：job 结束后的构建输出保留。

@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "open-compute SDK surface",
-    "version": "0.1.9",
+    "version": "0.1.10",
     "description": "Combined Cloudflare-compatible and vendor surface exposed by @open-compute/sdk. Generated from the pinned authority; do not hand-edit."
   },
   "servers": [
@@ -16,8 +16,8 @@
   },
   "x-open-compute-sdk": {
     "package": "@open-compute/sdk",
-    "packageVersion": "0.1.9",
-    "surfaceDigest": "a945e2aa720245e4f91020cea65e6f2ea4e7742524048ae6f9dc9de1105804b1",
+    "packageVersion": "0.1.10",
+    "surfaceDigest": "a68c48dee1f07831c66de0e14bcf5993b193f150f4c3da7fee5b21602ec6999f",
     "openapiRevision": "b8687f42e28fbfcb296a350f7dbf16349ea900af",
     "cloudflareSdk": "7.1.0"
   },
@@ -876,7 +876,10 @@
         "x-fern-sdk-group-name": "workers.scripts",
         "x-fern-sdk-method-name": "delete",
         "x-forge-hidden": true,
-        "x-open-compute-status": "supported",
+        "x-open-compute-status": "supported_with_deviation",
+        "x-open-compute-deviations": [
+          "OC-DEPLOY-001"
+        ],
         "x-open-compute-sdk-node": "workers.scripts"
       }
     },
@@ -10173,6 +10176,152 @@
         "x-fern-availability": "generally-available",
         "x-fern-sdk-group-name": "r2.buckets.objects",
         "x-fern-sdk-method-name": "delete",
+        "x-forge-hidden": true,
+        "x-open-compute-status": "supported",
+        "x-open-compute-sdk-node": "r2.buckets.objects"
+      }
+    },
+    "/accounts/{account_id}/r2/buckets/{bucket_name}/objects": {
+      "get": {
+        "operationId": "r2-list-objects",
+        "summary": "List Objects",
+        "description": "Lists objects in an R2 bucket. Returns object metadata including key, size, etag, last modified date, HTTP metadata, and custom metadata.\n\nFor most workloads, we recommend using R2's [S3-compatible API](https://developers.cloudflare.com/r2/api/s3/api/) or a [Worker with an R2 binding](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/) instead.\n",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/r2_account_identifier"
+            }
+          },
+          {
+            "name": "bucket_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/r2_bucket_name"
+            }
+          },
+          {
+            "name": "cf-r2-jurisdiction",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/r2_jurisdiction"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "description": "Maximum number of objects to return per page.",
+              "type": "integer",
+              "default": 20,
+              "maximum": 1000,
+              "minimum": 1
+            }
+          },
+          {
+            "name": "prefix",
+            "in": "query",
+            "schema": {
+              "description": "Restricts results to only those objects whose keys begin with the specified prefix.",
+              "type": "string"
+            }
+          },
+          {
+            "name": "delimiter",
+            "in": "query",
+            "schema": {
+              "description": "A single character used to group keys. All keys that contain the delimiter between the prefix and the first occurrence of the delimiter after the prefix are grouped under a single result element.",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "description": "Pagination cursor received from a previous List Objects call. Used to retrieve the next page of results.",
+              "type": "string"
+            }
+          },
+          {
+            "name": "start_after",
+            "in": "query",
+            "schema": {
+              "description": "Returns objects with keys that come after the specified key in lexicographic order.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List Objects response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "$ref": "#/components/schemas/r2_errors"
+                    },
+                    "messages": {
+                      "$ref": "#/components/schemas/r2_messages"
+                    },
+                    "result": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/r2_r2_object"
+                      }
+                    },
+                    "result_info": {
+                      "$ref": "#/components/schemas/r2_r2_list_objects_result_info"
+                    },
+                    "success": {
+                      "description": "Whether the API call was successful.",
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "errors",
+                    "messages",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "List Objects response failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/r2_v4_response_failure"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_token": []
+          }
+        ],
+        "tags": [
+          "R2 Object"
+        ],
+        "x-cfPermissionsRequired": {
+          "enum": [
+            "com.cloudflare.edge.r2.bucket.read"
+          ]
+        },
+        "x-fern-availability": "generally-available",
+        "x-fern-sdk-group-name": "r2.buckets.objects",
+        "x-fern-sdk-method-name": "list",
         "x-forge-hidden": true,
         "x-open-compute-status": "supported",
         "x-open-compute-sdk-node": "r2.buckets.objects"
@@ -32614,6 +32763,483 @@
         "x-open-compute-sdk-node": "workflows.instances.events"
       }
     },
+    "/accounts/{account_id}/artifacts/namespaces": {
+      "post": {
+        "operationId": "artifacts-namespaces-create",
+        "x-open-compute-sdk-method": "artifacts.namespaces.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateNamespace"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Namespace"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.namespaces.create"
+      },
+      "get": {
+        "operationId": "artifacts-namespaces-list",
+        "x-open-compute-sdk-method": "artifacts.namespaces.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/NamespaceList"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.namespaces.list"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}": {
+      "get": {
+        "operationId": "artifacts-namespaces-get",
+        "x-open-compute-sdk-method": "artifacts.namespaces.get",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Namespace"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.namespaces.get"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos": {
+      "post": {
+        "operationId": "artifacts-repositories-create",
+        "x-open-compute-sdk-method": "artifacts.repositories.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateRepository"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CreatedRepository"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.create"
+      },
+      "get": {
+        "operationId": "artifacts-repositories-list",
+        "x-open-compute-sdk-method": "artifacts.repositories.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Search"
+          },
+          {
+            "$ref": "#/components/parameters/Sort"
+          },
+          {
+            "$ref": "#/components/parameters/Direction"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RepositoryList"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.list"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}": {
+      "get": {
+        "operationId": "artifacts-repositories-get",
+        "x-open-compute-sdk-method": "artifacts.repositories.get",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Repository"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.get"
+      },
+      "delete": {
+        "operationId": "artifacts-repositories-delete",
+        "x-open-compute-sdk-method": "artifacts.repositories.delete",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          }
+        ],
+        "responses": {
+          "202": {
+            "$ref": "#/components/responses/Identifier"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.delete"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/fork": {
+      "post": {
+        "operationId": "artifacts-repositories-fork",
+        "x-open-compute-sdk-method": "artifacts.repositories.fork",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ForkRepository"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ForkedRepository"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.fork"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/import": {
+      "post": {
+        "operationId": "artifacts-repositories-import",
+        "x-open-compute-sdk-method": "artifacts.repositories.import",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ImportRepository"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CreatedRepository"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.import"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/tokens": {
+      "post": {
+        "operationId": "artifacts-tokens-issue",
+        "x-open-compute-sdk-method": "artifacts.tokens.issue",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/IssueToken"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IssuedToken"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.tokens.issue"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tokens": {
+      "get": {
+        "operationId": "artifacts-tokens-list",
+        "x-open-compute-sdk-method": "artifacts.tokens.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          },
+          {
+            "$ref": "#/components/parameters/TokenState"
+          },
+          {
+            "$ref": "#/components/parameters/PerPage"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/TokenList"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.tokens.list"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/tokens/{token}": {
+      "delete": {
+        "operationId": "artifacts-tokens-revoke",
+        "x-open-compute-sdk-method": "artifacts.tokens.revoke",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Identifier"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.tokens.revoke"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/log": {
+      "get": {
+        "operationId": "artifacts-repositories-log",
+        "x-open-compute-sdk-method": "artifacts.repositories.log",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          },
+          {
+            "$ref": "#/components/parameters/Ref"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/CommitList"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.log"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/commit/{oid}": {
+      "get": {
+        "operationId": "artifacts-repositories-commit",
+        "x-open-compute-sdk-method": "artifacts.repositories.commit",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          },
+          {
+            "$ref": "#/components/parameters/ObjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/GitObject"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.commit"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/tree/{oid}": {
+      "get": {
+        "operationId": "artifacts-repositories-tree",
+        "x-open-compute-sdk-method": "artifacts.repositories.tree",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          },
+          {
+            "$ref": "#/components/parameters/ObjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/GitObject"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.tree"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/blob/{oid}": {
+      "get": {
+        "operationId": "artifacts-repositories-blob",
+        "x-open-compute-sdk-method": "artifacts.repositories.blob",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          },
+          {
+            "$ref": "#/components/parameters/ObjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Binary"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.blob"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/file": {
+      "get": {
+        "operationId": "artifacts-repositories-file",
+        "x-open-compute-sdk-method": "artifacts.repositories.file",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredRef"
+          },
+          {
+            "$ref": "#/components/parameters/FilePath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Binary"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.file"
+      }
+    },
+    "/accounts/{account_id}/artifacts/namespaces/{namespace}/repos/{repository}/raw/{reference}/{path}": {
+      "get": {
+        "operationId": "artifacts-repositories-raw",
+        "x-open-compute-sdk-method": "artifacts.repositories.raw",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountId"
+          },
+          {
+            "$ref": "#/components/parameters/Namespace"
+          },
+          {
+            "$ref": "#/components/parameters/Repository"
+          },
+          {
+            "$ref": "#/components/parameters/Reference"
+          },
+          {
+            "$ref": "#/components/parameters/RawPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Binary"
+          }
+        },
+        "x-open-compute-source": "observed_standard",
+        "x-open-compute-sdk-node": "artifacts.repositories.raw"
+      }
+    },
     "/open-compute/capabilities": {
       "get": {
         "operationId": "open-compute-get-open-compute-capabilities",
@@ -33612,9 +34238,299 @@
         },
         "x-open-compute-sdk-node": "openCompute.backups.d1.restore"
       }
+    },
+    "/accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations": {
+      "get": {
+        "operationId": "open-compute-get-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+        "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "d1.migrations.list",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OpenComputePathSegment"
+            }
+          },
+          {
+            "name": "database_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OpenComputePathSegment"
+            }
+          }
+        ],
+        "x-open-compute-request-body": "none",
+        "responses": {
+          "200": {
+            "description": "Successful vendor extension response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenComputeD1MigrationsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenComputeErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenComputeErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "x-open-compute-sdk-node": "openCompute.d1.migrations.list"
+      },
+      "put": {
+        "operationId": "open-compute-put-accounts-account-id-open-compute-d1-databases-database-id-migrations",
+        "x-open-compute-capability-status": "supported",
+        "x-open-compute-sdk-method": "d1.migrations.apply",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OpenComputePathSegment"
+            }
+          },
+          {
+            "name": "database_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OpenComputePathSegment"
+            }
+          }
+        ],
+        "x-open-compute-request-body": "json",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenComputeD1MigrationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful vendor extension response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenComputeD1MigrationsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenComputeErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Cloudflare-style or vendor-reserved error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenComputeErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "x-open-compute-sdk-node": "openCompute.d1.migrations.apply"
+      }
     }
   },
   "components": {
+    "parameters": {
+      "AccountId": {
+        "name": "account_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Namespace": {
+        "name": "namespace",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Repository": {
+        "name": "repository",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Token": {
+        "name": "token",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ObjectId": {
+        "name": "oid",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Reference": {
+        "name": "reference",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RawPath": {
+        "name": "path",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Search": {
+        "name": "search",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Sort": {
+        "name": "sort",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "name",
+            "created_at",
+            "updated_at",
+            "last_push_at"
+          ]
+        }
+      },
+      "Direction": {
+        "name": "direction",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        }
+      },
+      "TokenState": {
+        "name": "state",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "active",
+            "expired",
+            "revoked",
+            "all"
+          ]
+        }
+      },
+      "PerPage": {
+        "name": "per_page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "Ref": {
+        "name": "ref",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RequiredRef": {
+        "name": "ref",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "FilePath": {
+        "name": "path",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
     "schemas": {
       "iam_single_user_response": {
         "allOf": [
@@ -36510,6 +37426,110 @@
           }
         }
       },
+      "r2_errors": {
+        "type": "array",
+        "items": {
+          "properties": {
+            "code": {
+              "type": "integer",
+              "minimum": 1000
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object",
+          "uniqueItems": true
+        }
+      },
+      "r2_messages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "r2_r2_object": {
+        "description": "Metadata for an R2 object.",
+        "type": "object",
+        "properties": {
+          "custom_metadata": {
+            "description": "Custom metadata key-value pairs associated with the object.",
+            "type": "object",
+            "example": {},
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "etag": {
+            "description": "The entity tag for the object. In JSON list/get responses this is the raw\nhex digest (without surrounding quotes). The HTTP `ETag` response header on\nGet Object follows RFC 7232 and IS wrapped in surrounding double-quotes.\n",
+            "type": "string",
+            "example": "d41d8cd98f00b204e9800998ecf8427e"
+          },
+          "http_metadata": {
+            "$ref": "#/components/schemas/r2_r2_object_http_metadata"
+          },
+          "key": {
+            "description": "The object key (name).",
+            "type": "string",
+            "example": "path/to/my-object.txt"
+          },
+          "last_modified": {
+            "description": "The date and time the object was last modified.",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "size": {
+            "description": "The size of the object in bytes.",
+            "type": "integer",
+            "example": 1048576
+          },
+          "ssec": {
+            "description": "Whether the object is encrypted with a customer-supplied encryption key.",
+            "type": "boolean",
+            "example": false
+          },
+          "storage_class": {
+            "$ref": "#/components/schemas/r2_storage_class"
+          }
+        }
+      },
+      "r2_r2_list_objects_result_info": {
+        "description": "Pagination information for list objects responses.",
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "description": "Pagination cursor to use in the next List Objects call to retrieve the next page of results.",
+            "type": "string",
+            "example": "eyJrZXkiOiJwYXRoL3RvL215LW9iamVjdC50eHQifQ=="
+          },
+          "delimited": {
+            "description": "Common prefixes found when a delimiter is specified. Each entry represents a group\nof keys sharing a common prefix up to the delimiter. Equivalent to S3's `CommonPrefixes`\nin `ListObjectsV2`; the field name differs because of the existing R2 API wire format.\n",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "path/to/",
+              "another/path/"
+            ]
+          },
+          "is_truncated": {
+            "description": "Whether the result was truncated. If true, use the cursor to retrieve the next page.",
+            "type": "boolean",
+            "example": true
+          },
+          "per_page": {
+            "description": "The maximum number of objects returned per page.",
+            "type": "integer",
+            "example": 20
+          }
+        }
+      },
       "vectorize_identifier": {
         "description": "Identifier",
         "type": "string",
@@ -37226,110 +38246,6 @@
             "$ref": "#/components/schemas/mq_http-consumer-request"
           }
         ]
-      },
-      "r2_errors": {
-        "type": "array",
-        "items": {
-          "properties": {
-            "code": {
-              "type": "integer",
-              "minimum": 1000
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message"
-          ],
-          "type": "object",
-          "uniqueItems": true
-        }
-      },
-      "r2_messages": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "r2_r2_object": {
-        "description": "Metadata for an R2 object.",
-        "type": "object",
-        "properties": {
-          "custom_metadata": {
-            "description": "Custom metadata key-value pairs associated with the object.",
-            "type": "object",
-            "example": {},
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "etag": {
-            "description": "The entity tag for the object. In JSON list/get responses this is the raw\nhex digest (without surrounding quotes). The HTTP `ETag` response header on\nGet Object follows RFC 7232 and IS wrapped in surrounding double-quotes.\n",
-            "type": "string",
-            "example": "d41d8cd98f00b204e9800998ecf8427e"
-          },
-          "http_metadata": {
-            "$ref": "#/components/schemas/r2_r2_object_http_metadata"
-          },
-          "key": {
-            "description": "The object key (name).",
-            "type": "string",
-            "example": "path/to/my-object.txt"
-          },
-          "last_modified": {
-            "description": "The date and time the object was last modified.",
-            "type": "string",
-            "format": "date-time",
-            "example": "2024-01-15T10:30:00Z"
-          },
-          "size": {
-            "description": "The size of the object in bytes.",
-            "type": "integer",
-            "example": 1048576
-          },
-          "ssec": {
-            "description": "Whether the object is encrypted with a customer-supplied encryption key.",
-            "type": "boolean",
-            "example": false
-          },
-          "storage_class": {
-            "$ref": "#/components/schemas/r2_storage_class"
-          }
-        }
-      },
-      "r2_r2_list_objects_result_info": {
-        "description": "Pagination information for list objects responses.",
-        "type": "object",
-        "properties": {
-          "cursor": {
-            "description": "Pagination cursor to use in the next List Objects call to retrieve the next page of results.",
-            "type": "string",
-            "example": "eyJrZXkiOiJwYXRoL3RvL215LW9iamVjdC50eHQifQ=="
-          },
-          "delimited": {
-            "description": "Common prefixes found when a delimiter is specified. Each entry represents a group\nof keys sharing a common prefix up to the delimiter. Equivalent to S3's `CommonPrefixes`\nin `ListObjectsV2`; the field name differs because of the existing R2 API wire format.\n",
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "example": [
-              "path/to/",
-              "another/path/"
-            ]
-          },
-          "is_truncated": {
-            "description": "Whether the result was truncated. If true, use the cursor to retrieve the next page.",
-            "type": "boolean",
-            "example": true
-          },
-          "per_page": {
-            "description": "The maximum number of objects returned per page.",
-            "type": "integer",
-            "example": 20
-          }
-        }
       },
       "iam_api-response-single": {
         "type": "object",
@@ -40099,6 +41015,43 @@
           }
         }
       },
+      "r2_r2_object_http_metadata": {
+        "description": "HTTP metadata associated with an R2 object.",
+        "type": "object",
+        "properties": {
+          "cacheControl": {
+            "description": "Specifies caching behavior for the object.",
+            "type": "string",
+            "example": "max-age=3600"
+          },
+          "cacheExpiry": {
+            "description": "The date and time at which the object's cache entry expires.",
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-12-31T23:59:59Z"
+          },
+          "contentDisposition": {
+            "description": "Specifies presentational information for the object.",
+            "type": "string",
+            "example": "attachment; filename=\"example.jpg\""
+          },
+          "contentEncoding": {
+            "description": "Specifies the content encoding applied to the object.",
+            "type": "string",
+            "example": "gzip"
+          },
+          "contentLanguage": {
+            "description": "The language of the object content.",
+            "type": "string",
+            "example": "en-US"
+          },
+          "contentType": {
+            "description": "The MIME type of the object.",
+            "type": "string",
+            "example": "image/jpeg"
+          }
+        }
+      },
       "vectorize_messages": {
         "type": "array",
         "items": {
@@ -40427,43 +41380,6 @@
         "required": [
           "type"
         ]
-      },
-      "r2_r2_object_http_metadata": {
-        "description": "HTTP metadata associated with an R2 object.",
-        "type": "object",
-        "properties": {
-          "cacheControl": {
-            "description": "Specifies caching behavior for the object.",
-            "type": "string",
-            "example": "max-age=3600"
-          },
-          "cacheExpiry": {
-            "description": "The date and time at which the object's cache entry expires.",
-            "type": "string",
-            "format": "date-time",
-            "example": "2024-12-31T23:59:59Z"
-          },
-          "contentDisposition": {
-            "description": "Specifies presentational information for the object.",
-            "type": "string",
-            "example": "attachment; filename=\"example.jpg\""
-          },
-          "contentEncoding": {
-            "description": "Specifies the content encoding applied to the object.",
-            "type": "string",
-            "example": "gzip"
-          },
-          "contentLanguage": {
-            "description": "The language of the object content.",
-            "type": "string",
-            "example": "en-US"
-          },
-          "contentType": {
-            "description": "The MIME type of the object.",
-            "type": "string",
-            "example": "image/jpeg"
-          }
-        }
       },
       "iam_api-response-common": {
         "type": "object",
@@ -43577,15 +44493,30 @@
         "additionalProperties": false,
         "required": [
           "id",
-          "path",
+          "kind",
+          "url",
+          "scope",
           "created_on"
         ],
         "properties": {
           "id": {
             "type": "string"
           },
-          "path": {
-            "type": "string"
+          "kind": {
+            "type": "string",
+            "enum": [
+              "local_origin"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "local_machine"
+            ]
           },
           "created_on": {
             "type": "string",
@@ -43672,6 +44603,71 @@
             "maxLength": 128,
             "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
           }
+        }
+      },
+      "OpenComputeD1Migration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "sha256",
+          "applied_at_ms"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "applied_at_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "OpenComputeD1MigrationInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "sha256",
+          "sql"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "OpenComputeD1MigrationRequest": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "#/components/schemas/OpenComputeD1MigrationInput"
         }
       },
       "OpenComputeRestoredResource": {
@@ -44140,6 +45136,41 @@
           }
         }
       },
+      "OpenComputeD1MigrationsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "result",
+          "errors",
+          "messages"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenComputeD1Migration"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "$ref": "#/components/schemas/OpenComputeError"
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenComputeMessage"
+            }
+          }
+        }
+      },
       "OpenComputeUpgradeCheckResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -44168,6 +45199,876 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/OpenComputeMessage"
+            }
+          }
+        }
+      },
+      "ArtifactsEnvelopeBase": {
+        "type": "object",
+        "required": [
+          "success",
+          "errors",
+          "messages"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactsApiMessage"
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactsApiMessage"
+            }
+          }
+        }
+      },
+      "ArtifactsApiMessage": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ArtifactsCreateNamespaceRequest": {
+        "type": "object",
+        "required": [
+          "namespace"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "jurisdiction": {
+            "type": "string",
+            "enum": [
+              "eu",
+              "us"
+            ]
+          }
+        }
+      },
+      "ArtifactsCreateRepositoryRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "read_only": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ArtifactsForkRepositoryRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "read_only": {
+            "type": "boolean"
+          },
+          "default_branch_only": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ArtifactsImportRepositoryRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "read_only": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ArtifactsIssueTokenRequest": {
+        "type": "object",
+        "required": [
+          "repo"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "repo": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          },
+          "ttl": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "ArtifactsNamespace": {
+        "type": "object",
+        "required": [
+          "namespace",
+          "repo_count",
+          "created_at",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "repo_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "jurisdiction": {
+            "type": "string",
+            "enum": [
+              "eu",
+              "us"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ArtifactsRepository": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "default_branch",
+          "remote",
+          "read_only",
+          "created_at",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "remote": {
+            "type": "string",
+            "format": "uri"
+          },
+          "read_only": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_push_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "ArtifactsCreatedRepository": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "default_branch",
+          "remote",
+          "token"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "remote": {
+            "type": "string",
+            "format": "uri"
+          },
+          "token": {
+            "type": "string",
+            "format": "password",
+            "x-open-compute-secret": true
+          }
+        }
+      },
+      "ArtifactsForkedRepository": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "default_branch",
+          "remote",
+          "token",
+          "objects"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "remote": {
+            "type": "string",
+            "format": "uri"
+          },
+          "token": {
+            "type": "string",
+            "format": "password",
+            "x-open-compute-secret": true
+          },
+          "objects": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ArtifactsToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "expires_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ArtifactsIssuedToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "expires_at",
+          "plaintext"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "plaintext": {
+            "type": "string",
+            "format": "password",
+            "x-open-compute-secret": true
+          }
+        }
+      },
+      "ArtifactsIdentifier": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "ArtifactsCommit": {
+        "type": "object",
+        "required": [
+          "id",
+          "content"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "ArtifactsGitObject": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "content"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "commit",
+              "tree"
+            ]
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "ArtifactsCursorResultInfo": {
+        "type": "object",
+        "required": [
+          "cursor",
+          "per_page",
+          "count"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "per_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ArtifactsPageResultInfo": {
+        "type": "object",
+        "required": [
+          "page",
+          "per_page",
+          "count",
+          "total_count",
+          "total_pages"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_pages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ArtifactsNamespaceEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/ArtifactsNamespace"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsNamespaceListEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result",
+              "result_info"
+            ],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ArtifactsNamespace"
+                }
+              },
+              "result_info": {
+                "$ref": "#/components/schemas/ArtifactsCursorResultInfo"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsRepositoryEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/ArtifactsRepository"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsCreatedRepositoryEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/ArtifactsCreatedRepository"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsForkedRepositoryEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/ArtifactsForkedRepository"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsRepositoryListEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result",
+              "result_info"
+            ],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ArtifactsRepository"
+                }
+              },
+              "result_info": {
+                "$ref": "#/components/schemas/ArtifactsCursorResultInfo"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsIssuedTokenEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/ArtifactsIssuedToken"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsTokenListEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result",
+              "result_info"
+            ],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ArtifactsToken"
+                }
+              },
+              "result_info": {
+                "$ref": "#/components/schemas/ArtifactsPageResultInfo"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsIdentifierEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/ArtifactsIdentifier"
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsCommitListEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ArtifactsCommit"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ArtifactsGitObjectEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactsEnvelopeBase"
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/ArtifactsGitObject"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "requestBodies": {
+      "CreateNamespace": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsCreateNamespaceRequest"
+            }
+          }
+        }
+      },
+      "CreateRepository": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsCreateRepositoryRequest"
+            }
+          }
+        }
+      },
+      "ForkRepository": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsForkRepositoryRequest"
+            }
+          }
+        }
+      },
+      "ImportRepository": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsImportRepositoryRequest"
+            }
+          }
+        }
+      },
+      "IssueToken": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsIssueTokenRequest"
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Namespace": {
+        "description": "Artifact namespace",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsNamespaceEnvelope"
+            }
+          }
+        }
+      },
+      "NamespaceList": {
+        "description": "Artifact namespaces",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsNamespaceListEnvelope"
+            }
+          }
+        }
+      },
+      "Repository": {
+        "description": "Artifact repository",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsRepositoryEnvelope"
+            }
+          }
+        }
+      },
+      "CreatedRepository": {
+        "description": "Created artifact repository and one-time token",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsCreatedRepositoryEnvelope"
+            }
+          }
+        }
+      },
+      "ForkedRepository": {
+        "description": "Forked artifact repository",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsForkedRepositoryEnvelope"
+            }
+          }
+        }
+      },
+      "RepositoryList": {
+        "description": "Artifact repositories",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsRepositoryListEnvelope"
+            }
+          }
+        }
+      },
+      "IssuedToken": {
+        "description": "Issued artifact token; plaintext is returned once",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsIssuedTokenEnvelope"
+            }
+          }
+        }
+      },
+      "TokenList": {
+        "description": "Artifact token metadata",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsTokenListEnvelope"
+            }
+          }
+        }
+      },
+      "Identifier": {
+        "description": "Deleted or revoked resource identifier",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsIdentifierEnvelope"
+            }
+          }
+        }
+      },
+      "CommitList": {
+        "description": "Repository commit log",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsCommitListEnvelope"
+            }
+          }
+        }
+      },
+      "GitObject": {
+        "description": "Git commit or tree object",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactsGitObjectEnvelope"
+            }
+          }
+        }
+      },
+      "Binary": {
+        "description": "Streaming object bytes",
+        "content": {
+          "application/octet-stream": {
+            "schema": {
+              "type": "string",
+              "format": "binary"
             }
           }
         }

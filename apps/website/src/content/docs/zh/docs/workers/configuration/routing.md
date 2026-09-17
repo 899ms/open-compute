@@ -2,24 +2,24 @@
 title: "Routing"
 ---
 
-`ocd wrangler deploy` 在所选平台上激活部署。默认本机 origin 是 `http://127.0.0.1:8787`；Worker 在绑定的 `platform_path` 提供服务。
+`ocd wrangler deploy` 在所选平台上激活部署。每个 Worker 使用 canonical name 与 account ID 取得一个本机 origin。
 
 ```sh
 ocd wrangler --project examples/hello-worker deploy --env dev
-# Worker is serving at http://127.0.0.1:8787/<path>
+# Worker is serving at http://hello-worker.<account-id>.localhost:8787/
 ```
 
-HTTP 请求到达绑定了该 Worker 的路径后，由 `fetch` handler 处理。Static Assets 的 HTML trailing-slash / SPA / Worker-first 路由概念与 [Cloudflare Static Assets routing](https://developers.cloudflare.com/workers/static-assets/) 对齐，见 [Static Assets](/zh/docs/workers/static-assets/)。
+该 exact origin 下的所有 path 都属于 Worker，由 `fetch` 或 Static Assets 处理。只有 public listener 可从 loopback 到达时才发布该 origin。Static Assets 的 HTML trailing-slash / SPA / Worker-first 路由概念与 [Cloudflare Static Assets routing](https://developers.cloudflare.com/workers/static-assets/) 对齐，见 [Static Assets](/zh/docs/workers/static-assets/)。
 
 ## 兼容性
 
 | 主题                                                                                              | Cloudflare                           | open-compute                                            |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------- |
-| 绑定路径上的 HTTP 由 `fetch` 处理                                                                 | 是                                   | 是                                                      |
+| Worker origin 上的 HTTP 由 `fetch` 处理                                                           | 是                                   | 是                                                      |
 | Static Assets HTML trailing-slash / SPA / Worker-first                                            | 是                                   | 是，见 [Static Assets](/zh/docs/workers/static-assets/) |
 | [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) | 是                                   | 不提供                                                  |
-| [workers.dev](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)       | 是                                   | 不提供                                                  |
+| [workers.dev](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)       | 是                                   | 只提供本机 `.localhost` origin                          |
 | Cloudflare zone Routes / Page Rules                                                               | 是                                   | 不提供                                                  |
 | 项目文件中的 `routes` / `workers_dev`                                                             | 是                                   | 不允许                                                  |
-| 预览 URL                                                                                          | `*.workers.dev` / Cloudflare preview | 不提供；调用已配置的 platform path                      |
+| 预览 URL                                                                                          | `*.workers.dev` / Cloudflare preview | canonical 本机 origin                                   |
 | 部署与路由数据源                                                                                  | Cloudflare 控制面                    | 本机 SQLite；`ocd` 监督当前 workerd 进程                |
