@@ -68,6 +68,16 @@ vendor endpoint API 现在只返回当前 shape：
 
 没有可达 loopback public listener 时返回空列表。旧 `path` 字段已从 OpenAPI、生成 SDK 和 Dashboard consumer 删除。
 
+## P18 双入口扩展边界（待实现）
+
+[P18](../p18-single-domain-public-gateway.md) §8–9 在本 authority 上增加“每 Worker 一个 local、最多一个 public”合同；每实例最多
+配置一个基础域名。当前 V6 的 local-only CHECK 与 `UNIQUE(worker_id)` 尚不支持双入口，需要追加 migration，不能改已发布 V6。
+
+扩展必须同步 local-only resolver、route metadata、endpoint API、OpenAPI/生成 SDK 和 consumer，不能只放开数据库唯一索引。
+未来 local/public endpoint 分别按实际 transport capability 投影；无本机 listener 不得让已可用的 public endpoint 一起消失。
+两个入口绑定同一个 Worker/当前部署；关闭公网、换域名或 Gateway 故障不撤销 local claim。此节是 P18 设计引用，不改变上述 R0
+当前实现和下面的已完成验收声明。
+
 ## 验收覆盖
 
 回归覆盖 canonical host/port 拒绝、Host-first 平台 path 遮蔽、endpoint 空/非空投影、Worker create/list/resolve/delete、V5 数据迁移、缺失

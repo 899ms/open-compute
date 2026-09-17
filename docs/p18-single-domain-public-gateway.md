@@ -1,8 +1,8 @@
 # P18：单域名公网网关、DNS 与 TLS
 
-状态：Day 1 单基础域名、固定产品 namespace、手工 DNS onboarding、内嵌 Caddy、DNS-01 wildcard TLS 与
-`ocd` Host 路由合同完成；待实现 pinned Caddy、自有 DNS provider、权威 challenge DNS、持久化 authority、
-Worker/R2 公网入口与真实 DNS/ACME 验收。
+状态：Day 1 单基础域名、Worker 本机/公网双入口、固定产品 namespace、手工 DNS onboarding、内嵌 Caddy 与
+DNS-01 wildcard TLS 设计合同已同步；待实现双入口 migration/resolver/endpoint API、常驻 child 复用接口、pinned Caddy、
+自有 DNS provider、权威 challenge DNS、Worker/R2 公网入口与真实 DNS/ACME 验收。本文不将设计合同视为已实现能力。
 
 P18 为一个 self-hosted open-compute 实例接入一个 operator 控制的专用基础域名，并为 Worker、R2 以及以后明确支持
 公网访问的产品生成稳定 HTTPS URL。设计聚焦单个专用 `base_domain` 和固定产品 namespace。operator 一次性手工配置业务
@@ -17,7 +17,8 @@ P18 遵循 [Host authority](references/host-authority.md)，复用先行的
 
 P18 Day 1 固定以下合同：
 
-- 每个实例恰好配置一个 `base_domain`；
+- 公网 Gateway 可选；未启用时无需 `base_domain`，启用时每个实例只配置一个 `base_domain`；
+- 每个 live tenant Worker 保留一个 `local` origin，最多再绑定一个 `public` origin；不支持多个公网别名或多基础域名；
 - `base_domain` 可以是专用 registrable apex，例如 `ocd.com`，也可以是已有业务 zone 下专门划出的固定子域，例如
   `compute.example.com`；
 - Worker 使用 `<name>.<base_domain>`，其他公开产品使用 `<name>.<product>.<base_domain>`；
@@ -97,8 +98,8 @@ dedicated subdomain:  compute.example.com
 - 至少包含一个 registrable domain；
 - 是 operator 明确划给当前 open-compute 实例的独占 namespace。
 
-一个实例只有一个 active `base_domain`。域名替换 workflow 先停用当前公网 namespace 和 binding，再为新域名完成 DNS、证书和
-binding onboarding。
+一个实例最多配置一个 `base_domain`。域名替换 workflow 先停用当前公网 namespace 和 binding，再为新域名完成 DNS、证书和
+binding onboarding；本机 claim、Worker 和当前 deployment 不变。不要求新旧基础域名同时服务，也不增加双域名迁移系统。
 
 ### 3.2 固定 namespace
 
@@ -116,6 +117,25 @@ KV 行固定未来的命名方法。新增公开产品在 HTTP contract 完成�
 公网 URL 不包含 account。binding 保存 `account_id` 和 target identity，控制面按 account 授权，data plane 只按 canonical
 hostname 读取已经持久化的 target。Worker 根 namespace 至少保留 `ingress`、`ns1`、`r2`、`kv`、`api`、`admin`、
 `health` 和 `operator`。
+
+### 3.3 Worker 固定双入口
+
+同一个 Worker 的两个入口为：
+
+```text
+local_origin  -> http://<worker-name>.<account-id>.localhost:<local-port>/
+public_origin -> https://<public-name>.<base_domain>/
+```
+
+`local` claim 随 Worker 原子创建；`public` claim 默认不存在，仅在 namespace 就绪后显式启用。两个 claim 指向同一个 Worker，
+请求沿该 Worker 的 `active_deployment_id` 解析当前部署；不复制 Worker、deployment 或运行时，也不把本机请求重定向到公网。
+`public-name` 独立于 Worker display name，修改它只替换唯一的 public binding。
+
+`.localhost` 只服务访问者本机，不能作为其他员工访问共享服务器的地址；远程访问使用绑定域名。本机 endpoint 的 port 来自实际
+可达的 loopback listener，公网 URL 固定使用 HTTPS 的外部 443，不暴露 Caddy 的内部 8443 或本机端口。
+
+Gateway 未配置、DNS/ACME 失败、Caddy crash、关闭公网访问或更换基础域名，都不得删除或停用本机 claim。两个入口的持久化约束、
+可信 ingress 和 API 投影分别见 §8，资源生命周期见 §9.3。
 
 ## 4. 用户手工 DNS setup
 
@@ -263,13 +283,41 @@ ocd（唯一分发文件）
        └─ challenge DNS UDP/TCP
 ```
 
-P17 Host Process Runtime 负责 Caddy 的 verified launch、process group、bounded stdout/stderr、TERM/KILL/reap 与 orphan
-primitives。P18 `GatewayManager` 独占 typed Caddy JSON、配置验证、
-TLS readiness、ACME storage、restart/backoff 和 gateway health。Caddy admin API 默认禁用；完整配置先用正式 pinned binary
-validate，再原子发布并启动或受控重启。
+P18 复用 P17 已有的 verified executable、process-group 与停止/回收原语，并从现有 workerd 常驻进程路径提取必要的受控
+child 接口；该接入仍待实现，不能把短任务 `run_host_process` 直接当作 Caddy supervisor。`GatewayManager` 拥有 typed Caddy JSON、
+配置验证、storage 路径/权限配置、TLS readiness、restart/backoff 和 gateway health；ACME account、证书及私钥仍由 Caddy 独占。
+Caddy admin API 默认禁用；完整配置先用正式 pinned binary validate，再原子发布并启动或受控重启。
 
 Caddy 和自有 module 的许可证及 notices 必须进入 `ocd licenses`。P18 实现完成时同步更新
 [`single-binary.md`](references/single-binary.md) 的内嵌内容、物化布局、构建输入和正式单文件测试。
+
+### 6.3 常驻 child 复用边界
+
+P17 的短任务路径为 `run_host_process -> run_image -> owner_wait`；workerd 常驻路径为 `spawn_child -> ChildHandle -> owner_loop`。
+两者已有共享底层原语，但不是已经交付的单一通用 owner loop。P18 在 `open-compute-runtime` 内收敛实际重复的进程所有权能力，
+不在 Gateway 中复制第三套 spawn/pipe/signal/wait 实现，也不把产品状态机抽象成 `Supervisor<Policy>`。
+
+通用层提供短任务执行和常驻进程启动两种入口。前者保留 `run_host_process`；后者返回受控 handle，名称在实现时确定，不宣称已有
+`spawn_host_process` API。通用层只管理 OS 进程，不理解 Worker deployment、OCDP、Caddy JSON、TLS 或 ACME：
+
+- 验证后的 executable、显式 argv/environment/cwd/stdio 与必要 FD mapping；`env_clear()`，不搜索 PATH 或下载程序；
+- 一个 child 只有一个 signal/wait/reap owner，独立 process group；handle 提供存活/退出通知和完成结果，不公开可任意操作的 raw child/PID；
+- handle/owner 保持 verified `ExecImage`、FD 与平台 staging 有效，直到 child 和其受管后代完成回收；
+- 短任务捕获有界结果，deadline/取消/协议输出 overflow 后停止；Caddy 常驻日志持续 drain、脱敏并保留有界 tail，
+  丢弃过旧内容，不因生命周期累计日志超过 capture cap 而退出；
+- 常驻 child 没有短任务式总寿命 deadline；启动、探测和 TERM/KILL/reap 各有独立有界等待，Drop 不放弃回收 owner。
+
+`caddy version`、module inventory 和 `caddy validate` 使用短任务接口；正式服务使用前台 `caddy run` 和常驻接口。
+workerd 保留 `WorkerdSupervisor` 的 control-fd、readiness 与 deployment/generation 策略；Xberg 保留单次 OCDP、rlimit 和不自动重试；
+Caddy 的 TLS probe、配置切换与有界 crash backoff 仅由 `GatewayManager` 决定。通用层不再自动重启一遍。
+
+Caddy 使用独立的 child lease/generation，复用并按 executable identity 扩展既有 orphan fencing 原语；重启前先确认旧 child 已回收，
+不得仅凭进程名称或裸 PID 发信号。`ocd` crash/restart 后先恢复 ownership，再重新接管 listener/storage，避免两个 Caddy 并存。
+
+Day 1 保持一个 workerd、一个可选 Caddy 和 Xberg 现有并发限制，不新增全局 Process Coordinator、动态调度或预测性总预算。
+`service` composition root 显式协调顺序：先准备后端、private ingress 和 challenge/provider socket，再启动 Caddy；完整关闭时先停止
+公网 admission，让 Caddy 在限定时间内 drain 并 TERM/KILL/reap，期间保留 upstream/workerd，之后再关闭其依赖。
+只停用 Gateway 时不停止 workerd 或本机 listener。续期失败不作为进程重启信号，尚有效证书继续服务。
 
 ## 7. 两种网络拓扑，一套运行合同
 
@@ -310,8 +358,10 @@ hostname authorization 始终使用 SNI、Host 和 SQLite binding。
 ## 8. Caddy projection 与 `ocd` Host authority
 
 hostname claim、typed product route、可信 ingress context 和 endpoint projection 的共享合同由
-[Host authority](references/host-authority.md)拥有，并由 R0 先行实现。P18 不建立第二套 hostname registry；本节只定义 Caddy
-projection 和公网 binding 的附加状态。
+[Host authority](references/host-authority.md)拥有，R0 已实现本机入口。P18 在同一 authority 上扩展双入口约束，不建立第二套
+hostname registry；以下 schema、resolver 和 endpoint 改动仍属于 P18 待实现范围。
+
+### 8.1 Caddy projection
 
 Caddy JSON 是从 SQLite/config authority 生成的可重建 projection，只包含：
 
@@ -340,6 +390,60 @@ Caddy 必须移除外部传入的 `Forwarded`、`X-Forwarded-*`、`CF-Connecting
 scheme/host/client metadata。`ocd` 只信任 Caddy 的精确 private peer，并重新校验 canonical Host；Caddy 不获得 admin/deployer
 token、SQLite、workerd internal endpoint 或 tenant identity。
 
+### 8.2 R0 到双入口的 schema 合同
+
+当前 V6 将 claim 限定为 `namespace=worker`、`exposure=local` 和 `.localhost`，且 `active_worker_host_routes` 在 `worker_id` 上
+唯一。P18 必须追加 migration，不能只增加 public claim 后继续沿用该唯一索引，也不能修改已发布 V6 的字节。
+
+保留 `hostname_claims` 和 `worker_host_routes` 作为唯一 authority，约束如下：
+
+- active canonical hostname 继续全实例唯一，单个 claim 只绑定一个 typed target；
+- claim 的 `exposure` 扩展为 `local | public`；local 仍严格使用 R0 hostname 规则，public 必须属于当前基础域名的固定产品
+  namespace。只允许已实现产品枚举，不接受任意字符串 namespace；
+- Worker route 携带 `namespace=worker` 和 `exposure`，以
+  `(claim_id, account_id, namespace, exposure)` 复合外键引用 claim 的对应唯一键，避免跨 account、产品或入口类型错配；
+- 保留 `(worker_id, account_id)` 到 Worker 的真实外键，以及一个 claim 至多一条 Worker route 的约束；
+- 用 `(worker_id, exposure)` 的 active 唯一索引替代旧的 `UNIQUE(worker_id)`，只允许每种入口一条，不开放任意多域名。
+
+核心索引为：
+
+```sql
+CREATE UNIQUE INDEX active_worker_origin
+ON worker_host_routes(worker_id, exposure)
+WHERE state = 'active';
+```
+
+唯一索引保证“至多一个”；每个 live tenant Worker“恰好一个 local”由 Worker create/delete 事务与持久化 invariant 检查保证。
+public claim/route 的 enable、replace、disable 在同一事务内完成，claim 与 typed route 状态一致；替换先撤销旧 public binding 再创建新
+binding，冲突时整个事务回滚，原 binding 保持有效。关闭 public 的代码不得误更新 local 行。
+
+migration 保留已有 local claim/route identity、生命周期和外键关系，验证已有 local 约束再切换 schema；不一致则事务失败，不静默
+补造路由或重置数据。同步更新 schema/checksum/invariant wiring 和所有 producer/consumer，不保留旧新 schema 双读写。
+
+### 8.3 同一 resolver 与独立 endpoint 投影
+
+本机 listener 和 Caddy private listener 调用同一个 canonical Host resolver，但准入的 exposure 来自实际 listener 的可信 ingress
+context：本机路径只接收 local claim，Caddy 路径只接收 public claim。不能由外部 header 选择 exposure，也不能把当前查询中的
+`c.exposure = 'local'` 简单删除后允许任意入口穿透。Host-first dispatch 和平台 path 隔离继续生效。
+
+resolver 在一个读取快照中沿 claim、typed Worker route、Worker 的 `active_deployment_id` 冻结当前 deployment/version。
+两条 origin 不各自保存 active deployment；一次部署切换影响后续两个入口的请求，已 pin 的在途请求按原有生命周期完成。
+
+endpoint API 保留现有 `id/kind/url/scope/created_on` 结构，按 route exposure 独立投影：
+
+| exposure | kind | scope | URL 来源 |
+| --- | --- | --- | --- |
+| local | `local_origin` | `local_machine` | persisted hostname + 实际可达 loopback port，HTTP |
+| public | `public_origin` | `public_network` | persisted hostname + 已验证的 Gateway HTTPS 能力，外部 443 |
+
+没有本机 listener 时只省略 local 项，不能提前返回整个空列表；Gateway 未完成首次资格、已停用或不可服务时只省略 public 项，
+不影响 local 项。短暂故障不删除持久化 binding；public namespace 已完成资格且尚可用有效证书服务时，单纯 renewal health degraded
+不撤销现有 public endpoint。新 public binding 的 admission 仍要求 namespace active。
+
+实现时同步 `crates/storage/src/workers/deployments.rs` 的 local-only resolver/route metadata、
+`crates/service/src/workers_http.rs` 的 Host/port/ingress 校验、`crates/service/src/cloudflare_v4/vendor.rs` 的 endpoint 投影，
+以及 OpenAPI、生成 SDK、CLI/Wrangler 和 Dashboard consumer。禁止把所有 route 都格式化为 `http://hostname:<local-port>/`。
+
 ## 9. 生命周期
 
 ### 9.1 Domain onboarding
@@ -367,8 +471,19 @@ disable 只在不存在 active/pending binding 时允许；先禁止新 claim，
 
 ### 9.3 Resource binding
 
-namespace active 后，资源公网操作只有一个 SQLite transaction：校验 account、产品能力、`public-name` 和保留名称，声明或切换
-exact hostname，返回稳定 HTTPS URL。该流程不访问 DNS、ACME 或 Caddy。
+namespace active 后，资源公网 enable/replace 只有一个 SQLite transaction：校验 account、产品能力、`public-name` 和保留名称，
+声明或替换唯一 public binding，返回稳定 HTTPS URL。撤销 public binding 不依赖 namespace 健康或外部网络；这些资源操作均不访问
+DNS、ACME 或 Caddy，不重载 Caddy。
+
+| 操作 | local origin | public origin |
+| --- | --- | --- |
+| 创建 Worker | 原子建立 | 默认不存在 |
+| 启用公网访问 | 不变 | 创建唯一 binding |
+| 部署/回滚 | 沿 Worker 当前部署解析 | 沿同一个 Worker 当前部署解析 |
+| 修改 public-name | 不变 | 原子替换，失败保留旧 binding |
+| 关闭公网访问 | 不变 | claim/route 同时失效 |
+| 删除 Worker | claim/route 失效 | claim/route 同时失效 |
+| Gateway 故障或更换基础域名 | 不变 | 故障时保留 binding；换域名时停用旧 binding 并重新 onboarding |
 
 Worker deploy 的 `workers_dev`/subdomain intent 可以调用同一 authority，但 URL 不包含 Cloudflare account subdomain；兼容文档
 必须记录这一 hostname-shape deviation。
@@ -405,6 +520,8 @@ Caddy storage 是 certificate/ACME secret authority；Caddy JSON 是可重建 pr
 - Caddy storage 损坏：fail closed 并保留证据，不自动删除后批量重签。
 
 公网 DNS/ACME 状态进入独立、secret-free gateway health component；`/health/ready` 继续表达 ocd/workerd admission state。
+Gateway 故障不关闭本机 deployment admission，也不删除 local/public binding。持久化 ownership、是否允许新 binding 与当前 transport
+可服务能力分别判断；renewal degraded 但有效证书仍可服务时，保留现有 public origin，见 §8.3。
 
 ## 11. 配置与 operator experience
 
@@ -430,7 +547,7 @@ API/CLI/dashboard 必须提供：
 - 显式 retry/reconcile onboarding；
 - enable/disable 固定 product namespace；
 - 为资源 enable/disable/update public name；
-- 输出最终 HTTPS URL；
+- 分别展示本机 URL 与唯一公网 HTTPS URL；公网开关和 public-name 修改不影响本机入口；
 - 输出 Nginx stream 与 Traefik TCP passthrough reference snippet；
 - 生成 secret-free gateway doctor/support report。
 
@@ -453,15 +570,16 @@ API/CLI/dashboard 必须提供：
 
 ## 13. 实施顺序
 
-1. **Caddy supply chain**：冻结 Caddy/Go/module pin，构建三平台定制 binary，建立 lock、LFS bytes、licenses 与离线物化验证。
-2. **Open Compute provider**：实现最小 `dns.providers.opencompute` libdns adapter 和私有 Unix-socket protocol。
-3. **Challenge DNS**：实现固定 zone 的 UDP/TCP SOA/NS/TXT authoritative responder、无 recursion 和边界测试。
-4. **GatewayManager**：复用 P17 Host Process Runtime，增加 typed JSON、storage、readiness 和 restart recovery；只在出现实际跨产品 child/FD 竞争时于 composition root 增加共享总预算。
-5. **Domain authority**：追加 migration，建立 singleton domain、namespace workflow，并复用 R0 hostname claim/typed binding authority。
-6. **Host ingress**：复用 R0 Host-first resolver，实现 Caddy trusted-ingress boundary、public Worker URL 与 passthrough PROXY protocol
-   allowlist。
+1. **双入口 authority**：按 §8.2 追加 migration，建立 singleton domain/namespace workflow 与每 Worker 一 local、至多一 public 的约束；
+   同步 resolver、route metadata、endpoint schema/consumer，公网未就绪时保持 local-only 可用。
+2. **常驻 child 复用**：按 §6.3 从现有 runtime/workerd owner 提取必要接口，保留短任务行为；验证日志 tail、执行文件存活期、
+   TERM/KILL/reap 与独立 lease recovery，不新增全局 Coordinator。
+3. **Caddy supply chain**：冻结 Caddy/Go/module pin，建立正式 target 的 lock、LFS bytes、licenses 与离线物化验证。
+4. **Provider 与 Challenge DNS**：实现最小 `dns.providers.opencompute`、私有 Unix-socket protocol 和固定 zone 的 UDP/TCP responder。
+5. **GatewayManager**：增加 typed JSON、storage 路径配置、TLS readiness、有界 crash backoff 与 composition-root 启停协调。
+6. **Public ingress**：接通 Caddy trusted-ingress boundary、public Worker URL 与 passthrough PROXY protocol allowlist；完成双入口联测。
 7. **R2 public bucket**：R2 HTTP/access contract 冻结后启用 `r2` namespace。
-8. **Operator surface**：DNS plan/verify、gateway doctor、Nginx/Traefik snippet 和真实 onboarding qualification。
+8. **Operator surface**：双入口 UI、DNS plan/verify、gateway doctor、Nginx/Traefik snippet 和真实 onboarding qualification。
 
 每一步同步更新当前 Day 1 producer、consumer、schema、fixtures 和文档。已发布 database migration bytes 保持不变，schema 变化
 通过新 migration 追加。
@@ -472,10 +590,17 @@ API/CLI/dashboard 必须提供：
 
 - base-domain canonicalization、IDNA、public-suffix 和 malicious suffix；
 - public-name、保留名称、跨 account/global conflict 和 namespace 隔离；
+- 同一 Worker 同时拥有一个 local 和一个 public；第二个同 exposure binding 即使使用不同 hostname 也原子拒绝；
+- claim/route 复合外键拒绝 account、namespace、exposure 错配；追加 migration 保留 local identity，损坏状态原子拒绝；
+- public enable/replace/disable、失败回滚、换基础域名、Worker delete 与 restart 后的双入口生命周期；
+- 两种 listener 的 exposure 隔离、同一 active deployment 解析，以及 endpoint 的 local-only/public-only/both/none 投影；
 - 固定 DNS plan 对 apex/subdomain base 的正确展开；
 - challenge zone exact allowlist、SOA/NS/TXT、UDP/TCP、negative response、无 recursion/AXFR/update；
 - provider append/delete、opaque ID、重复 cleanup、非法 name/type/value 和 crash token loss；
 - Caddy lock、target、checksum、version、build-info、module allowlist、损坏 payload 拒绝；
+- 短任务 stdout/stderr overflow 及时回收的既有行为不变；常驻 Caddy 累计日志超过短任务 capture cap 后继续运行、内存有界；
+- 常驻 handle 保持 executable/staging 存活，取消/Drop、reader/owner failure 和 TERM/KILL/reap 不泄漏 child；
+- Caddy crash backoff、独立 lease/orphan recovery、旧 generation 回收后才重启，以及先 drain 网关再关闭 upstream 的顺序；
 - typed JSON deterministic projection、validation、atomic replace 和 restart rebuild；
 - Caddy storage permissions、redaction、backup contract 和损坏 fail-closed；
 - Host-first dispatch、tenant path 不落入平台 handler、spoofed forwarded header stripping；
@@ -492,6 +617,8 @@ API/CLI/dashboard 必须提供：
 - UDP/TCP 53 公网权威查询、NS delegation 与临时 TXT propagation 正常；
 - Worker 与 R2 分别取得正确 wildcard certificate，错误层级 hostname 不被覆盖；
 - Caddy restart、ocd restart、token cleanup、ACME/DNS 暂时失败和 storage reuse 不导致无界重签；
+- localhost 与绑定域名同时访问同一 Worker；关闭公网或 Caddy crash 时 localhost 继续工作，恢复后复用原 binding；
+- 部署/回滚后两个入口解析同一当前部署，public-name 修改失败不丢旧 URL；有效证书下 renewal degraded 不撤销现有公网入口；
 - 完整托管与现有代理 SNI passthrough 都由同一 Caddy certificate 完成真实 TLS handshake；
 - HTTP/1.1、HTTP/2、streaming 和 WebSocket 正常，协议广告与 Day 1 h1/h2 合同一致；
 - 两个 account 争用同一 hostname 时只有一个成功；
@@ -505,6 +632,9 @@ API/CLI/dashboard 必须提供：
 
 实施时同步：
 
+- 对齐 [Host authority](references/host-authority.md)、[R0](implemented/r0-localhost-worker-origins.md) 与
+  [P17](implemented/p17-host-process-infrastructure.md) 的已实现/待实现边界；
+- 更新 endpoint OpenAPI、生成 SDK、CLI/Wrangler 和 Dashboard，区分 `local_origin`/`public_origin`，不手改生成文件；
 - 更新 [`references/cloudflare-compatibility.md`](references/cloudflare-compatibility.md)，记录 Workers/R2 public URL 的精确
   single-domain deviation；
 - 更新 [`references/single-binary.md`](references/single-binary.md)，加入 pinned Caddy build/payload/process/storage；
