@@ -1,4 +1,6 @@
 use super::*;
+use crate::{PersistentHostProcess, PersistentHostProcessSpec};
+use sha2::Digest as _;
 use std::os::unix::fs::PermissionsExt;
 
 #[tokio::test]
@@ -253,6 +255,48 @@ async fn host_process_stops_when_stderr_exceeds_its_bound() {
     assert!(output.stderr_overflow);
     assert!(!output.timed_out);
     wait_reaped(output.pid.unwrap(), Duration::from_secs(2)).unwrap();
+}
+
+#[tokio::test]
+async fn persistent_host_process_maps_control_fd_and_reaps_on_shutdown() {
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("persistent-host.sh");
+    fs::write(
+        &executable,
+        b"#!/bin/sh\nIFS= read -r value <&3\nprintf '%s' \"$value\" >&3\nwhile :; do sleep 30; done\n",
+    )
+    .unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+    let image = VerifiedLaunchImage::from_verified_file(File::open(&executable).unwrap());
+    let lease = directory.path().join("provider.lease");
+    let (mut parent, child) = std::os::unix::net::UnixStream::pair().unwrap();
+    parent
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let process = PersistentHostProcess::spawn(
+        &image,
+        PersistentHostProcessSpec {
+            args: Vec::new(),
+            environment: Vec::new(),
+            working_directory: directory.path().to_owned(),
+            control_fd: child.into(),
+            lease_path: lease.clone(),
+            binary_sha256: hex::encode(sha2::Sha256::digest(fs::read(&executable).unwrap())),
+            redactor: Redactor::new(),
+        },
+    )
+    .unwrap();
+    let pid = process.pid();
+    parent.write_all(b"ready\n").unwrap();
+    let mut reply = [0; 5];
+    parent.read_exact(&mut reply).unwrap();
+    assert_eq!(&reply, b"ready");
+    assert!(process.is_running());
+    process
+        .shutdown(Duration::from_millis(50), Duration::from_secs(1))
+        .await;
+    wait_reaped(pid, Duration::from_secs(2)).unwrap();
+    assert!(!lease.exists());
 }
 
 #[cfg(target_os = "macos")]

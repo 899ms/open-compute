@@ -375,7 +375,17 @@ def verify_inputs(*, probe_version=True):
 def verify_selected_inputs(targets, *, probe_version=True):
     """L0 typed checks need only frozen manifests; Cargo product Gates need runtime inputs."""
     if any(not isinstance(target, TypedTarget) for target in targets.values()):
-        return verify_inputs(probe_version=probe_version)
+        result = verify_inputs(probe_version=probe_version)
+        if 'p3-services-product' in targets:
+            configured = os.environ.get('OPEN_COMPUTE_TEST_HOST_EXTENSION_PROVIDER')
+            provider = Path(configured or '')
+            if (not provider.is_absolute() or provider.is_symlink()
+                    or not provider.is_file() or not os.access(provider, os.X_OK)):
+                raise ValueError(
+                    'OPEN_COMPUTE_TEST_HOST_EXTENSION_PROVIDER must name an existing '
+                    'absolute executable regular file; no downloads')
+            result['host_extension_provider_sha256'] = digest(provider)
+        return result
     return {
         'baseline_sha256': digest(ROOT / 'test/conformance/baseline.json'),
         'catalog_sha256': digest(ROOT / 'test/conformance/catalog.json'),
