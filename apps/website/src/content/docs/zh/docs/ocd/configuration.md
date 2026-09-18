@@ -117,7 +117,7 @@ macOS 与 Linux operator 可把本地扩展静态暴露为 Service Binding 目�
 path = "./extensions/local-files"
 ```
 
-路径相对实际加载的 config file 解析。目录必须包含严格的 `extension.toml`，指向一个已打包 facade module 与一个可执行 Provider。扩展是 operator 信任的代码，只在 `ocd` 启动时加载；`ocd` 不向它注入 tenant secret 或平台凭据，也不负责安装、下载、版本管理、热更新或 OS sandbox。扩展名与 Worker service name 共用 namespace，不得与 live Worker 冲突。完整合同见 [W3 native binding](https://github.com/elliothux/open-compute/blob/main/docs/implemented/w3-user-extensible-native-bindings.md)。
+路径相对实际加载的 config file 解析。目录必须包含严格的 `extension.toml`，指向一个已打包 facade module 与一个可执行 Provider。扩展是 operator 信任的代码，只在 `ocd` 启动时加载；`ocd` 不向它注入 tenant secret 或平台凭据，也不负责安装、下载、版本管理、热更新或 OS sandbox。扩展名与 Worker service name 共用 namespace，不得与 live Worker 冲突。完整说明见[扩展](/zh/docs/extension/)。
 
 ## 其它段
 

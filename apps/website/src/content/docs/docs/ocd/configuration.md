@@ -117,7 +117,7 @@ On macOS and Linux, an operator may statically expose a local extension as a Ser
 path = "./extensions/local-files"
 ```
 
-The path is resolved relative to the loaded config file. The directory must contain strict `extension.toml` entries for one bundled facade module and one executable Provider. Extensions are trusted operator code, load only at `ocd` startup, receive no tenant secrets or platform credentials, and are not installed, downloaded, versioned, hot-reloaded, or sandboxed by `ocd`. Their names share the Worker service namespace and may not collide with a live Worker. See the [W3 native-binding contract](https://github.com/elliothux/open-compute/blob/main/docs/implemented/w3-user-extensible-native-bindings.md).
+The path is resolved relative to the loaded config file. The directory must contain strict `extension.toml` entries for one bundled facade module and one executable Provider. Extensions are trusted operator code, load only at `ocd` startup, receive no tenant secrets or platform credentials, and are not installed, downloaded, versioned, hot-reloaded, or sandboxed by `ocd`. Their names share the Worker service namespace and may not collide with a live Worker. See [Extensions](/docs/extension/).
 
 ## Other sections
 
