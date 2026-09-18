@@ -32,9 +32,7 @@ sleep 30
     // and writes the pid a few instructions later, so an existence predicate can fire while
     // the file is still empty and the cleanup kill would erase the value under test.
     let written = |path: &Path| -> bool {
-        fs::read_to_string(path)
-            .map(|content| !content.trim().is_empty())
-            .unwrap_or(false)
+        fs::read_to_string(path).is_ok_and(|content| !content.trim().is_empty())
     };
     set_wait_fail_hook({
         let pid_file = pid_file.clone();

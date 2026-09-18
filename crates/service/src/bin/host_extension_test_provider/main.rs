@@ -15,8 +15,6 @@
 
 #[rustfmt::skip]
 #[allow(
-    warnings,
-    clippy::all,
     unused_qualifications,
     missing_debug_implementations,
     missing_docs,
@@ -24,7 +22,18 @@
     unreachable_pub,
     elided_lifetimes_in_paths,
     unused_must_use,
-    rust_2018_idioms,
+    reason = "committed Cap'n Proto codegen is not maintained by hand"
+)]
+#[allow(
+    clippy::allow_attributes_without_reason,
+    clippy::semicolon_if_nothing_returned,
+    clippy::uninlined_format_args,
+    clippy::doc_markdown,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::cloned_instead_of_copied,
+    clippy::type_complexity,
+    clippy::too_many_arguments,
+    reason = "committed Cap'n Proto codegen is not maintained by hand"
 )]
 pub mod host_extension_capnp {
     include!("host_extension_capnp_fixture.rs");
@@ -33,7 +42,6 @@ pub mod host_extension_capnp {
 use std::cell::RefCell;
 use std::ffi::CString;
 use std::fs::File;
-use std::future::Future;
 use std::io::{IoSliceMut, Read};
 use std::os::fd::AsFd as _;
 use std::os::fd::{BorrowedFd, OwnedFd};
@@ -108,102 +116,94 @@ fn open_relative(payload: &[u8], directory: bool) -> Result<OwnedFd, capnp::Erro
 }
 
 impl host_extension::Server for FileProvider {
-    fn call(
+    async fn call(
         self: CapnpRc<Self>,
         params: host_extension::CallParams,
         mut results: host_extension::CallResults,
-    ) -> impl Future<Output = Result<(), capnp::Error>> + 'static {
-        async move {
-            let params = params.get()?;
-            if params.get_method() != LIST_METHOD {
-                return Err(failed("unsupported fixture method"));
-            }
-            let fd = open_relative(params.get_payload()?, true)?;
-            let dir = rustix::fs::Dir::read_from(&fd)
-                .map_err(|_| failed("fixture directory unavailable"))?;
-            let mut names: Vec<Vec<u8>> = Vec::new();
-            for entry in dir {
-                let entry = entry.map_err(|_| failed("fixture directory unavailable"))?;
-                let name = entry.file_name().to_bytes();
-                if name == b"." || name == b".." {
-                    continue;
-                }
-                let stat = rustix::fs::statat(&fd, name, AtFlags::SYMLINK_NOFOLLOW)
-                    .map_err(|_| failed("fixture directory unavailable"))?;
-                if is_regular_file(&stat) {
-                    names.push(name.to_vec());
-                }
-            }
-            names.sort();
-            let mut listing: Vec<u8> = Vec::new();
-            for name in &names {
-                listing.extend_from_slice(name);
-                listing.push(b'\n');
-            }
-            results.get().set_payload(&listing);
-            Ok(())
+    ) -> Result<(), capnp::Error> {
+        let params = params.get()?;
+        if params.get_method() != LIST_METHOD {
+            return Err(failed("unsupported fixture method"));
         }
+        let fd = open_relative(params.get_payload()?, true)?;
+        let dir =
+            rustix::fs::Dir::read_from(&fd).map_err(|_| failed("fixture directory unavailable"))?;
+        let mut names: Vec<Vec<u8>> = Vec::new();
+        for entry in dir {
+            let entry = entry.map_err(|_| failed("fixture directory unavailable"))?;
+            let name = entry.file_name().to_bytes();
+            if name == b"." || name == b".." {
+                continue;
+            }
+            let stat = rustix::fs::statat(&fd, name, AtFlags::SYMLINK_NOFOLLOW)
+                .map_err(|_| failed("fixture directory unavailable"))?;
+            if is_regular_file(&stat) {
+                names.push(name.to_vec());
+            }
+        }
+        names.sort();
+        let mut listing: Vec<u8> = Vec::new();
+        for name in &names {
+            listing.extend_from_slice(name);
+            listing.push(b'\n');
+        }
+        results.get().set_payload(&listing);
+        Ok(())
     }
 
-    fn open_stream(
+    async fn open_stream(
         self: CapnpRc<Self>,
         params: host_extension::OpenStreamParams,
         mut results: host_extension::OpenStreamResults,
-    ) -> impl Future<Output = Result<(), capnp::Error>> + 'static {
-        async move {
-            let params = params.get()?;
-            if params.get_method() != READ_METHOD {
-                return Err(failed("unsupported fixture method"));
-            }
-            let fd = open_relative(params.get_payload()?, false)?;
-            let stat = rustix::fs::fstat(&fd).map_err(|_| failed("fixture file unavailable"))?;
-            if !is_regular_file(&stat) || stat.st_size > MAX_FILE_BYTES {
-                return Err(failed("fixture file unavailable"));
-            }
-            let stream: host_extension_stream::Client = capnp_rpc::new_client(FileStream {
-                fd: RefCell::new(Some(File::from(fd))),
-            });
-            results.get().set_stream(stream);
-            Ok(())
+    ) -> Result<(), capnp::Error> {
+        let params = params.get()?;
+        if params.get_method() != READ_METHOD {
+            return Err(failed("unsupported fixture method"));
         }
+        let fd = open_relative(params.get_payload()?, false)?;
+        let stat = rustix::fs::fstat(&fd).map_err(|_| failed("fixture file unavailable"))?;
+        if !is_regular_file(&stat) || stat.st_size > MAX_FILE_BYTES {
+            return Err(failed("fixture file unavailable"));
+        }
+        let stream: host_extension_stream::Client = capnp_rpc::new_client(FileStream {
+            fd: RefCell::new(Some(File::from(fd))),
+        });
+        results.get().set_stream(stream);
+        Ok(())
     }
 }
 
 impl host_extension_stream::Server for FileStream {
-    fn read(
+    async fn read(
         self: CapnpRc<Self>,
         params: host_extension_stream::ReadParams,
         mut results: host_extension_stream::ReadResults,
-    ) -> impl Future<Output = Result<(), capnp::Error>> + 'static {
-        async move {
-            let max_bytes = params.get()?.get_max_bytes();
-            if max_bytes == 0 || max_bytes > MAX_READ_BYTES {
-                return Err(failed("invalid fixture read size"));
-            }
-            let mut fd = self.fd.borrow_mut();
-            let Some(file) = fd.as_mut() else {
-                return Err(failed("fixture stream canceled"));
-            };
-            let mut buffer = vec![0u8; max_bytes as usize];
-            let amount = file
-                .read(&mut buffer)
-                .map_err(|_| failed("fixture read failed"))?;
-            let mut results = results.get();
-            results.set_payload(&buffer[..amount]);
-            results.set_eof(amount == 0);
-            Ok(())
+    ) -> Result<(), capnp::Error> {
+        let max_bytes = params.get()?.get_max_bytes();
+        if max_bytes == 0 || max_bytes > MAX_READ_BYTES {
+            return Err(failed("invalid fixture read size"));
         }
+        let mut fd = self.fd.borrow_mut();
+        let Some(file) = fd.as_mut() else {
+            return Err(failed("fixture stream canceled"));
+        };
+        let mut buffer = vec![0u8; max_bytes as usize];
+        let amount = file
+            .read(&mut buffer)
+            .map_err(|_| failed("fixture read failed"))?;
+        let mut results = results.get();
+        results.set_payload(&buffer[..amount]);
+        results.set_eof(amount == 0);
+        Ok(())
     }
 
-    fn cancel(
+    async fn cancel(
         self: CapnpRc<Self>,
         _params: host_extension_stream::CancelParams,
         _results: host_extension_stream::CancelResults,
-    ) -> impl Future<Output = Result<(), capnp::Error>> + 'static {
-        async move {
-            self.fd.borrow_mut().take();
-            Ok(())
-        }
+    ) -> Result<(), capnp::Error> {
+        self.fd.borrow_mut().take();
+        Ok(())
     }
 }
 
@@ -225,10 +225,10 @@ async fn run_session(fd: OwnedFd) {
     );
     let client: host_extension::Client = capnp_rpc::new_client(FileProvider);
     let rpc = capnp_rpc::RpcSystem::new(Box::new(network), Some(client.client));
-    if let Err(error) = rpc.await {
-        if error.kind != capnp::ErrorKind::Disconnected {
-            eprintln!("host-extension-test-provider session failed: {error}");
-        }
+    if let Err(error) = rpc.await
+        && error.kind != capnp::ErrorKind::Disconnected
+    {
+        eprintln!("host-extension-test-provider session failed: {error}");
     }
 }
 
@@ -251,7 +251,7 @@ fn write_full(fd: BorrowedFd<'_>, bytes: &[u8]) -> Result<(), std::io::Error> {
 /// driver and acknowledges with one zero byte, mirroring the reference implementation that
 /// enqueues the session before acknowledging. Workerd buffers its RPC frames until the
 /// session's Cap'n Proto server starts draining the socket.
-fn control_loop(sessions: SessionSink) -> Result<(), std::io::Error> {
+fn control_loop(sessions: &SessionSink) -> Result<(), std::io::Error> {
     let stdin = std::io::stdin();
     let stdin_lock = stdin.lock();
     let control = stdin_lock.as_fd();
@@ -305,7 +305,7 @@ fn main() -> ExitCode {
     let (sessions, mut session_source) = tokio::sync::mpsc::unbounded_channel::<OwnedFd>();
     let local = tokio::task::LocalSet::new();
     let result = local.block_on(&runtime, async {
-        let control = tokio::task::spawn_blocking(move || control_loop(sessions));
+        let control = tokio::task::spawn_blocking(move || control_loop(&sessions));
         while let Some(fd) = session_source.recv().await {
             tokio::task::spawn_local(run_session(fd));
         }
