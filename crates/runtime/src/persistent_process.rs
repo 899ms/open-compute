@@ -22,7 +22,8 @@ pub struct PersistentHostProcessSpec {
     pub environment: Vec<(OsString, OsString)>,
     /// Private working directory selected by the owning domain.
     pub working_directory: PathBuf,
-    /// Child-side private control socket mapped to fd 3.
+    /// Child-side private control socket mapped to fd 0 (the child's stdin), so any
+    /// language can adopt it through its standard input API without raw fd access.
     pub control_fd: OwnedFd,
     /// Private crash-recovery lease path.
     pub lease_path: PathBuf,
@@ -62,13 +63,12 @@ impl PersistentHostProcess {
             .env_clear()
             .envs(spec.environment)
             .current_dir(spec.working_directory)
-            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         command
             .fd_mappings(vec![FdMapping {
                 parent_fd: spec.control_fd,
-                child_fd: 3,
+                child_fd: 0,
             }])
             .map_err(|_| invalid())?;
         let mut child = command.spawn().map_err(|_| invalid())?;

@@ -5,7 +5,7 @@ description: "动手实现 local-files 扩展：manifest、facade Worker、nativ
 
 本教程实现一个 `local-files` 扩展：列出并读取 operator 放在 Provider 工作目录旁的文件。用户 Worker 用 Wrangler `services` 和 `props` 绑定它。没有新的公开 Binding 类型。
 
-需要一台正在运行的 macOS 或 Linux `ocd`、可写配置文件，以及能处理 Unix `SCM_RIGHTS` 与 Cap'n Proto 的原生工具链。fork 里的 Provider fixture 是测试二进制，不进入 release artifact。
+需要一台正在运行的 macOS 或 Linux `ocd`、可写配置文件，以及能处理 Unix `SCM_RIGHTS` 与 Cap'n Proto 的原生工具链。open-compute 仓库自带一个完整可运行的 Provider：测试 fixture [crates/service/src/bin/host_extension_test_provider/](https://github.com/elliothux/open-compute/blob/main/crates/service/src/bin/host_extension_test_provider/main.rs)——schema、Cap'n Proto 绑定与 attach 循环共约 300 行 Rust。把它当作你自己的 Provider 的活参考；它是 `test-support` 二进制，不进入 release artifact。
 
 ## 1. 创建扩展目录
 
@@ -74,11 +74,11 @@ facade 的 `globalOutbound` 为 `null`。它不能访问公网、平台 listener
 - 使用启动时已打开并固定身份的 executable；
 - 清空 environment，argv 为空；
 - 工作目录是 `<data.path>/runtime/extensions/<name>`（不是源码目录）；
-- control socket 作为 fd 3 继承。
+- control socket 作为标准输入（fd 0）继承。
 
 control socket 只用于 session attach。业务字节不经过 `ocd`。
 
-Provider 在 fd 3 上循环：
+Provider 在标准输入上循环：
 
 1. 读取 4 字节外加一个文件描述符（`SCM_RIGHTS`）。
 2. 要求 magic 为 `OCP1`，且恰好一个 FD。
@@ -101,7 +101,7 @@ interface HostExtensionStream {
 
 方法编号和 payload codec 由你定义。unary 请求和响应各不超过 8 MiB。stream 每个 chunk 不超过 64 KiB，总读取不超过 64 MiB。
 
-本教程中，方法 `1` 列出 payload 给出的相对目录（UTF-8、无 `/` 前缀、无 `..`）中的普通文件，返回换行分隔的名单。方法 `2` 打开该相对路径并流式返回字节。用 `openat` 加 `O_NOFOLLOW` 从进程工作目录（或 Provider 自己打开的 operator 根）打开。`props` 不会进入 argv、environment 或可变全局配置；facade 必须把需要的值放进 payload。
+本教程中，方法 `1` 列出 payload 给出的相对目录（UTF-8、无 `/` 前缀、无 `..`）中的普通文件，返回换行分隔的名单。方法 `2` 打开该相对路径并流式返回字节。用 `openat` 加 `O_NOFOLLOW` 从进程工作目录（或 Provider 自己打开的 operator 根）打开。`props` 不会进入 argv、environment 或可变全局配置；facade 必须把需要的值放进 payload。上面链接的 fixture 完整实现了这套契约，包括 `O_NOFOLLOW` 路径遍历。
 
 ABI 不匹配、额外 FD、未知 identity、attach timeout 或 disconnect 都会 fail closed。取消调用不会回滚 Provider 副作用，也不会重放请求。
 

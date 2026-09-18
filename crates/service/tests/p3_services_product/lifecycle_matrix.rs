@@ -1,10 +1,7 @@
 use super::*;
 
 pub(super) async fn run() {
-    let provider = std::env::var_os("OPEN_COMPUTE_TEST_HOST_EXTENSION_PROVIDER")
-        .map(std::path::PathBuf::from)
-        .expect("OPEN_COMPUTE_TEST_HOST_EXTENSION_PROVIDER must name the built fork fixture");
-    assert!(provider.is_absolute() && provider.is_file());
+    let provider = std::path::PathBuf::from(env!("CARGO_BIN_EXE_host-extension-test-provider"));
     let harness = Harness::start_with_local_extension("p3-services-product", &provider).await;
     let storage = harness.storage.clone();
     let artifacts = harness.artifacts.clone();

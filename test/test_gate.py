@@ -75,24 +75,6 @@ class GateTests(unittest.TestCase):
         with patch.dict(os.environ, OPEN_COMPUTE_GATE_ROUNDS='3'):
             self.assertEqual(gate.rounds_from_env(), 3)
 
-    def test_service_product_gate_requires_an_explicit_executable_provider(self):
-        with tempfile.TemporaryDirectory() as temp, \
-             patch.object(gate, 'verify_inputs', return_value={}):
-            provider = Path(temp) / 'provider'
-            provider.write_bytes(b'fixture')
-            provider.chmod(0o700)
-            targets = self.targets(['p3-services-product'])
-            with patch.dict(os.environ, {
-                'OPEN_COMPUTE_TEST_HOST_EXTENSION_PROVIDER': str(provider),
-            }, clear=True):
-                result = gate.verify_selected_inputs(targets, probe_version=False)
-                self.assertEqual(result['host_extension_provider_sha256'], gate.digest(provider))
-            provider.chmod(0o600)
-            with patch.dict(os.environ, {
-                'OPEN_COMPUTE_TEST_HOST_EXTENSION_PROVIDER': str(provider),
-            }, clear=True), self.assertRaisesRegex(ValueError, 'absolute executable regular file'):
-                gate.verify_selected_inputs(targets, probe_version=False)
-
     def test_overlapping_selections_run_each_physical_target_once(self):
         selected = gate.selection(['p0-2', 'p2-3', 'workflow', 'p1-8', 'p0-7'])
         self.assertEqual(len(selected), len(set(gate.TARGETS[name][:2] for name in selected)))

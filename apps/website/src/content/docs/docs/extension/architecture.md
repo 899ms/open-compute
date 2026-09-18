@@ -13,7 +13,7 @@ An extension call has four participants and two transports. `ocd` authenticates 
 | Facade      | Operator JavaScript loaded from `extension.toml` `[worker].main`. Reads `this.ctx.props`. Calls `env.HOST`.                         |
 | workerd     | The single supervised pinned runtime. Holds the private `HostExtensionFactory`, broker fd 4, and the session Cap'n Proto client.    |
 | `ocd`       | Loads the extension at startup, issues session identity, brokers one socketpair, waits for Provider ACK, then leaves the data path. |
-| Provider    | Operator native process. Accepts `OCP1` + `SCM_RIGHTS` on fd 3, ACKs, and serves `HostExtension` on the session socket.             |
+| Provider    | Operator native process. Accepts `OCP1` + `SCM_RIGHTS` on its stdin (fd 0), ACKs, and serves `HostExtension` on the session socket. |
 
 There is still one workerd. The Provider is a host child of `ocd`, not a second runtime and not a tenant isolate.
 
@@ -45,7 +45,7 @@ workerd  <--------- session Cap'n Proto ----------->  Provider
 | Magic  | Socket                           | Direction        | Purpose                                                  |
 | ------ | -------------------------------- | ---------------- | -------------------------------------------------------- |
 | `OCH1` | workerd generation broker (fd 4) | workerd → `ocd`  | Prove a validated session identity and receive a data FD |
-| `OCP1` | Provider control (fd 3)          | `ocd` → Provider | Attach one session FD; Provider ACKs `0`                 |
+| `OCP1` | Provider control (stdin, fd 0)   | `ocd` → Provider | Attach one session FD; Provider ACKs `0`                 |
 
 Both transfers use `SCM_RIGHTS` with exactly one FD. Extra FDs, wrong magic, truncated identity, or a missing ACK fail closed. Formal FD passing uses workerd `--//:io_backend=cxx`.
 
@@ -61,7 +61,7 @@ Broker EOF or a workerd generation change closes the sessions of that generation
 | ---------------------------- | ------------------- | ------ | -------------------------------------------- | ---------- |
 | `HOST` / `HostExtensionPort` | no                  | yes    | n/a                                          | no         |
 | Session identity             | no                  | no     | no                                           | no         |
-| Provider path / raw FD       | no                  | no     | own fd 3 / session FD                        | no         |
+| Provider path / raw FD       | no                  | no     | own stdin / session FD                       | no         |
 | Platform tokens, S3, SQLite  | no                  | no     | no                                           | redacted   |
 | `ctx.props`                  | Binding config only | yes    | only if the facade sends them in the payload | no         |
 

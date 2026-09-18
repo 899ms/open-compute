@@ -20,8 +20,6 @@ bun run check:generated
 bun run test:js
 export RUSTFLAGS='-D warnings'
 export OPEN_COMPUTE_TEST_WORKERD="$PWD/share/workerd/darwin-arm64/workerd" # 按宿主目标选择
-# p3-services-product / coverage / workspace Gate：先在 fork 中显式构建同 revision 的 fixture
-export OPEN_COMPUTE_TEST_HOST_EXTENSION_PROVIDER="$PWD/third_party/workerd/bazel-bin/src/workerd/server/host-extension-test-provider"
 # 仅 p5-search：本机 OpenAI-compatible embedding fixture
 export OPEN_COMPUTE_TEST_EMBEDDING_API_KEY=fixture-secret
 export OPEN_COMPUTE_TEST_EMBEDDING_BASE_URL=http://127.0.0.1:8080/v1
@@ -33,8 +31,9 @@ export OPEN_COMPUTE_TEST_EMBEDDING_BASE_URL=http://127.0.0.1:8080/v1
 根 build 从 Git LFS 固定二进制生成 Cargo 所需的正式压缩包；无需设置 archive 环境变量。
 输入准备工具 `bun scripts/prepare-workerd.ts --dest /abs/new-dir` 默认使用同一固定依赖并拒绝覆盖；
 可用 `--archive /abs/pinned.gz` 指定同一正式 pin 的另一份压缩包。`--download`、发布打包和特权网络夹具需要单独授权。
-W3 Provider fixture 不属于发行物；使用 `docs/workerd/README.md` 记录的正式 C++ I/O backend 与 strip flags 显式构建
-`//src/workerd/server:host-extension-test-provider`，Gate 只接受预置绝对可执行路径，不隐式调用 Bazel 或下载依赖。
+W3 Provider fixture 不属于发行物；它是本仓库 `test-support` feature 下的 Cargo 测试二进制
+`crates/service/src/bin/host_extension_test_provider/`（schema 拷贝、Cap'n Proto 绑定与 `OCP1` attach 循环），
+随测试目标一起由 cargo 构建，`p3-services-product` 通过 `CARGO_BIN_EXE` 直接定位，无需外部 fixture、环境变量或 Bazel。
 
 ## 一个调度入口
 

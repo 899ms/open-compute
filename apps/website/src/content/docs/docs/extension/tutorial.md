@@ -5,7 +5,7 @@ description: "Build a local-files extension: manifest, facade Worker, native Pro
 
 This walkthrough implements a `local-files` extension that lists and reads files from directories the operator placed next to the Provider. A user Worker binds it with Wrangler `services` and `props`. There is no new public Binding type.
 
-You need a running `ocd` on macOS or Linux, a writable config file, and a native toolchain that can speak Unix SCM_RIGHTS plus Cap'n Proto. The fork's Provider fixture is a test binary; it is not part of the release artifact.
+You need a running `ocd` on macOS or Linux, a writable config file, and a native toolchain that can speak Unix SCM_RIGHTS plus Cap'n Proto. A complete working Provider ships in the open-compute repository as the test fixture [crates/service/src/bin/host_extension_test_provider/](https://github.com/elliothux/open-compute/blob/main/crates/service/src/bin/host_extension_test_provider/main.rs) — schema, Cap'n Proto bindings, and the attach loop in about 300 lines of Rust. Use it as the live reference for your own Provider; it is a `test-support` binary and is not part of the release artifact.
 
 ## 1. Create the extension directory
 
@@ -74,11 +74,11 @@ The facade has `globalOutbound` set to `null`. It cannot fetch the public intern
 - the opened executable (identity pinned at `ocd` startup);
 - a cleared environment and empty argv;
 - working directory `<data.path>/runtime/extensions/<name>` (not the source directory);
-- control socket inherited as file descriptor 3.
+- control socket inherited as standard input (file descriptor 0).
 
 The control socket is only for session attach. Business bytes never go through `ocd`.
 
-On fd 3 the Provider loops:
+On standard input the Provider loops:
 
 1. Read 4 bytes plus one file descriptor (`SCM_RIGHTS`).
 2. Require magic `OCP1` and exactly one FD.
@@ -101,7 +101,7 @@ interface HostExtensionStream {
 
 Method numbers and payload codec are yours. Unary request and response are each at most 8 MiB. Each stream chunk is at most 64 KiB; a stream may not read more than 64 MiB in total.
 
-For this tutorial, method `1` lists regular files in the relative directory named by the payload (UTF-8, no `/` prefix, no `..`) and returns a newline-separated listing. Method `2` opens that relative path as a file and streams its bytes. Open through `openat` with `O_NOFOLLOW` from the process working directory, or from another operator-chosen root the Provider itself opens. `props` never appear in argv, environment, or a mutable Provider config; the facade must send them in the payload.
+For this tutorial, method `1` lists regular files in the relative directory named by the payload (UTF-8, no `/` prefix, no `..`) and returns a newline-separated listing. Method `2` opens that relative path as a file and streams its bytes. Open through `openat` with `O_NOFOLLOW` from the process working directory, or from another operator-chosen root the Provider itself opens. `props` never appear in argv, environment, or a mutable Provider config; the facade must send them in the payload. The linked fixture implements exactly this contract, including the `O_NOFOLLOW` path walk.
 
 A mismatched ABI, extra file descriptor, unknown identity, attach timeout, or disconnect fails closed. Cancellation does not roll back Provider side effects and does not replay the request.
 

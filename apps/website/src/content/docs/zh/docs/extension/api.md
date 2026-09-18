@@ -96,7 +96,7 @@ session socket 上的 Cap'n Proto schema 是 pinned workerd 中的 `HostExtensio
 | -------- | -------------------------------------------------------------------------------------------------------------------- |
 | 启动     | 该扩展名字的第一次 session；每个名字一个 process group                                                               |
 | 身份     | executable 字节与 FD 在 `ocd` 启动时固定                                                                             |
-| 环境     | 清空；argv 为空；control socket 为 fd 3                                                                              |
+| 环境     | 清空；argv 为空；control socket 为标准输入（fd 0）                                                                   |
 | 工作目录 | `<data.path>/runtime/extensions/<name>`                                                                              |
 | Attach   | magic `OCP1`、恰好一个 `SCM_RIGHTS` FD、ACK 字节 `0`                                                                 |
 | 崩溃     | 进行中的调用失败；后续 acquire 按 200 ms–5 s backoff 重试；连续六次失败后，本次 `ocd` 生命周期保持 unavailable       |

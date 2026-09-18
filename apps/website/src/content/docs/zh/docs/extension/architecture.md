@@ -7,13 +7,13 @@ description: "用户 Worker、facade、ocd、workerd 与 native Provider 如何�
 
 ## 参与者
 
-| 参与者      | 角色                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------ |
-| 用户 Worker | 声明 `services` + `props`。调用 facade RPC，例如 `env.FILES.list()`。看不到 `HOST`。                         |
-| Facade      | 来自 `extension.toml` `[worker].main` 的 operator JavaScript。读取 `this.ctx.props`。调用 `env.HOST`。       |
-| workerd     | 唯一受监督的 pinned runtime。持有私有 `HostExtensionFactory`、broker fd 4 和 session Cap'n Proto client。    |
-| `ocd`       | 启动时加载扩展、签发 session identity、经纪一对 socketpair、等待 Provider ACK，然后离开数据路径。            |
-| Provider    | operator 的原生进程。在 fd 3 上接受 `OCP1` + `SCM_RIGHTS`，ACK，并在 session socket 上提供 `HostExtension`。 |
+| 参与者      | 角色                                                                                                                   |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 用户 Worker | 声明 `services` + `props`。调用 facade RPC，例如 `env.FILES.list()`。看不到 `HOST`。                                   |
+| Facade      | 来自 `extension.toml` `[worker].main` 的 operator JavaScript。读取 `this.ctx.props`。调用 `env.HOST`。                 |
+| workerd     | 唯一受监督的 pinned runtime。持有私有 `HostExtensionFactory`、broker fd 4 和 session Cap'n Proto client。              |
+| `ocd`       | 启动时加载扩展、签发 session identity、经纪一对 socketpair、等待 Provider ACK，然后离开数据路径。                      |
+| Provider    | operator 的原生进程。在标准输入（fd 0）上接受 `OCP1` + `SCM_RIGHTS`，ACK，并在 session socket 上提供 `HostExtension`。 |
 
 仍然只有一个 workerd。Provider 是 `ocd` 的宿主子进程，不是第二个 runtime，也不是 tenant isolate。
 
@@ -45,7 +45,7 @@ workerd  <--------- session Cap'n Proto ----------->  Provider
 | Magic  | Socket                            | 方向             | 用途                                        |
 | ------ | --------------------------------- | ---------------- | ------------------------------------------- |
 | `OCH1` | workerd generation broker（fd 4） | workerd → `ocd`  | 证明已校验的 session identity 并接收数据 FD |
-| `OCP1` | Provider control（fd 3）          | `ocd` → Provider | 附加一个 session FD；Provider ACK `0`       |
+| `OCP1` | Provider control（stdin，fd 0）   | `ocd` → Provider | 附加一个 session FD；Provider ACK `0`       |
 
 两次传递都使用恰好一个 FD 的 `SCM_RIGHTS`。额外 FD、错误 magic、截断的 identity 或缺失 ACK 都会 fail closed。正式 FD passing 使用 workerd `--//:io_backend=cxx`。
 
@@ -57,13 +57,13 @@ Broker EOF 或 workerd generation 更换会关闭该 generation 的 session。Pr
 
 ## 各层不该看到什么
 
-| 秘密或句柄                   | 用户 Worker     | Facade | Provider                 | `ocd` 日志 |
-| ---------------------------- | --------------- | ------ | ------------------------ | ---------- |
-| `HOST` / `HostExtensionPort` | 否              | 是     | 不适用                   | 否         |
-| Session identity             | 否              | 否     | 否                       | 否         |
-| Provider 路径 / 原始 FD      | 否              | 否     | 自己的 fd 3 / session FD | 否         |
-| 平台 token、S3、SQLite       | 否              | 否     | 否                       | 已脱敏     |
-| `ctx.props`                  | 仅 Binding 配置 | 是     | 仅当 facade 放进 payload | 否         |
+| 秘密或句柄                   | 用户 Worker     | Facade | Provider                  | `ocd` 日志 |
+| ---------------------------- | --------------- | ------ | ------------------------- | ---------- |
+| `HOST` / `HostExtensionPort` | 否              | 是     | 不适用                    | 否         |
+| Session identity             | 否              | 否     | 否                        | 否         |
+| Provider 路径 / 原始 FD      | 否              | 否     | 自己的 stdin / session FD | 否         |
+| 平台 token、S3、SQLite       | 否              | 否     | 否                        | 已脱敏     |
+| `ctx.props`                  | 仅 Binding 配置 | 是     | 仅当 facade 放进 payload  | 否         |
 
 ## Cloudflare 边界
 

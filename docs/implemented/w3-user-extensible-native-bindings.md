@@ -82,7 +82,7 @@ workerd <──── session Cap'n Proto ───────> Provider
 direct ABI 只有 numeric unary 与 stream：request/response 各不超过 8 MiB，stream chunk 不超过 64 KiB，总读取不超过
 64 MiB。既有 Service authority 提供 30 秒 root deadline；调用取消不代表 Provider 副作用回滚，也不会重放请求。
 
-Provider 首次 session 时启动，每个扩展名字一个 process group。通用 persistent-process owner 负责 env clear、fd 3 control、
+Provider 首次 session 时启动，每个扩展名字一个 process group。通用 persistent-process owner 负责 env clear、stdin（fd 0）control、
 bounded logs、lease/start identity、TERM/KILL、reap 与严格 orphan recovery。crash 后当前调用失败，后续 acquire 按 200 ms–5 s
 backoff 重启；连续六次失败后本次 `ocd` 生命周期保持 unavailable。Broker EOF 或 workerd generation 更换会关闭对应 session；
 Provider 可供新 generation 复用，并在 `ocd` shutdown 时有界回收。
@@ -91,7 +91,9 @@ Provider 可供新 generation 复用，并在 `ocd` shutdown 时有界回收。
 
 fork 只增加私有 `HostExtensionFactory`/`HostExtensionPort`、broker fd 接线和 session-scoped Cap'n Proto client。Factory 仅绑定到
 trusted loader/DO host system Workers；Port 只能通过 dynamic env capability table 委派一次，不能持久化或再次 RPC 转移。
-Provider reference fixture 留在 fork test target，不进入 release artifact。
+Provider reference fixture 现由 open-compute 的 test-support Cargo 二进制
+`crates/service/src/bin/host_extension_test_provider/`（Rust，schema 拷贝随仓库提交）承担，product Gate 通过 `CARGO_BIN_EXE`
+直接定位；fork test target 保留 fork 自己的 C++ fixture。二者都不进入 release artifact。
 
 FD passing 正式使用 `--//:io_backend=cxx`。macOS release build同时保留
 `--@rules_rust//:extra_exec_rustc_flag=-Cstrip=none`，避免 exec-configuration proc-macro dylib 被破坏；最终 `workerd` 仍以

@@ -263,7 +263,7 @@ async fn persistent_host_process_maps_control_fd_and_reaps_on_shutdown() {
     let executable = directory.path().join("persistent-host.sh");
     fs::write(
         &executable,
-        b"#!/bin/sh\nIFS= read -r value <&3\nprintf '%s' \"$value\" >&3\nwhile :; do sleep 30; done\n",
+        b"#!/bin/sh\nIFS= read -r value <&0\nprintf '%s' \"$value\" >&0\nwhile :; do sleep 30; done\n",
     )
     .unwrap();
     fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
