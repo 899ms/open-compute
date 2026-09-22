@@ -1,369 +1,300 @@
 # R1：单 OCD daemon、多 Instance 与单一身份重构
 
-状态：**planned**。2026-09-22。源码基线：`51aa520c973b90f749797fe79977072754cf450f`。
-本文统一定义目标架构、重构步骤、删除清单与验收要求；代码尚未实施。
+状态：**planned**。2026-09-22。审阅基线：`9a3df7929978d17be8e3d3576bab2dd8e154462f`。
+本文定义目标合同、实施原则与验收要求；代码尚未实施。按 Day1 直接替换当前模型，不维护旧 open-compute 的布局、配置或身份兼容路径。
 
-## 1. 最终模型
+## 1. 最终模型与安装作用域
 
-**一台机器至多一个常驻 OCD daemon；一个 Instance 对应一份 `compute.toml` 和一个独占数据目录。内部只有 `InstanceId`，不再存在 account 实体或第二套平台身份。**
+**一个选定作用域内只有一个常驻 OCD daemon，管理多个 Instance；每个实例只有一个 InstanceId、一份 compute.toml 和一个实例目录。应用自有文件只归属于 OCD_DIR 或 INSTANCE_DIR。**
+
+| 模式 | OCD_DIR | 安装与运行 |
+| --- | --- | --- |
+| 用户级，默认 | `~/.open-compute/` | 普通用户安装和 `ocd setup --yes` 均不需要 root；使用 systemd user service / LaunchAgent，以当前用户运行 |
+| 系统级，显式 `--system` | `/var/lib/open-compute/` | `sudo ocd setup --system --yes` 创建系统目录和系统服务；daemon 仍以发起 sudo 的非 root 用户运行 |
+
+两种模式使用完全相同的配置、目录布局、实例生命周期和授权模型；区别只在根目录选择、OS 服务注册范围及其必要权限。不新建专用 service user，不要求普通 CLI 使用 sudo，不隐式提权；root setup 必须显式选择 `--system`。
+
+“全局唯一”指选定的 user/system 作用域内唯一，不承诺无 root 条件下跨所有 OS 用户强制全机互斥。CLI 默认只访问当前用户的 OCD_DIR，`--system` 才访问系统 OCD_DIR；无自动探测另一作用域、接管或合并。不同作用域的端口冲突明确报错，不静默换端口。
+
+用户根中的 `~` 指运行 UID 的 home，不由任意覆盖的 HOME 环境值重新定义；system 模式始终选择固定系统根。每个作用域的 OCD_DIR 固定；生产命令不通过任意 `--config`、cwd 或项目数据目录再创建一套 daemon。单例锁在 `<OCD_DIR>/ocd.lock`，所有启动入口先获得它；第二次启动不得删除原 socket。测试根目录注入只用于隔离测试，不成为生产多 daemon 入口。
+
+“一个 daemon”不排除短命 CLI、workerd、Caddy、Provider 和解析器子进程。实例可独立启停；daemon 崩溃或 OOM 仍影响其全部实例，不宣称进程内硬故障隔离。
+
+## 2. 只有两类目录
 
 ```text
-OCD daemon
-├── ocd.toml：机器监听、网关、实例配置清单
-├── 全局单例锁 / control socket / 一个受监督的 Caddy（可选）
-├── Instance A
-│   ├── compute.toml + data/control.sqlite 中的唯一 InstanceId
-│   ├── 独立存储、密钥、凭证、调度、日志、运行时状态
-│   ├── 自己的 workerd supervisor
-│   └── 自己的 native extension Providers
-└── Instance B
-    └── 相同结构，互不复用可变状态
+<OCD_DIR>/
+├── ocd.toml                  # 全局配置与唯一实例清单
+├── ocd.lock                  # 作用域单例锁，不能作为 cache 清理
+├── run/                      # control socket、运行 descriptor、具名内部 socket
+├── gateway/                  # Caddy/ACME 持久状态和生效配置
+├── cache/                    # 可重建的共享缓存、内嵌工具物化产物
+├── logs/                     # daemon 日志
+├── tmp/                      # daemon 的一次性临时文件
+└── instances/                # 默认实例容器，不是第三层权威
+    └── dev/                  # INSTANCE_DIR，也可整体放在外部磁盘
+        ├── compute.toml      # 此实例的固定配置入口
+        ├── control.sqlite    # 唯一 InstanceId 与资源元数据
+        ├── keys/            # 密钥、凭证文件
+        ├── objects/         # 本地对象原件，不是 cache
+        ├── extensions/      # 实例扩展输入
+        ├── runtime/         # 实例恢复状态、Provider 工作目录及 lease
+        ├── cache/           # 仅可重建副本
+        ├── logs/            # 实例日志
+        └── tmp/             # 实例的一次性临时文件
 ```
 
-“一个 OCD”指一个常驻服务，不是禁止短命 CLI、workerd、Provider、解析器或 Caddy 子进程。不同 Instance 的失败和启停不应主动终止其他 Instance；daemon 自身崩溃仍影响全部实例，不宣称进程内的硬故障隔离。
+scheduler、observability、产品数据库及其他实例业务文件也属于 INSTANCE_DIR；全局目录不另存实例业务权威。只读且内容寻址的内嵌工具可在 OCD_DIR 共享，Provider/workerd 的可变状态不能共享。
 
-## 2. 身份与持久化
+不再分别发现或配置 state/config/cache/runtime/temp 根；不写入额外的 `/etc/open-compute`、XDG cache/runtime、系统 cache 或 `/tmp/open-compute-*`。安装 receipt、升级检查缓存、自有 CLI target 设置、日志和子进程物化文件也必须归入这两类目录。可执行文件及 OS service/LaunchAgent 注册入口仍按安装方式放置，但不在那里保存应用状态。
 
-| 项目 | 唯一规则 |
-| --- | --- |
-| 内部类型 | `InstanceId`，统一序列化为 32 位小写十六进制字符串；可用 UUID v7 的无连字符形式生成 |
-| 创建与权威 | 新数据目录初始化时生成一次，保存在 `control.sqlite` 的实例元数据中；以后只读取，不重新派生 |
-| 配置 | 配置描述实例并指向数据目录，不再存储另一份 ID，也不从配置路径或内容计算 ID |
-| 名称 | 可选 `instance.name`，仅作为显示名和本机 CLI 选择器，不参与存储、授权、域名或密钥派生 |
-| 公开兼容字段 | `/accounts/{account_id}/…` 中的值就是 `InstanceId` 的原始字符串，不转换身份 |
+两类目录约束的是 OCD 管理的本地文件。显式选择的远端 S3 仍是产品存储；operator 指定的外部只读输入、外部工具自身状态及 OS 自行产生的日志不变成 OCD 的第三个数据根，也不得被 OCD 当作自有数据清理。受管子进程的缓存和临时输出必须显式重定向；仅设置 cwd 不足以保证任意 native code 不写外部文件。
 
-移除路径哈希式 Instance ID、独立 `PlatformId`、`AccountId`、`default_account_id`、公开 account ID 派生及其映射表。`WorkerId`、`VersionId`、资源 ID、启动代次与 session ID 仍有各自用途，不属于需要合并的实例身份。
+### 2.1 目录包含关系
 
-初始化只接受真正的新数据状态。已有目录中的身份缺失、格式错误或不支持的 schema 必须报错，不得通过生成新 ID“修复”。读取 status 不初始化数据、不迁移数据库。
+实例默认是 `<OCD_DIR>/instances/<directory>`，也可使用完全外置的 INSTANCE_DIR。允许这个受控父子关系，不允许任意全局/实例根相互包含：
 
-同一 daemon 拒绝重复配置路径、重复数据目录、相互嵌套的数据根，以及不同目录中重复的 InstanceId；可选名称也必须唯一。保留数据目录独占锁，不能只依靠内存去重。复制配置并指向原数据不是新实例；复制完整数据也不是自动创建新身份。
+- 实例不得等于 OCD_DIR、`OCD_DIR/instances` 容器本身，不得位于全局 `gateway/cache/run/logs/tmp` 等目录，也不得包含 OCD_DIR。
+- 不同实例目录不得相等或互相包含；默认实例容器内的目录仍逐个检查，不能把整个容器当成一个实例。
+- 本地 objects 固定在本实例目录内；不保留独立的外置 local object root。需要换磁盘时移动整个 INSTANCE_DIR。
 
-移动或重命名配置不改变身份，但必须保证解析后的 `data.path` 仍指向原数据。搬迁完整数据后保留原 ID。创建独立实例必须初始化新数据目录；本阶段不实现带资源重写的实例克隆工具。
+路径按规范化后的真实文件系统关系、owner、no-follow 与 containment 规则检查；不能只比较字符串前缀。新目录检查已有父级并在创建后复验。setup、add、启动、purge 和 restore 都遵守同一边界，拒绝符号链接逃逸；不以递归 chown 或删除自动修复未知目录。
 
-## 3. 配置只分两层
+### 2.2 Socket 和临时运行状态
 
-### 3.1 `ocd.toml`：机器共享资源
+具名 Unix socket 全部在 `<OCD_DIR>/run/`，实例子路径以 InstanceId 区分；内部优先使用无路径的 socketpair。具名 socket 在 bind/connect/配置渲染前检查绝对路径及 **103 encoded bytes** 上限，采用短文件名；超长明确报错，不外置到 `/tmp` 或建立备用运行根。外置实例目录再长也不进入 socket 路径。
 
-以下为目标配置示意，不是当前 CLI 已支持的配置。
+run 中的 descriptor/socket 可重建，但只能由持锁的 owner 在完成对应旧子进程身份核验与恢复后处理；不把 run 或 lease 交给通用 temp/cache 清理。
+
+## 3. 两份配置，各有唯一入口
+
+### 3.1 `<OCD_DIR>/ocd.toml`
+
+以下是目标配置示意，不代表当前二进制已支持：
 
 ```toml
-[daemon]
-state_dir = "/var/lib/open-compute"
-
 [server]
 public_bind = "127.0.0.1:8787"
-# 需要公开 HTTP 时可显式分离 admin_bind；默认仅 loopback 合并入口。
+# 需要时显式配置 admin_bind；默认只在 loopback 合并入口。
 
 [[instances]]
-config = "/srv/dev/compute.toml"
+data_dir = "./instances/dev"
 autostart = true
 
 [[instances]]
-config = "/srv/prod/compute.toml"
+data_dir = "/mnt/data/production"
 autostart = true
 ```
 
-机器级配置还拥有全局网关 listener、challenge DNS listener、信任的反向代理、原始 Caddyfile 列表，以及必要的整机资源上限。单例锁与 control socket 使用安装时确定的固定系统路径，**不随 `state_dir`、cwd、用户 HOME 或 `--config` 改变**。
+清单只保留 `data_dir` 与 `autostart`；从目录固定读取 `compute.toml`，不同时保存 config path、另一份 InstanceId、digest、PID 或服务状态。不另建 registry/全局实例数据库；内存索引由清单与实例权威重建。
 
-实例清单只保存配置路径与 `autostart`。不再另建持久 registry 来复制 ID、配置 digest、数据路径、binary path、OS service identifier 和运行状态。内存索引从清单及实例权威重建；没有全局实例数据库。
+共享 listener、Caddyfile 列表、challenge DNS、代理信任、全局 cache 策略及第 10 节列明的共享上限由本文件配置；不再配置 `daemon.state_dir`。相对路径相对 OCD_DIR；本机 CLI 输入的相对目录先相对调用 cwd 解析，再写入明确的清单路径。
 
-### 3.2 `compute.toml`：实例自己的意图
+### 3.2 `<INSTANCE_DIR>/compute.toml`
 
 ```toml
 [instance]
 name = "dev"
 
-[data]
-path = "./data"
-
 [extensions.local-files]
 path = "./extensions/files"
 ```
 
-此处只展示边界相关字段。密钥和认证仍使用受验证的 file/env 引用；现有存储、KV/R2/D1、AI、调度、资源限额等产品配置保留在实例内。认证从机器 listener 配置中拆出，成为实例级配置。密钥和默认本地对象目录从该实例数据根派生，不再隐式落到全局默认目录。
+INSTANCE_DIR 自身就是数据根，不保留 `[data].path`、单独 config path 或旧全局数据根默认值。实例密钥、本地对象、缓存和临时路径从该根派生；其他数据策略字段可保留，但不能再次选择存储根。
 
-实例配置不得包含公共监听端口、OS service scope、daemon PID、全局 Caddyfile 或另一份 account/platform ID。实例可声明自己的公网 base domain；不得声明绑定 80/443/53 的所有权。
+认证、存储 backend、KV/R2/D1、AI、调度、实例限额及域名声明留在实例配置；不包含公共监听端口、OS service scope 或另一份账户/平台身份。secret 继续采用经过校验的 env/file 引用，OCD 生成的文件只写在对应根下。
 
-配置内相对路径始终相对该配置文件解析。机器配置与实例配置没有隐式继承、层层 merge 或错误时 fallback。启动只使用明确的 daemon 配置入口，`./compute.toml` 只能选择实例，不能另起 daemon。
+相对路径相对 INSTANCE_DIR。扩展只静态声明；跨配置不做隐式继承、层层 merge、旧配置发现或损坏时 fallback。目录重命名不等于实例改身份。
 
-## 4. 内部不保留 account
+## 4. 唯一身份与 Cloudflare 边界
 
-唯一保留 account 命名的地方是 **Cloudflare 对外兼容协议边界**，核心入口为：
+`InstanceId` 在新实例初始化时生成一次，持久化到 `control.sqlite` 的实例元数据，统一表示为 32 位小写十六进制字符串。可用 UUID v7 的无连字符形式生成；配置和目录名不产生身份。
+
+重启、搬迁完整实例目录不改变 ID。已有状态身份缺失、重复、损坏或 schema 不支持时拒绝启动，不生成新 ID“修复”。status 只读，不初始化数据。复制完整目录不会创建新身份；本阶段不提供资源重写式 clone。
+
+`instance.name` 可选、可改，仅用于展示和临时 CLI 选择；选择后立即解析成 ID。SDK/Dashboard 内部状态、target、授权、持久引用、日志和私有协议统一用 InstanceId；无名称实例必须可管理。非空名称在同一清单内唯一，不能冒充另一实例的完整 ID。
 
 ```text
 /client/v4/accounts/{account_id}/…
-                    │ parse as InstanceId
+                    │ 原始值直接解析为 InstanceId
                     ▼
-             查找实例 + 验证权限
+             定位实例并验证权限
                     ▼
-          传递已授权的 InstanceContext
+              已授权 InstanceContext
 ```
 
-`account_id` 只是路由占位符的协议名称。handler 立即将其读入 `InstanceId`；下游不接收 `AccountId`，不调用 `cloudflare_account_id()`，不维护 `AccountAuthority` 或 alias table。
+删除内部 Account、AccountId、PlatformId、AccountAuthority、default account、路径哈希 ID 及账户映射/派生函数；不以别名类型保留。API 的 `account_id` 原样等于 InstanceId，没有第二个值或映射表。
 
-为保持已声明的 Wrangler/官方 SDK 合同，`GET /accounts` 的 `result[].id`、`/memberships` 中协议要求的嵌套字段，以及官方客户端的 `account_id` 参数仍由同一对外适配层读写；值仍是原始 InstanceId。这是兼容接口的线格式，不是扩大内部模型。不能为了清理单词而破坏这些已支持的对外响应。`/user`、token verify 同样仅投影已认证的实例与凭证，不创建账户或成员表。
+account 命名只属于 Cloudflare 对外线协议：包括上述路径、已支持的 `/accounts` 列表、`/memberships` 必需字段和官方 SDK/Wrangler 调用参数。`/user`、token verify 等由已认证实例和凭证投影，不建立内部账户、用户或成员实体。内部自有 DTO 不保存 account 别名。官方 [Account Details](https://developers.cloudflare.com/api/resources/accounts/methods/get/) 要求路径 ID 长度为 32；小写十六进制是本项目的统一格式选择。
 
-内部配置、CLI 状态、Dashboard 状态、target registry、自有 SDK 的领域模型、数据库、私有 JSON/Cap'n Proto 协议、运行时模板、日志和 metrics 均使用 `instance_id` / `instanceId`。直接调用官方 SDK/Wrangler 的适配代码可以写协议要求的字段，适配前后的内部对象不得存储 account 别名。
+删除 AccountAuthority 不等于删除其他资源的协议行为：KV/D1/DO、Queue、consumer ID、Worker tag 等按各自当前官方合同输出和解析。资源自身 ID 已满足格式时直接使用；确需序列化投影时只在 CF 适配边界使用无状态纯函数。不保留旧 open-compute 的哈希输出，不新建有状态 projector、映射表或第二套权威；必须验证资源查询/引用往返及 Wrangler 的受支持流程。
 
-格式依据：[Cloudflare Account Details](https://developers.cloudflare.com/api/resources/accounts/methods/get/) 将路径 ID 长度限制为 32；32 位小写十六进制是本项目统一的 InstanceId 格式选择，不再另设“公开格式”。
+实例数据库天然提供作用域，删除只为账户层存在的恒定列、外键、索引和查询参数，不机械改成每行重复的 instance_id。跨实例共享 key、S3 前缀、备份 manifest、密文 AAD、DO/书签/游标和 capability 需要作用域时使用唯一 InstanceId；资源、Worker 和版本之间的有效约束继续保留。
 
-## 5. 端口、入口与授权
+## 5. 本机权限与配置修改
 
-| 入口 | 所有者与分发规则 |
+OCD_DIR、INSTANCE_DIR 及其私有子目录由确定的非 root 运行 UID 持有，目录默认 `0700`；配置、secret、descriptor、管理 socket 默认 `0600`。系统 setup 只在安装阶段创建系统目录/注册服务并赋予该运行用户所有权，系统模式下的 `ocd.toml` 也不是 root-only `/etc` 配置。
+
+管理 socket 只接受 **运行 UID 或 root**，无额外允许 GID、admin group、ACL 或本机角色系统。普通同 UID CLI 可直接使用；root 是显式管理通道，不是默认运行要求。Linux 使用真实 `SO_PEERCRED`，macOS 使用真实 `getpeereid`/等价内核 peer API；读取失败拒绝，禁止返回自身 UID 伪装成 peer 验证。客户端也校验目标路径及服务身份，不向错误 owner 的 socket 发送管理信息。平台接口依据见 [Linux unix(7)](https://man7.org/linux/man-pages/man7/unix.7.html) 和 [Apple getpeereid](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getpeereid.3.html)。
+
+在线实例增删通过管理 socket，由 daemon 串行校验并原子改写唯一 `ocd.toml`；写入采用 no-follow、owner/mode、fsync/atomic rename。实例 HTTP admin/deployer 凭证没有此权限，网络请求不能改全局配置或指定 native executable。运行 UID 及其配置的 native 扩展属于同一受信任主体，不声称网络 daemon 被攻破后仍有独立的同 UID 配置隔离。
+
+校验失败不写清单；清单成功落盘后运行失败则保留明确的 failed 状态和原因，不回滚删除数据。手工配置修改只在显式重读/相应重启后生效；与在线修改发现内容冲突时拒绝覆盖。停止 daemon 时可由 owner 编辑文件，不另设离线写入 daemon 或持久 registry。
+
+## 6. 公共入口与共享 Gateway
+
+| 入口 | 规则 |
 | --- | --- |
-| 本地 HTTP，默认 `127.0.0.1:8787` | daemon 只 bind 一次；所有实例共享。可选 admin listener 也只 bind 一次 |
-| CF 管理 API | 路径中的原始 InstanceId 定位实例，再验证凭证与该实例、操作权限匹配 |
-| 不含 ID 的发现接口 | 由凭证确定实例；不按第一个实例、默认实例或客户端任意 header 兜底 |
-| 本地 Worker | `<worker>.<instance_id>.localhost` 按 Host 进入实例的 Worker 路由 |
-| Dashboard | 使用实例专属的 `<instance_id>.localhost` 管理 origin；session 和 host-only cookie 均绑定该实例，不设置共享父域 cookie |
-| 公网 HTTPS | 一个受监督 Caddy，统一占用所配置的 443；需要 80 时也由它统一管理。按域名进入对应实例 |
-| DNS challenge | 一个 daemon 级 UDP/TCP listener，按配置过的 challenge zone 分发 |
-| 本机管理 | 一个固定 control socket，CLI 请求携带 InstanceId；不占用每实例管理端口 |
-| workerd / binding 后端 | 实例自己的私有 listener；优先沿用 socketpair/Unix socket，现有 TCP 可继续使用自动分配的 loopback 临时端口 |
+| 本地 HTTP / 可选 admin HTTP | 每个 daemon 各 bind 一次，默认 loopback；不为每实例分配公共端口 |
+| CF 管理 API | 原始 InstanceId 定位实例，再验证实例和操作权限 |
+| 无路径 ID 的发现接口 | 一个 bearer 只对应一个 `(InstanceId, role)`；拒绝重复凭证；无权限不得枚举其他实例 |
+| 本地 Worker | `<worker>.<instance_id>.localhost`；Host 先分类，Worker 上的 `/client/v4`、`/operator` 不进入管理面 |
+| Dashboard | `<instance_id>.localhost` 管理 origin；host-only cookie 和 session 绑定实例，不设置共享父域 cookie |
+| 公网 Gateway | 一套受监督 Caddy 管配置的 HTTPS/可选 HTTP 端口；按域名分发，不把实例管理入口自动公开 |
+| DNS challenge | 一个 UDP/TCP listener，仅处理已声明的 challenge zone |
+| 内部通信 | socketpair 或 OCD_DIR/run 内的私有 socket；保留必要的自动分配 loopback TCP 端口，不暴露给用户配置 |
 
-凭证仍按实例配置。Day1 一个 bearer 凭证只属于一个 `(InstanceId, role)`；注册或修改时拒绝重复凭证，避免发现接口选不出实例。机器管理权限来自受保护的 control socket 及 OS peer 校验，不增加万能 HTTP token。
+ID、Host、路径均不代表授权。Git/R2 独立凭证、上传 token、tail/WebSocket、Dashboard 和其他非 `/accounts` 入口也必须定位并验证实例。移除/覆盖伪造内部 header；共享索引和会话以实例和运行代次隔离，停止后旧能力失效。
 
-ID、Host 和路径只负责定位，均不是授权。A 的 token 不能访问 B。上传 token、Git/R2 独立凭证、tail、WebSocket 和无 account 路径的数据面必须各自确定并验证实例，不得遗漏。Host 进入已知 Worker 后只能走 Worker 路由，即使路径是 `/client/v4` 或 `/operator`，也不能变成管理请求。
+Gateway 的持久状态统一在 `<OCD_DIR>/gateway/`；实例只拥有域名声明和业务路由，不能注入全局 Caddy 配置。域名、base domain、challenge zone 不得重叠；Host 索引由清单和实例路由权威重建，不另存全局路由数据库。未知/停止实例流量不 fallback 到其他实例。
 
-私有 token/session 绑定实例与运行代次；实例停止或换代后旧能力失效。来自客户端的内部身份 header 必须剥离或覆盖。共享缓存、连接或 registry 只要存在，key 就必须包含实例作用域。
+保留原生多 Caddyfile、CNAME、PROXY peer、TLS 校验和私有 upstream 安全合同。共享配置先渲染验证再应用，失败保留已生效配置；受信任 operator Caddyfile 与受管 listener/域名冲突仍拒绝。低端口权限由显式部署设置或端口转发解决，不以支持 80/443/53 为由把默认 daemon 提权。
 
-全局 `/health/live` 表示 daemon 存活；全局 ready 表示共享管理/入口能服务。实例 readiness 通过带实例选择的状态接口报告；一个实例 degraded 不应被误当成重启整个 daemon 的信号。日志和聚合 metrics 带 InstanceId，不暴露凭证。
+## 7. 实例运行时与 Native extensions
 
-## 6. 数据与运行时所有权
+每实例独占存储、密钥、crypto、调度器、运行任务、业务缓存、健康状态、workerd supervisor、扩展 registry/broker 和 session。不得通过进程全局“当前实例”变量切换作用域。
 
-| 机器共享 | 每实例独占 |
+Provider 所有权固定为 `(InstanceId, extension_name)`；即使扩展名和二进制相同也不跨实例共享进程。实例内不同 Binding 仍可共享 Provider，但 props/session 独立；名字冲突只在所属实例检查。沿用静态扩展、facade、`services + props`、socketpair 和 FD 交付，不改成 dlopen 或业务 payload 代理。
+
+保留首次调用启动、已打开 executable 验证、env clear、独立进程组、私有 FD、有界日志、lease/start identity、退避及 TERM/KILL/reap。Provider 可变工作数据及 lease 在本实例目录；换代撤销旧 session，停止 A 不得触碰 B 的进程、FD、lease。扩展更新通过重启所属实例生效；不热加载、不自动重放有副作用的调用。
+
+这只是状态、通信和生命周期隔离，不是 native OS 沙箱。同 UID native code 能访问的绝对路径、网络和设备不会因 cwd 不同自动隔离；本阶段只支持 operator 信任的扩展。独占设备冲突清晰失败，不新增权限 broker 或硬件调度器。
+
+## 8. Cache 与 temp 管理
+
+**Cache 必须是可重建副本；清理由 owner 执行，不依赖系统清理，也不要求用户日常手动维护。**
+
+| 范围 | 自动清理 |
 | --- | --- |
-| daemon 配置清单、全局锁、control socket、入口路由索引、Caddy/TLS/challenge 服务、整机资源 admission | `control.sqlite`、scheduler/log 数据、密钥、业务文件、本地对象根、S3 实例前缀、缓存、调度器、secret crypto、运行时 auth、workerd supervisor、extensions 与 session |
+| `<OCD_DIR>/cache/` | daemon 管理共享可重建缓存和工具物化副本；只清理所有实例均未使用的条目，当前 pin/正在执行的工具版本保留 |
+| `<INSTANCE_DIR>/cache/` | 所属实例沿用容量上限、LRU、高/低水位及 pin 保护；产品 Cache API 的 TTL/配额仍由对应产品处理 |
+| 两类根下的 `tmp/` | 创建者正常结束或失败时释放自己的临时文件；崩溃残留在取得所属锁并完成恢复后有界清理 |
 
-实例数据库本身就是作用域。删除 `accounts` 表及只为多 account 分层设置的恒定字段、索引、外键和查询参数；不要把它们机械改名成每行重复的 `instance_id`。存储对象必须绑定明确的 InstanceContext；不能使用“当前实例”全局变量。
+自动清理复用现有 cache/maintenance 路径：启动检查过期 partial，缓存写入触发容量回收，维护周期回收已过期/已释放条目；不新增常驻清理进程或通用 GC 框架。缓存写入/物化前计算空间需求并保护并发占用；所有候选仍在使用、无法回收足够空间时拒绝新增占用并报告，不强删使用中条目，不把高低水位误当作可突破的硬磁盘保护。
 
-跨实例共享索引、对象存储物理前缀、备份 manifest、密文身份绑定和私有 capability 需要作用域时，使用唯一 InstanceId。secret AAD 和 DO/书签/游标等身份输入同步改造，不能只改数据库字段。原有 Worker、版本、资源间的约束继续保留。
+数据库、对象原件、业务持久数据、密钥、Caddy 证书/ACME 状态、生效配置、进程 lease、恢复中的 staging 和未完成操作记录均不是 cache。手动清理也不得递归删除整个 cache/run/runtime 根；只能调用经过所有权检查的缓存清理逻辑，跳过 pin 并报告释放字节、跳过条目和失败原因。清理失败不能伪装成全部成功；不为清理强制停止实例。
 
-两个实例可使用同一 S3 服务或 bucket，但实际 key prefix 必须按 InstanceId 隔开；不得复用同一个可写对象根。各实例资源配额之外，整机仍需 admission 上限；数据目录不等于磁盘、CPU 或内存配额，daemon OOM 仍是共享故障。
+每个临时任务使用所属 `tmp/` 中独立的私有目录。受管子进程的 TMPDIR/TMP/TEMP、HOME/XDG 缓存和日志输出按需显式指向所属根，env clear 后只传允许项；构建/升级物化、解析、Caddy/Provider 临时输出不能漏到第三处。需跨崩溃恢复的文件放明确的 runtime/staging 位置，不放可直接扫除的 tmp。
 
-Linux 布局示例：
+只在确认对应任务及子进程不再活动、无恢复引用后删除 temp 残留；不能只凭 mtime、PID 数值或“daemon 刚启动”判断安全。先核验 start identity/binary digest 并完成 orphan recovery，再清理；证据不足跳过并报告。全局清理不递归扫实例目录、其他 UID 或未知子目录；已登记的外置实例由自己的 owner 持锁清理。必须保留的失败诊断不归入一次性 tmp。
 
-```text
-/var/lib/open-compute/gateway/          # 机器共享持久状态
-/srv/dev/compute.toml                  # 实例配置
-/srv/dev/data/                         # 实例全部持久数据
-/srv/dev/data/runtime/extensions/...   # 实例 Provider 工作目录与 lease
-/run/open-compute/control.sock         # 固定机器管理入口
-/run/open-compute/i/<instance-id>/     # 短运行目录，存放该实例的 filesystem sockets
-```
+## 9. 生命周期与 CLI
 
-Unix socket 路径必须满足现有绝对路径与 103 encoded bytes 上限，不能拼接任意 data/cwd/TMPDIR。macOS 使用安装时选定的固定系统运行目录，同样执行长度校验。runtime socket/descriptor 是可重建状态，不需要为了“一个数据目录”塞回持久数据根。
+daemon 只处理一次 OS signal、作用域锁、服务注册、公共 listener、共享 Gateway 和总退出。InstanceRuntime 接受独立取消信号并持有全部 task/child handles，不自行监听全进程退出。每实例变更串行，状态为 stopped/starting/running/stopping/failed，健康状态独立。
 
-## 7. Native extensions
+冷启动先检查清单、根目录、ID、名称、凭证和域名冲突；冲突项不按加载顺序选赢家。全局配置或 bind 失败拒绝 daemon 启动；单实例初始化失败只标记该实例。停止实例先撤路由和新任务、撤能力，再有界 drain/结束 tasks 和 children，关闭存储后释放数据锁；未结束不得报告 stopped。
 
-沿用 W3 的静态配置、facade、`services + props`、socketpair 和受监督 Provider，不改成 `dlopen`，不新增插件注册中心。
-
-**Provider 的所有权是 `(InstanceId, extension_name)`。** 两个实例即使配置相同名字、目录或二进制，也分别启动 Provider；实例内不同 Binding 可继续共享该 Provider，各自保留 session/props。相同扩展名在不同实例不冲突；扩展与 Worker 的名字冲突检查只在所属实例内执行。
-
-每个实例持有自己的 LocalExtensionRegistry、ServiceInvocationRegistry、HostExtensionBroker 和 workerd supervisor。保留现有首次调用启动、清理继承环境、独立进程组、私有 FD、日志限额、lease/start identity、退避、TERM/KILL/reap；已打开的二进制验证规则不变。Broker 只交付授权 session FD，不代理业务 payload，也不让 Provider 绑定公共端口。
-
-停止实例时先停止新调用并撤销能力，终止和回收该实例 workerd/Provider，等任务与文件句柄退出后才释放数据锁。A 的重启和 orphan recovery 不得关闭 B 的 FD、任务、Provider 或 lease。扩展内容修改通过重启所属实例生效，不增加热加载或兼容兜底。
-
-**这是状态、通信和生命周期隔离，不是对不受信任 native code 的 OS 沙箱。** 当前 Provider 与 daemon 权限主体相关，同 UID 下的绝对路径、网络、设备和用户全局缓存不会因不同 cwd 自动隔离。Day1 仅支持 operator 信任的扩展；跨互不信任主体运行 native code 需要独立 OS 权限/沙箱，明确不在本重构范围。访问同一独占设备时允许清晰失败，不建设通用硬件调度器。
-
-## 8. 生命周期与最小实现
-
-将现有 `run_platform(LoadedConfig)` 拆为机器级 daemon composition 与可独立启停的 InstanceRuntime；不是并排调用多次旧 `run_platform`。
-
-机器级只处理一次信号、单例锁、OS service、公共 listener、网关和全局退出。实例级负责加载配置、持有数据锁、构建服务、启动/停止 tasks 与 children，接受自己的取消信号，不自行监听 OS signal，不终止整个进程。
-
-实例状态只需 `stopped → starting → running → stopping`，启动或运行失败记为 `failed`；健康状况单独报告。每实例串行处理生命周期变更。run error 需有界清理，不能丢弃 task handle 后继续称实例已停止。
-
-冷启动先检查所有配置、身份、数据根、凭证和域名冲突；冲突项拒绝启动，不按加载顺序选赢家。全局配置或公共 bind 错误使 daemon 启动失败；单个实例初始化失败仅标记该实例。已有实例运行时加载新实例失败，不影响旧实例。
-
-目标 CLI：
+以下是目标命令；新增行为需实现后才能使用：
 
 ```sh
-ocd run --config /etc/open-compute/ocd.toml       # 唯一前台 daemon
-ocd start                                      # 启动机器服务，不选择实例
-ocd stop                                       # 停止整个 daemon
+ocd setup --yes                           # 默认用户级，无 sudo
+sudo ocd setup --system --yes             # 仅系统级 setup 需要相应权限
+ocd run                                  # 读取用户 OCD_DIR/ocd.toml
+ocd start
+ocd stop
+ocd restart
+ocd status
 ocd instances
-ocd instance add --config /srv/dev/compute.toml # 更新唯一实例清单并初始化新实例
+ocd instance add --data-dir /mnt/data/dev # 目录中已有 compute.toml
 ocd instance start dev
 ocd instance stop dev
 ocd instance restart dev
-ocd instance remove dev                       # 停止并移出清单，保留配置与数据
+ocd instance remove dev                   # 停止并移出清单，保留配置和数据
+ocd cache clean                           # 只清理全局 cache，不递归包含实例
+ocd cache clean --instance dev            # 只清理指定实例的 cache
+ocd cache clean --all                     # 全局及清单内各实例，逐项报告
+ocd cache clean --instance dev --dry-run   # 预览，不创建目录、初始化或修改数据
+ocd --system status                      # 显式选择系统 OCD_DIR，非自动提权
 ```
 
-上述为待实现命令。start/stop 是本次 daemon 生命周期操作；重启 daemon 后按清单的 `autostart` 决定启动。修改配置后显式重启所属实例；公共端口变更重启 daemon。不为任意配置热更新设计 reconcile 引擎。
+`--instance` 与 `--all` 互斥；选择器接受完整 InstanceId 或唯一名称。手动 cache clean 尽可能回收目标范围内全部未使用且可重建的条目，不受是否达到高水位限制，不附带 purge/temp 清理。自动策略仍按水位/过期条件执行。
 
-全机唯一要求一个系统级 service 与固定单例入口；不能继续让不同用户各自启动互不知情的 user daemon。安装时选择受限的非 root 运行用户并配置权限；普通运行不隐式提权。安装、权限和 macOS GUI/TCC 能力需要在对应宿主验证，不能把 launch agent 当作全机单例证明。多个独立容器必须连接同一宿主 daemon；互不共享单例入口的容器不属于“全机唯一”的支持部署。
+daemon 在线时，cache clean 必须经管理 socket 交给 owner，不能由 CLI 绕过 pin 直接删文件。daemon 确认离线时，CLI 可取得相同作用域锁及必要实例锁，先核验/回收残留子进程，再复用相同清理逻辑；拿不到锁或无法验证残留进程时拒绝清理，不能把 socket 连接失败当作“已经停止”。停止实例的清理由 daemon 取得该实例锁后执行；dry-run 同样不绕过授权。
 
-## 9. 网关与当前方案的关系
+add 只接受目录，不接受另一份 config path；初始化只针对明确的新实例状态。持久 start/stop 意图仅由清单 autostart 决定，单次 start/stop 不隐式改 autostart。配置改变后显式重启所属实例；公共端口和作用域变更重启对应 daemon。实例增删只影响相关实例，不实现通用 reconcile 引擎。
 
-P18 的每实例 listener/Caddy 归属由本方案替换：机器管理一套 Caddy 和 ACME 状态；实例只拥有域名声明和业务路由。保留原生多 Caddyfile 能力，但配置入口上移机器级。每实例 base domain 不允许重叠；同一 hostname/zone 的归属必须唯一。
+安装、升级和卸载每次只管理选定作用域的一套 OS service，默认保留实例数据。移除、purge、restore、全局卸载严格区分；purge 仍需原有显式确认和路径归属证明，不能因为默认实例嵌在 OCD_DIR 下就递归删除全部目录。
 
-全局 Host 索引从实例配置与各自持久路由权威重建，不再建第二份持久路由库。未知 Host/zone 拒绝路由；停止实例对应流量不可转给其他实例。现有 CNAME、TLS、PROXY peer 和私有 upstream 安全合同继续生效。
+## 10. 有边界的共享资源限制
 
-Caddy 变更先渲染、校验再应用；失败保留原来的有效配置，不中断其他实例。整机自定义 Caddyfile 是受信任 operator 配置，但与受管域名/listener 冲突仍须在应用前拒绝。不能让实例直接提交全局 Caddy 指令或占用机器端口。
+不承诺通用的“整机总负载保证”。R1 只将以下已有计数器上移到同一 daemon 共享服务，目标配置项均在 ocd.toml；不在每实例重复一份相同共享上限：
 
-## 10. Day1 与非目标
-
-按仓库 Day1 规则直接替换当前模型。旧 config、路径哈希 ID、独立账户 ID、旧 snapshot/加密/私有协议格式不创建双读双写、alias、fallback 或长期迁移兼容层。不以保留旧公开 account ID 为理由留下派生函数；本次身份 break 需要更新本地 Wrangler/SDK target。
-
-已发布数据库 migration 的文件名、顺序和字节保持不变，当前 schema 通过追加 migration 表达；无法安全接纳的旧状态明确拒绝。历史 migration 中的单词不构成当前内部模型。读取或启动失败不得删除、重置或擅自转换用户数据；另行保留数据/迁移不在本文授权范围。
-
-不新增内部 account/tenant/workspace 三层模型、集群控制面、每实例 OS service、共享 workerd 大池、Provider 池、native marketplace、动态扩展加载或通用跨实例权限系统。
-
-## 11. 实施原则与范围
-
-本次跨 P0/P6/P11/P12/P17/P18/W3 替换身份和所有权模型。删除范围按第 2、4、10 节执行；禁止用 `type AccountId = InstanceId`、废弃别名、私有协议旧字段或运行时 schema fallback 假装完成删除。
-
-批次是开发顺序，不是要发布六套过渡架构。各批次同时更新受影响的生产者、消费者和测试；只有最终单一模型可进入验收。共享 crate 边界沿用仓库现状，不额外建控制平面 framework。
-
-## 12. 按模块修改
-
-| 范围 / 当前入口 | 修改 | 必须删掉或避免 |
+| 配置项 | 单位、默认值 | 获取/释放与超限行为 |
 | --- | --- | --- |
-| `crates/core/src/instance_id.rs`、ID 定义、`config.rs` | 一个可持久化的 32-hex InstanceId；拆出 DaemonConfig 与 InstanceConfig | 路径 SHA/Crockford ID 分配、独立 PlatformId/AccountId、默认账户、实例内公共 bind |
-| `crates/storage/src/identity.rs`、`lib.rs`、schema/migrations | 元数据只保留实例身份；存储 owner 绑定实例；产品表依靠独立数据库作用域 | accounts 表、恒定账户列/外键/参数；机械地换成每行恒定 instance_id |
-| `crates/storage/src/crypto.rs`、产品 paths、`crates/artifacts/` | 密文、DO key、书签、游标、manifest 与共享对象前缀统一使用 InstanceId；保持授权和完整性约束 | 旧身份查找、旧 AAD 双读、旧前缀 fallback、绕过验证寻找数据 |
-| `crates/service/src/run.rs`、`run/startup.rs`、`run/execution.rs` 及其子模块 | 抽出有明确 owner 的 InstanceRuntime；daemon 独占 signal、公共入口和总退出 | 每实例 signal listener、每实例公共 bind、错误时退出整个 daemon |
-| `instance_registry.rs`、`instance_control.rs`、`service_manager.rs` | 一份配置清单、一个 control socket、一个机器服务；实例生命周期由 daemon 负责 | 每实例 OS service、路径 digest registry、重复服务状态、跨 HOME 的多个 daemon |
-| `http.rs`、`http/state.rs`、`cloudflare_v4/`、各产品 HTTP handler | 外层解析/授权实例，内层使用该实例 HttpState；wire 参数叫 account_id，内部变量/类型叫 InstanceId | AccountAuthority、public_account_id、cloudflare_v4_account、默认实例兜底 |
-| Worker/资源/binding API、`crates/workers/`、`packages/runtime/` | 局部调用从 InstanceContext 获得作用域；共享表和私有 capability 显式包含 InstanceId | 私有 account/accountId 字段、只按 Worker 名或扩展名索引的全局可变状态 |
-| `host_extension_broker.rs`、`local_extensions.rs`、`service_invocations.rs`、`crates/runtime/` | 每实例 broker/registry/Provider/supervisor；复用既有监督机制 | 跨实例 Provider 去重、共享 session、无身份校验的进程清理 |
-| `config/public_gateway.rs`、`gateway_*`、`challenge_dns`、持久路由 | 一个全局网关、一个 DNS listener；每实例声明域名；路由内存索引可重建 | 每实例 Caddy/listener、第二份持久全局路由权威、实例任意注入全局 Caddy |
-| CLI、`target_registry.rs`、`target_http.rs`、Wrangler 接线、Dashboard、自有 SDK | 使用 instance_id/instanceId；对外 SDK/Wrangler 调用点才写 account_id；target 指向 endpoint + InstanceId | 同时保存 instance/account 两套值、“默认账户”UI、按配置另起 daemon |
-| install / upgrade / uninstall / purge / backup / restore | 安装和升级只管理一个 service；实例移除仅停实例；删除数据保持原有显式确认 | 逐 instance 安装/升级 OS service、卸载时猜测或自动删除实例数据 |
-| 运行指南、schema、fixtures、测试注册表 | 源码、维护文档、机器合同、例子一起更新；历史报告仍只代表历史 | 宣称只改单个路径就能完成；保留旧案例迫使生产实现兼容分支 |
+| `artifacts.max_concurrent_requests` | 同时在途的 Git 请求数，16 | 所有实例共享同一 semaphore；开始读取/处理 Git body 前 try-acquire，请求/流结束或错误取消释放；无额度拒绝新 Git 请求，不建无界队列 |
+| `metrics.max_series` | daemon 保留的不同 metric series 总数，1024 | 包含 InstanceId 标签后的实际 series 统一计数；新增注册前检查，删除 series 时释放；到上限拒绝新增 series 并有界报告，不驱逐现有 series 或重启 daemon |
 
-`accounts.rs` 可保留为很薄的 CF wire handler 文件，或收敛到兼容模块的实例投影 handler；文件内不能再定义内部账户权威。产品私有 API 不增加一套独立 account 表面。
+Git 超限沿用产品已声明的限流错误；metric 容量不足不能导致进程崩溃。全局/实例 cache 另按第 8 节限制。产品数据库、Worker/资源数、解析并发等仍按实例现有策略执行，不为了 R1 新建通用调度、公平分配、CPU/RSS 聚合配额或跨文件系统磁盘预算框架；现有磁盘低水位与写入保护不删除。
 
-## 13. 实施顺序
+全局 `/health/live` 表示 daemon 存活，ready 表示共享入口可服务；实例 readiness 单独报告。日志/业务 metrics 以 InstanceId 区分，单实例 degraded 不触发全 daemon 重启。资源回归只验证本节两个明确计数器及已有实例限制，不以一次压测宣称硬资源隔离。
 
-### R1.1 身份和实例存储
+## 11. 备份、恢复与共享状态归属
 
-- [ ] 定义唯一 InstanceId、格式校验、生成与 `control.sqlite` 权威；metadata 读取与初始化分离。
-- [ ] 同步替换独立 PlatformId/AccountId；删除默认 account 和多层身份生成逻辑。
-- [ ] 将产品 repository/engine 绑定实例存储；删除实例内恒定账户维度，保留资源、Worker、版本之间的有效约束。
-- [ ] 修改文件路径、S3 prefix、secret AAD、DO 身份、书签/游标、snapshot manifest 和私有协议所有对应生产者与消费者。
-- [ ] 明确本次格式 break：旧状态不支持时停止，不自动修改、重置或“修复”用户数据。不得保留旧 ID 转换函数。
+实例备份以 INSTANCE_DIR 为边界，保护 compute.toml、身份、密钥及业务持久数据；远端对象仍按产品的备份合同处理，不能假称复制本地目录就包含 S3。实例 cache/tmp 和具名 socket 不进入备份；可重建工具副本不要求备份。实例备份不包含全局 Gateway。
 
-发布 migration 的字节不可修改。检查本基线已发布的 migration 清单后追加当前 schema 变更；若旧资源状态不能在本次范围内安全接纳，migration 应事务失败并说明需要新目录，不留下部分删除后的数据。对新建库执行完整当前迁移链后仅有一个现行模型。不要仅为了旧开发数据额外设计迁移服务。
+**共享状态由 operator 独立备份，R1 不新增机器备份引擎。**备份范围包括 OCD_DIR/ocd.toml、全局必需 secret、Gateway 的证书/ACME storage 与已生效配置，以及引用的 operator 配置输入。缓存、临时 challenge TXT、socket、PID/运行 lease 不作为恢复输入；外部输入需 operator 自行一并保护。全局备份不递归吞入默认 instances，避免混淆实例备份归属；secret 备份保持私有权限，不进日志或 support bundle。
 
-### R1.2 配置与全机单例
+本阶段的整机冷恢复顺序固定为：停止 daemon 及全部 children → 恢复全局配置/Gateway 持久状态与权限 → 恢复需要的实例目录及对应远端数据 → 核对路径/ID/冲突 → 启动 daemon。迁移到其他位置时 operator 显式更新实例清单，不通过旧路径搜索自动兜底。
 
-- [ ] 拆分 DaemonConfig/InstanceConfig；保留现有严格校验、secret 引用与相对路径规则。
-- [ ] `ocd.toml` 成为唯一实例清单；CLI 经 daemon 修改清单，写入采用现有原子写与权限检查。
-- [ ] 固定机器单例锁和 control socket；任何 daemon 启动入口均先获取同一个锁，不能借更换 config/cwd/HOME 绕过。
-- [ ] 替换每实例 systemd/launchd 记录；机器级 service 由安装器配置。开发运行也使用同一单例入口，测试隔离入口仅在 test-support 中注入。
-- [ ] 拒绝配置重复、数据根重叠、重复 InstanceId/名字、重复凭证与域名冲突。保留真实 data-dir flock。
+已初始化 Gateway 的证书/ACME storage 丢失时拒绝自动批量重签；全新 setup 与状态丢失必须区分，恢复备份或由 operator 明确重新初始化。实例恢复不得覆盖共享 Gateway；global cache clean、instance purge 和目录权限处理都不得触碰证书及其他实例。
 
-### R1.3 InstanceRuntime 与生命周期
+## 12. Day1 实施原则
 
-- [ ] 重用现有存储 bootstrap、运行时 verify 和 composition，提取可取消的 InstanceRuntime；不平行启动多个旧 `run_platform`。
-- [ ] 每实例拥有全部 task handles、workerd supervisor、调度器、后端 listener、auth registry、metrics 和健康状态。
-- [ ] signal/daemon shutdown 只在最外层；实例启动/失败/停止均有界清理，不影响其他实例。
-- [ ] 同一实例生命周期操作串行化；停止流程先撤路由/新请求，撤销 session，drain/终止 children 与 tasks，最后关闭数据库并释放锁。
-- [ ] 进程恢复保留 binary digest、start identity、lease 和 process group 校验，不通过遍历 PID 或 executable 名称杀进程。
-- [ ] 共享整机 admission 与每实例预算各司其职，不宣称单数据目录等于硬资源隔离。
+本次只保留一个现行模型：同一作用域单 daemon、唯一 InstanceId、两类数据根、固定配置入口。旧 config/state/cache/runtime 路径、路径哈希 ID、账户别名、旧 API 私有字段、旧 AAD/snapshot/hash 输出不保留读写分支、backfill、alias、fallback 或迁移服务。唯一协议兼容义务是项目明确支持的官方 Cloudflare 行为，不是旧 open-compute 实现。
 
-### R1.4 统一入口、授权与网关
+已发布数据库 migration 的文件名、顺序和字节不可修改；需要改变当前 schema 时追加 migration。不能安全接纳的旧状态明确拒绝并保留原数据，不在启动、setup 或清理中自动重置。新目录执行完整当前迁移链后只有一个现行模型；不为了旧开发数据保留账户层。
 
-- [ ] daemon bind 一次公共 HTTP，可选 admin HTTP 同样一次；内部先做 Host 分类，再做所属面的路由。
-- [ ] CF 路由读取 account_id 的原始值为 InstanceId，授权后交给实例局部 HttpState。删除全部账户转换/派生。
-- [ ] 无路径 ID 的 CF 发现接口由凭证定位；保留受支持的响应形状。未知 ID、越权、缺凭证均返回相应兼容错误，不返回别的实例。
-- [ ] 逐项接入 Git、R2、上传 token、tail/WebSocket、Dashboard cookie 和其他非 account 路径入口；不能只改 REST /accounts 路径。
-- [ ] 本地域名用唯一 InstanceId；保留 Worker-host-first 和内部 header 防伪。共享 cache key 显式含实例作用域。
-- [ ] Caddy/TLS/challenge DNS 升到 daemon；保留 P18 的域名归属、CNAME、peer trust、私有 socket 和验证后 reload。
-- [ ] 域名/zone 所有权索引只由各实例权威投影；停实例不允许流量 fallback，配置失败保留其他实例的有效网关。
+实施按职责闭环推进，不按预先枚举的文件名单判断完成：
 
-### R1.5 扩展、CLI 和工具链
+- [ ] 身份/存储：统一实例权威，删除账户维度，同步所有路径、密文、资源引用和私有协议的生产者与消费者。
+- [ ] 目录/权限：固定两类根，保留默认用户级体验，统一 owner/mode、真实 peer 校验、同一清单写入与作用域单例。
+- [ ] 生命周期/入口：独立 InstanceRuntime、共享 listener/Gateway、全部入口授权、跨实例隔离与子进程恢复同时接通。
+- [ ] 清理/备份/工具：自动 cache/temp 回收、CLI cache clean、共享状态备份归属、安装/升级/purge/restore 和 SDK/Dashboard 引用一起更新。
+- [ ] 收尾：删除旧实现和无效参数，同步维护合同、生成输入、例子和测试；完成对应静态检查、coverage 与一次最终 Gate。
 
-- [ ] Provider 以 `(InstanceId, extension_name)` 为所有权；同 binary、同名字也不跨实例共进程。
-- [ ] 实例独占 extension/binding/session registry；Binding props 不变；native 权限仍是受信任 operator 边界。
-- [ ] CLI 区分 daemon 和 instance 生命周期；`instance remove` 保留配置/数据；purge、restore 与卸载不扩大破坏权限。
-- [ ] target 状态只存 InstanceId；自有 SDK/Dashboard 内部只用实例名称；调用官方 SDK/Wrangler 时才填线格式 account_id。
-- [ ] 升级只替换一次 daemon executable、重启一次机器 service，由 daemon 恢复所有 autostart 实例。
-- [ ] 核查私有 runtime schema/模板。只有确实涉及原生 seam 变更才修改正式 fork，并按既有 pin/build/Gate 规则同步，不能假设旧二进制已支持新协议。
+以上是开发顺序，不是发布多套过渡架构。涉及正式 workerd 私有 seam 时同步 fork、pin 和验证，不假设旧二进制支持新协议。实现期间同步替换 AGENTS/维护文档中旧的单实例、外置 runtime 路径等规则；本文仍为 planned，不提前把当前实现标成新模型已完成。
 
-### R1.6 清理、文档与一次验收
+账户残留检查覆盖生产领域类型、配置、数据库、私有 runtime 数据、SDK/UI 状态和全部调用边界，不以某个目录豁免代替检查。允许的 account 词只在 CF wire 参数/DTO/相应协议测试及不可改写的已发布 migration 中；不得藏入第二个身份权威。OS 用户变量明确命名为 uid/gid/service_user。默认 root、旧路径发现、外部临时目录以及可写根重复配置也需同样清除。
 
-- [ ] 删除被替代的旧实现、无效参数和测试，更新源合同及生成输入；不手改生成文件。
-- [ ] 更新维护文档、CLI/安装示例和 docs 索引；将 AGENTS 的“一个平台/一个 workerd”表述更新为 daemon/instance 所有权。当前文档阶段不提前改写已实现事实。
-- [ ] 新 Gate cases 注册到现有 case inventory，无另起重复 suite、跳过不支持的旧断言或放宽成功条件。
-- [ ] 静态检查与 coverage 后，最终 `./test/gate.py --workspace` 只跑一个完整轮次；记录真实结果。
+## 13. 回归与交付
 
-## 14. 必须通过的回归
-
-所有断言要求同时运行 A/B，刻意使用相同 Worker/资源/扩展名，并在需要验证共享 key 时注入可碰撞的局部 ID。不要只用永不重复的随机名称掩盖作用域问题。
+跨实例场景同时运行 A/B，刻意使用相同 Worker/资源/扩展名，并在共享 key 测试中注入可碰撞的局部 ID。以下是待实现断言，不是已通过结果；复用现有 Gate/case inventory，不新增重复 suite。
 
 | 编号 | 必须证明 |
 | --- | --- |
-| R1-T01 全机单例 | 两个不同 config/cwd/HOME 启动，只有一个 daemon 获得机器锁；第二次启动失败且不破坏原 control socket。跨 OS 用户需真实宿主资格，不以 unit test 冒充 |
-| R1-T02 唯一身份 | 新目录初始化一次；重启、移动配置并保持原数据路径、搬迁完整数据不变 ID；损坏身份不重建；只有一种 32-hex 对外表示 |
-| R1-T03 重复与锁 | 同目录、父子目录、两目录同 ID、两份配置引用同实例均拒绝；真实离线工具仍拿不到运行中实例的数据锁 |
-| R1-T04 CF 原样 ID | `/accounts/{id}`、列表响应、target 与内部 InstanceId 完全同值；无哈希/别名转换；受支持 Wrangler 工作流可部署到指定实例 |
-| R1-T05 凭证 | A token 不能读写 B；重复凭证拒绝；无 ID 发现只返回授权实例；无凭证不得枚举全机实例 |
-| R1-T06 Host 隔离 | A/B 同名 Worker 可同时服务；未知 Host 拒绝；Worker 上的 `/client/v4`、`/operator` 不进入管理面；伪造内部 header 无效 |
-| R1-T07 存储 | 同名 KV/R2/D1/Queue/DO 等互不读写；对象 key/S3 prefix 隔离；不通过切换一个全局“当前实例”实现 |
-| R1-T08 密文与备份 | A 密文/书签/能力不能在 B 使用；新格式重启可读；不支持的旧格式拒绝且原数据保留；备份、restore 身份校验一致 |
-| R1-T09 独立启停 | 重启或停止 A 后 B 请求持续完成；A 的启动失败不终止 B；A 数据锁只在任务、children 和存储都退出后释放 |
-| R1-T10 实例与 daemon 恢复 | crash/restart 不遗留 children、listener 或有效旧 token；一个实例恢复不能误杀另一个实例；daemon 重启只恢复清单中的 autostart |
-| R1-T11 Provider 隔离 | A/B 相同扩展名和二进制有不同 Provider PID/cwd/lease；实例内多 Binding 的既有共享语义不变 |
-| R1-T12 Session 隔离 | A 的 generation/session/FD 不能 attach B；A 停止撤销能力；迟到 ACK、旧代次和断连 fail closed |
-| R1-T13 Provider 故障 | A Provider crash/backoff/熔断不影响 B；停止 A 只清理 A 的进程组；native 副作用不被自动重放 |
-| R1-T14 共享网关 | 全部实例只启动一个 Caddy 和一个 challenge listener；多域名正确归属；重复/重叠域名和 Caddyfile 冲突拒绝 |
-| R1-T15 网关失败 | 新配置验证失败保留已有服务；停 A 不把 A 域名路由给 B；未知 challenge zone 不被授权；真实 TLS/DNS 另行资格记录 |
-| R1-T16 Socket/端口 | filesystem Unix socket 最长路径规则保持；长 config/data path 不进入 socket 路径；内部端口自动分配且 loopback-only |
-| R1-T17 非 REST 表面 | Git/R2 独立凭证、上传 token、tail/WebSocket、Dashboard login/cookie 均正确选择和隔离实例 |
-| R1-T18 运维与权限 | 一次安装/升级只管理一个 service；remove 不删数据；未知归属/运行中数据的 purge 拒绝；status 不写 DB、不泄露秘密 |
-| R1-T19 资源与观测 | 整机上限确实约束多实例总负载；实例限额仍有效；metrics/log 作用域正确，单实例 degraded 不触发整机重启 |
+| R1-T01 作用域与安装 | 默认 setup/CLI 不用 root；显式 system setup 后 daemon 仍为原非 root 用户；同一 OCD_DIR 只有一个持锁 daemon，改 cwd/HOME 不创建另一用户根，重复启动不破坏原 socket；不同 scope 无隐式 fallback |
+| R1-T02 唯一身份 | 初始化一次、重启/搬迁不变 ID；损坏身份不重建；名称变更不影响引用；无名称实例可管理；内外 ID 同值 |
+| R1-T03 目录边界 | 默认 instances 子目录及外置实例合法；全局根/保留子目录/父目录重叠、实例互嵌、重复 ID、symlink 逃逸和独立 local object root 拒绝；purge/restore 不碰其他 owner |
+| R1-T04 CF 线协议 | account_id 原样使用 InstanceId；列表/成员等支持面仍可用；资源 ID、Queue/consumer、Worker tag 的查询引用往返和正式 Wrangler 部署通过，无旧 hash 兼容 |
+| R1-T05 HTTP 凭证 | A token 无法操作/枚举 B；重复凭证拒绝；无 ID 发现只选择授权实例；HTTP admin 无权改 ocd.toml 或扩展路径 |
+| R1-T06 Host 隔离 | 同名 Worker 同时服务；未知 Host 拒绝；Worker 的管理样式路径不进入管理面；伪造内部 header 无效 |
+| R1-T07 数据隔离 | KV/R2/D1/Queue/DO 等同名资源互不读写；S3 key prefix 隔离；无全局当前实例切换 |
+| R1-T08 密文与备份 | 跨实例密文/书签/capability 拒绝；新格式重启可读；旧格式拒绝且不删原数据；实例备份与 restore 身份一致 |
+| R1-T09 独立启停 | A 重启/启动失败不终止 B；停止先撤入口并收回 tasks/children，最后才释放存储锁 |
+| R1-T10 恢复 | daemon/实例 crash 后恢复不误杀其他实例、不遗留有效旧能力；完整校验 lease/start identity；只恢复清单 autostart |
+| R1-T11 Provider | 同名同 binary 的 A/B Provider 有不同 PID/cwd/lease，实例内多 Binding 共享语义不变 |
+| R1-T12 Session | A 的 generation/session/FD 不能 attach B；迟到 ACK、旧代次、断连及停止均 fail closed |
+| R1-T13 扩展故障 | A 的 crash/backoff/熔断不影响 B；只回收所属进程组，不自动重放 native 副作用 |
+| R1-T14 共享网关 | 一个 Caddy/一个 challenge listener；域名/zone/Caddyfile 冲突拒绝；原生配置及私有 upstream 仍受约束 |
+| R1-T15 网关失败与恢复 | 无效新配置不破坏有效服务；未知 zone/停实例无 fallback；全局备份与实例备份分离；丢失 ACME storage 不自动重签 |
+| R1-T16 Socket 与输出根 | 具名 socket 只在 OCD_DIR/run，超长无外置 fallback；自动 loopback 端口不冲突；受管子进程的 cache/tmp/log 不写第三根 |
+| R1-T17 非 REST 表面 | Git/R2 凭证、上传 token、tail/WebSocket、Dashboard 登录和 cookie 全部验证正确实例 |
+| R1-T18 运维 | add/remove 只改唯一清单并保留数据；安装升级只管理选定 scope 服务；未知/运行中数据 purge 拒绝；status/dry-run 不初始化数据 |
+| R1-T19 明确资源边界 | A/B 合计 Git 在途请求不超过共享上限，取消后释放；总 metric series 不超过配置；已有实例限额仍有效，单实例 degraded 不触发整 daemon 重启 |
+| R1-T20 Peer 与配置写入 | Linux/macOS 真实 socket 验证 owner/root 允许、其他 UID/peer 获取失败拒绝；0700/0600 权限有效；同 UID CLI 无 sudo 改清单，写入失败/内容冲突不覆盖有效配置 |
+| R1-T21 Cache clean | 自动水位/LRU/pin 有效；全局/单实例/all 范围准确、选择器互斥；共享工具在任一实例使用时不可删；dry-run 不写；在线走 owner、离线需锁和 orphan 验证；释放/跳过/失败报告真实 |
+| R1-T22 Temp 安全 | 正常退出回收私有 tmp；崩溃后先恢复再扫；活动任务、恢复引用、其他实例及身份不明文件不可按年龄误删；secret、证书、lease、业务原件从不进入缓存回收 |
 
-## 15. account 残留检查
+文档改动只要求 `git diff --check`、示例语法、链接/索引及目标一致性检查，不构建 Rust、不下载 LFS runtime、不宣称上述产品回归通过。实现后的静态检查、正式 pin、coverage ≥90.00% 和单轮最终 Gate 遵循 [仓库规则](../AGENTS.md) 与 [测试规范](references/testing.md)，不降低门槛或多轮重跑掩盖失败。
 
-生产源码应人工核查以下结果，并将精确的协议边界约束接入已有 boundary check，而不是整目录大范围豁免。
-
-```sh
-rg -n 'AccountId|PlatformId|AccountAuthority|default_account_id|public_account_id|cloudflare_account_id|cloudflare_v4_account|digest_canonical_config_path' crates packages apps
-rg -n '\b(account_id|accountId|accountID|platform_id|platformId)\b' crates packages apps
-rg -n '\baccounts\b' crates packages apps
-```
-
-以上为待实施仓库检查命令，不是本次已运行的结果。
-
-允许保留：CF 路由、响应字段/DTO、官方 SDK/Wrangler 请求边界、对应协议测试，以及不得修改的已发布 migration 文本。它们不允许承载账户权威或生成第二个 ID。禁止简单豁免整个 `cloudflare_v4/`、SDK 或 migrations 目录来藏现行内部账户代码。
-
-内部业务参数、存储/配置字段、私有 runtime 数据、UI 状态和自有 DTO 不在允许范围。OS 用户解析不属于产品账户模型，但变量/函数也应明确叫 `uid`/`gid`/`service_user`，不混用产品的 `account_id`。
-
-## 16. 验证与交付
-
-文档阶段只验证 Markdown、TOML 示例、路径、索引、patch 与 `git diff --check`；不要求构建 Rust，不下载 Git LFS runtime，不宣称产品 Gate 通过。
-
-实施阶段使用仓库现有入口，执行权限遵守 AGENTS：
-
-```sh
-# 先准备已授权、正式 pin 的现有构建输入，再执行：
-bun run build
-cargo fmt --all --check
-./test/check-rust-clippy.sh
-RUSTFLAGS='-D warnings' cargo check --workspace --no-default-features
-cargo +1.98.0 check --workspace --all-targets
-cargo metadata --no-deps --format-version 1
-./test/check-boundaries.sh
-./test/coverage.sh
-./test/gate.py --workspace
-```
-
-保留 Rust 行覆盖率至少 90.00% 的当前门槛，不使用多轮重跑掩盖时序问题。真实多用户 service、macOS GUI/TCC、低端口、公网 DNS/ACME 和受特权控制的测试逐项取得授权并记录；没有证据时标记未验证，不宣称全平台完成。
-
-实现完成后按文档生命周期精简并移动 R1 结果，移除本文的实施过程、完成 TODO 与测试矩阵，只保留用户结果、持久边界、实际证据和接受的限制；不另留过渡架构副本。
-
-## 17. 源码依据
-
-以下是审阅基线的当前事实，不是目标已实现的证明；相对链接指向对应实现入口。
-
-| 当前事实 | 来源 |
-| --- | --- |
-| Instance ID 来自配置路径；registry 还保存服务与配置信息 | [instance_id.rs](../crates/core/src/instance_id.rs)、[instance_registry.rs](../crates/service/src/instance_registry.rs) |
-| 数据另存 platform/default account 身份；公开 ID 再派生 | [identity.rs](../crates/storage/src/identity.rs)、[accounts.rs](../crates/service/src/cloudflare_v4/accounts.rs) |
-| 配置和 run composition 同时拥有实例与机器资源 | [config.rs](../crates/core/src/config.rs)、[run.rs](../crates/service/src/run.rs)、[execution.rs](../crates/service/src/run/execution.rs) |
-| 数据路径、密文和资源访问已经使用旧 account 作用域 | [data_dir.rs](../crates/storage/src/data_dir.rs)、[crypto.rs](../crates/storage/src/crypto.rs)、[d1.rs](../crates/workers/src/d1.rs) |
-| Native Provider 已有独立进程、socketpair 和 lease | [host_extension_broker.rs](../crates/service/src/host_extension_broker.rs)、[persistent_process.rs](../crates/runtime/src/persistent_process.rs)、[W3](implemented/w3-user-extensible-native-bindings.md) |
-| Day1、发布 migration 不可变、短 Unix socket 和文档验证规则 | [AGENTS.md](../AGENTS.md)、[文档规则](references/README.md) |
+真实 Linux/macOS peer、多用户权限、user/system 服务、GUI/TCC、低端口和公网 DNS/ACME 按实际执行证据记录；需权限的操作先授权，缺证据不得标成已验证。实现完成后按 [文档生命周期](references/README.md) 精简为用户结果、持久边界、验证和接受限制，不长期保留过程清单。
