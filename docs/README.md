@@ -17,7 +17,7 @@
 
 | 文档                                                                               | 当前状态                                                                                                                                                                                                               |
 | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [R1 单 daemon、多 Instance 与单一身份重构](r1-single-daemon-instances.md) | planned：默认用户级、显式 system；唯一 InstanceId、OCD_DIR/INSTANCE_DIR 两类根、真实 peer 授权、cache/temp 回收及清理 CLI；按职责闭环实施，代码尚未实施 |
+| [R1 单 daemon、多 Instance 与单一身份重构](r1-single-daemon-instances.md) | planned：默认用户级、显式 system；唯一 InstanceId；清单登记 config、compute.toml 必填 data.path，instances 仅作创建默认值；补交互式 instance setup、cache/temp 回收与清理 CLI；代码尚未实施 |
 | [代码质量提升专项-2026-09-08](q0-code-quality-2026-09-08.md)                       | TODO：按 Day 1 收敛 Rust/TypeScript 领域与 package/crate 边界；Dashboard 改为 kebab-case 文件名、Jotai 状态和 date-fns 日期边界，并建立 Prettier/Oxlint/Knip/typecheck/build/test 硬门                                 |
 | [Q1 workspace 行覆盖长尾补齐](q1-coverage-long-tail.md)                            | TODO：从 90.02% 基线补齐既有覆盖长尾到 ≥91%；W2 新增代码已全覆盖，剩余缺口按 v4 产品后端/运行时进程/服务安装/存储引擎四组列出，结构性不可覆盖项（SIGKILL fixture、公网 clone）单列                                     |
 | [macOS 解析进程内存限制](p5-8-macos-document-parser.md)                            | TODO：RSS 硬限制待实现；0.1.0 接受此限制并保留完整格式支持                                                                                                                                                             |
