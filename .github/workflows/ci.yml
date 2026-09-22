@@ -175,6 +175,7 @@ jobs:
         run: |
           bun install --frozen-lockfile --ignore-scripts
           bun scripts/build-workerd.ts
+          bun run --filter @open-compute/dashboard build
           bun run --filter @open-compute/runtime build
       - name: Build and validate the custom Caddy module in Docker
         run: docker build --file test/gateway/Dockerfile --tag open-compute-gateway-caddy-test .
