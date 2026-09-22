@@ -221,7 +221,7 @@ impl GatewayControl {
         let source = fs::read(candidate.join("Caddyfile"))
             .map_err(|_| control_error("failed to read Caddy reload candidate"))?;
         let adapted_response = admin_request(
-            &self.gateway_dir.join("run/admin.sock"),
+            &self.admin_path,
             "POST",
             "/adapt",
             "text/caddyfile",
