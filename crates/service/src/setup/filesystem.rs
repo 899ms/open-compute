@@ -320,9 +320,8 @@ pub(super) fn assign_path_ownership(
     }
     let fd = rustix::fs::open(path, flags, rustix::fs::Mode::empty()).map_err(|_| invalid())?;
     let opened = rustix::fs::fstat(&fd).map_err(|_| invalid())?;
-    if u64::try_from(opened.st_dev).map_err(|_| invalid())? != metadata.dev()
-        || opened.st_ino != metadata.ino()
-    {
+    // rustix st_dev width differs by OS; Metadata::dev is always u64.
+    if opened.st_dev as u64 != metadata.dev() || opened.st_ino != metadata.ino() {
         return Err(invalid());
     }
     rustix::fs::fchown(
