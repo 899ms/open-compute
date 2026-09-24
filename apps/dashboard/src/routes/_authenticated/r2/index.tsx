@@ -10,9 +10,9 @@ function R2Page() {
     <OfficialCatalog
       kind="R2 buckets"
       description="Buckets returned by the official R2 API."
-      load={async (client, accountID, signal) => {
+      load={async (client, instanceID, signal) => {
         const result = await client.r2.buckets.list(
-          { account_id: accountID },
+          { account_id: instanceID },
           { signal },
         );
         return (result.buckets ?? []).map((bucket) => ({
@@ -24,11 +24,11 @@ function R2Page() {
           href: `/r2/${encodeURIComponent(bucket.name ?? "unknown")}`,
         }));
       }}
-      create={(client, accountID, name) =>
-        client.r2.buckets.create({ account_id: accountID, name })
+      create={(client, instanceID, name) =>
+        client.r2.buckets.create({ account_id: instanceID, name })
       }
-      remove={(client, accountID, row) =>
-        client.r2.buckets.delete(row.id, { account_id: accountID })
+      remove={(client, instanceID, row) =>
+        client.r2.buckets.delete(row.id, { account_id: instanceID })
       }
     />
   );

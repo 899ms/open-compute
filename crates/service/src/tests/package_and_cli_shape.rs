@@ -1,5 +1,7 @@
 use super::*;
 
+const TEST_INSTANCE_ID: &str = "01890f3c8b407cc0a000000000000001";
+
 #[test]
 fn package_and_cli_shape() {
     assert_eq!(env!("CARGO_PKG_NAME"), "open-compute-service");
@@ -31,12 +33,12 @@ fn package_and_cli_shape() {
             "--config",
             "/tmp/a.toml",
             "--instance",
-            "k7m2r",
+            TEST_INSTANCE_ID,
             "instances"
         ])
         .is_err()
     );
-    assert!(parse_from(["ocd", "run", "--instance", "k7m2r"]).is_ok());
+    assert!(parse_from(["ocd", "run", "--instance", TEST_INSTANCE_ID]).is_ok());
     let parsed = parse_from(["ocd", "instances", "--json"]).unwrap();
     assert!(matches!(parsed.command, Command::Instances { json: true }));
     assert!(!parsed.no_update_check);

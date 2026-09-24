@@ -18,8 +18,8 @@ use open_compute_artifacts::{
 };
 use open_compute_core::config::{DataConfig, MetricsConfig};
 use open_compute_core::{
-    AccountId, BindingKind, PlatformConfig, PlatformId, R2Config, RequestId, ResourceAvailability,
-    ResourceId, ResourceState, SecretString, SystemClock,
+    BindingKind, InstanceId, PlatformConfig, R2Config, RequestId, ResourceAvailability, ResourceId,
+    ResourceState, SecretString, SystemClock,
 };
 use open_compute_storage::{
     PlatformStorage, R2_SCHEMA_VERSION, R2BucketRepository, ReserveResourceCreate,
@@ -33,7 +33,7 @@ use tower::ServiceExt as _;
 fn resource(name: &str, state: ResourceState) -> ResourceRecord {
     ResourceRecord {
         id: ResourceId::generate(),
-        account_id: AccountId::generate(),
+        instance_id: InstanceId::generate(),
         kind: BindingKind::R2Bucket,
         name: name.to_owned(),
         state,
@@ -94,7 +94,7 @@ struct Fixture {
     _mock: MockS3,
     storage: Arc<PlatformStorage>,
     state: HttpState,
-    account_id: AccountId,
+    account_id: InstanceId,
 }
 
 async fn fixture() -> Fixture {
@@ -174,7 +174,7 @@ request_timeout_ms = 1000
     .with_binding(binding);
     let state =
         HttpState::for_test(HealthCoordinator::new(), metrics, false, None).with_r2_api(api);
-    let account_id = storage.identity().default_account_id;
+    let account_id = storage.identity().instance_id;
     Fixture {
         _temp: temp,
         _mock: mock,
@@ -199,7 +199,7 @@ fn assert_put_reservation_complete(fixture: &Fixture, name: &str) {
     let reservation = ResourceRepository::new(fixture.storage.db())
         .reserve_create(
             &ReserveResourceCreate {
-                account_id: fixture.account_id,
+                instance_id: fixture.account_id,
                 kind: BindingKind::R2Bucket,
                 name,
                 idempotency_key: &key,
@@ -211,10 +211,7 @@ fn assert_put_reservation_complete(fixture: &Fixture, name: &str) {
                 now_ms: now,
                 expires_at_ms: now + IDEMPOTENCY_TTL_MS,
             },
-            fixture
-                .storage
-                .hardening()
-                .max_resources_per_kind_per_account,
+            fixture.storage.hardening().max_resources_per_kind,
         )
         .expect("reservation read");
     assert!(matches!(
@@ -234,7 +231,7 @@ async fn put_by_name_completes_crash_recovery_recreates_and_concurrent_reservati
     let reservation = ResourceRepository::new(fixture.storage.db())
         .reserve_create(
             &ReserveResourceCreate {
-                account_id: fixture.account_id,
+                instance_id: fixture.account_id,
                 kind: BindingKind::R2Bucket,
                 name,
                 idempotency_key: &key,
@@ -246,10 +243,7 @@ async fn put_by_name_completes_crash_recovery_recreates_and_concurrent_reservati
                 now_ms: now,
                 expires_at_ms: now + IDEMPOTENCY_TTL_MS,
             },
-            fixture
-                .storage
-                .hardening()
-                .max_resources_per_kind_per_account,
+            fixture.storage.hardening().max_resources_per_kind,
         )
         .expect("initial reservation");
     let ResourceCreateReservation::Reserved(resource) = reservation else {
@@ -339,7 +333,7 @@ async fn startup_reconciliation_finishes_creating_and_deleting_r2_generations() 
         resources
             .reserve_create(
                 &ReserveResourceCreate {
-                    account_id: fixture.account_id,
+                    instance_id: fixture.account_id,
                     kind,
                     name,
                     idempotency_key: name,
@@ -394,11 +388,7 @@ async fn json(response: Response) -> serde_json::Value {
 #[tokio::test]
 async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
     let fixture = fixture().await;
-    let authority = crate::cloudflare_v4::accounts::AccountAuthority::new(
-        PlatformId::generate(),
-        fixture.account_id,
-        1,
-    );
+    let authority = crate::cloudflare_v4::accounts::V4InstanceContext::new(fixture.account_id, 1);
     let public_account = authority.public_id().to_owned();
     let app = crate::http::admin_router(
         fixture
@@ -407,7 +397,7 @@ async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
                 SecretString::new("deployer-token"),
                 SecretString::new("read-token"),
             )
-            .with_cloudflare_v4_account(authority),
+            .with_v4_instance_context(authority),
     );
     let collection = format!("/client/v4/accounts/{public_account}/r2/buckets");
 
@@ -800,7 +790,7 @@ async fn bucket_header_query_and_cursor_validation_is_closed_and_signed() {
         direction: Some("desc".to_owned()),
     };
     assert!(super::decode_cursor(api, fixture.account_id, &different, &cursor).is_err());
-    assert!(super::decode_cursor(api, AccountId::generate(), &query, &cursor).is_err());
+    assert!(super::decode_cursor(api, InstanceId::generate(), &query, &cursor).is_err());
 
     let encode_payload = |payload: super::BucketCursor| {
         let bytes = serde_json::to_vec(&payload).unwrap();

@@ -549,7 +549,7 @@ async fn worker_loader_native_binding_versions_delete_and_restart() {
     drop(command);
     fixture.process.stop().await;
     let storage = PlatformStorage::bootstrap(&storage_config(&fixture.data), &SystemClock).unwrap();
-    let account = storage.identity().default_account_id;
+    let account = storage.identity().instance_id;
     let repository = WorkerRepository::new(storage.db());
     let worker = repository
         .list_workers(account)

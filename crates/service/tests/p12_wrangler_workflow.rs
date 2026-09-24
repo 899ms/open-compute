@@ -12,12 +12,12 @@ use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
 
-const ACCOUNT_ID: &str = "0123456789abcdef0123456789abcdef";
+const ACCOUNT_ID: &str = "0123456789ab7def8123456789abcdef";
 
 fn ocd(config_home: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ocd"));
     command
-        .env("XDG_CONFIG_HOME", config_home)
+        .env("OPEN_COMPUTE_TEST_OCD_ROOT", config_home)
         .arg("--no-update-check");
     command
 }
@@ -124,6 +124,9 @@ fn target_commands_and_wrangler_wrapper_preserve_the_day1_boundary() {
     let config_home = temp.path().join("config-home");
     fs::create_dir(&config_home).unwrap();
     fs::set_permissions(&config_home, fs::Permissions::from_mode(0o700)).unwrap();
+    let user_root = config_home.join("user");
+    fs::create_dir(&user_root).unwrap();
+    fs::set_permissions(user_root, fs::Permissions::from_mode(0o700)).unwrap();
     let token = temp.path().join("deployer.token");
     fs::write(&token, "fixture-deployer-token\n").unwrap();
     fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
@@ -132,7 +135,7 @@ fn target_commands_and_wrangler_wrapper_preserve_the_day1_boundary() {
     let add = run(ocd(&config_home)
         .args(["target", "add", "remote", "--api-base-url"])
         .arg(&api_base_url)
-        .args(["--account-id", ACCOUNT_ID, "--token-file"])
+        .args(["--instance-id", ACCOUNT_ID, "--token-file"])
         .arg(&token));
     assert_success(&add);
     assert!(!String::from_utf8_lossy(&add.stdout).contains("fixture-deployer-token"));

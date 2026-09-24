@@ -25,7 +25,7 @@ Install the latest formal release:
 curl -fsSL https://open-compute.dev/install.sh | sh
 ```
 
-The installer selects the matching platform binary, verifies the release checksums, and installs `ocd` and its receipt below `~/.local`. It adds `~/.local/bin` to supported shell configuration when needed, or prints one exact `export PATH=...` command. It does not create configuration, data, secrets, or a service.
+The installer selects the matching platform binary and verifies the release checksums. It installs `ocd` below `~/.local` and stores its private receipt in `~/.open-compute/install-receipt.json`; temporary downloads stay under `~/.open-compute/tmp/`. It adds `~/.local/bin` to supported shell configuration when needed, or prints one exact `export PATH=...` command. It does not create configuration, instance data, secrets, or a service.
 
 ## 2. Set up the platform
 

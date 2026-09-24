@@ -13,7 +13,7 @@ async fn dry_run_with_fixture_metadata() {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&binary_path, fs::Permissions::from_mode(0o755)).unwrap();
     }
-    let receipt_path = temp.path().join("share/open-compute/install-receipt.json");
+    let receipt_path = temp.path().join("ocd/install-receipt.json");
     write_receipt(
         &receipt_path,
         &InstallReceipt {
@@ -43,6 +43,7 @@ async fn dry_run_with_fixture_metadata() {
     );
 
     let options = UpgradeOptions {
+        scope: ServiceScope::User,
         version: None,
         dry_run: true,
         no_restart: false,

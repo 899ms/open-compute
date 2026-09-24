@@ -10,9 +10,9 @@ function KvPage() {
     <OfficialCatalog
       kind="KV namespaces"
       description="Namespaces returned by the official Workers KV API."
-      load={async (client, accountID, signal) => {
+      load={async (client, instanceID, signal) => {
         const page = await client.kv.namespaces.list(
-          { account_id: accountID },
+          { account_id: instanceID },
           { signal },
         );
         return page.result.map((namespace) => ({
@@ -21,21 +21,21 @@ function KvPage() {
           href: `/kv/${encodeURIComponent(namespace.id)}`,
         }));
       }}
-      create={(client, accountID, name) =>
+      create={(client, instanceID, name) =>
         client.kv.namespaces.create({
-          account_id: accountID,
+          account_id: instanceID,
           title: name,
         })
       }
-      rename={(client, accountID, row, name) =>
+      rename={(client, instanceID, row, name) =>
         client.kv.namespaces.update(row.id, {
-          account_id: accountID,
+          account_id: instanceID,
           title: name,
         })
       }
-      remove={(client, accountID, row) =>
+      remove={(client, instanceID, row) =>
         client.kv.namespaces.delete(row.id, {
-          account_id: accountID,
+          account_id: instanceID,
         })
       }
     />

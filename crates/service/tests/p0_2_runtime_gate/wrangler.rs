@@ -17,7 +17,7 @@ const FIXTURE_SECRET: &str = "wrangler-runtime-gate-secret";
 pub(super) async fn exercise(
     state: HttpState,
     storage: Arc<PlatformStorage>,
-    account: open_compute_core::AccountId,
+    account: open_compute_core::InstanceId,
     public_account: &str,
     token: &str,
 ) {
@@ -67,7 +67,7 @@ pub(super) async fn exercise(
 async fn verify_project(
     origin: &str,
     storage: Arc<PlatformStorage>,
-    account: open_compute_core::AccountId,
+    account: open_compute_core::InstanceId,
     public_account: &str,
     token: &str,
     requests: Arc<Mutex<Vec<String>>>,
@@ -531,7 +531,7 @@ fn json_output(output: &Output) -> serde_json::Value {
     })
 }
 
-async fn assert_worker_response(origin: &str, account: open_compute_core::AccountId, answer: u64) {
+async fn assert_worker_response(origin: &str, account: open_compute_core::InstanceId, answer: u64) {
     let url = format!("{origin}/hello");
     let client: Client<HttpConnector, Body> =
         Client::builder(TokioExecutor::new()).build(HttpConnector::new());

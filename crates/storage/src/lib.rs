@@ -105,8 +105,6 @@ pub use data_dir::{
     DURABLE_OBJECT_DATA_FORMAT_VERSION, DURABLE_OBJECT_UNIQUE_KEY, DataDir,
     inspect_durable_object_storage, read_operation_receipt,
 };
-#[cfg(any(test, feature = "test-support"))]
-pub use data_dir::{expected_directories, future_resource_paths};
 pub use disk_admission::DiskAdmission;
 pub use durable_objects::{
     AuthorizedDurableObjectDelete, AuthorizedDurableObjectDispatch, DO_NAMESPACE_SCHEMA_VERSION,
@@ -264,7 +262,7 @@ impl PlatformStorage {
         let db = ControlDb::open(&db_path, config.sqlite_busy_timeout_ms)?;
         db.migrate(clock)?;
         let identity = identity::bootstrap(&db, clock, key.fingerprint())?;
-        data_dir.record_platform_id(&identity.platform_id.to_string())?;
+        data_dir.record_instance_id(&identity.instance_id.to_string())?;
         let crypto = SecretCrypto::new(key.bytes(), key.fingerprint())?;
         Ok(Self {
             data_dir,
@@ -291,7 +289,7 @@ impl PlatformStorage {
         let db = ControlDb::open(&db_path, config.sqlite_busy_timeout_ms)?;
         db.migrate_with_fault(clock, fault)?;
         let identity = identity::bootstrap(&db, clock, key.fingerprint())?;
-        data_dir.record_platform_id(&identity.platform_id.to_string())?;
+        data_dir.record_instance_id(&identity.instance_id.to_string())?;
         let crypto = SecretCrypto::new(key.bytes(), key.fingerprint())?;
         let mut hardening = HardeningConfig::default();
         hardening.emergency_reserve_bytes = hardening

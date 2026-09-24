@@ -1,22 +1,23 @@
-# I87、I103–115：issue 实施方案
+# I87、I103–116：issue 实施方案
 
 状态：**planned**。本文只记录实施方案；尚未修改生产代码、依赖、submodule 或生成文件。
 
-当前开放 issue 共 11 个，本文逐项覆盖 `#87`、`#103`–`#106`、`#110`–`#115`。
+当前开放 issue 共 12 个，本文逐项覆盖 `#87`、`#103`–`#106`、`#110`–`#116`。
 
-| Issue                                                                            | 核实结论                                                                                                               | 方案位置          |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| [#87](https://github.com/elliothux/open-compute/issues/87) Git thin-pack         | 属实：当前 Gitserver pin 缺少既有对象 delta-base resolver                                                              | 下文“#87”         |
-| [#103](https://github.com/elliothux/open-compute/issues/103) upstream refresh    | 属实：Wrangler pin 变化需要同步配置、CLI 和产品证据                                                                    | 下文“#103”        |
-| [#104](https://github.com/elliothux/open-compute/issues/104) upgrade latest      | 属实：匿名 GitHub REST 配额耗尽导致默认升级失败                                                                        | 下文“#104”        |
-| [#105](https://github.com/elliothux/open-compute/issues/105) upgrade 恢复        | 属实：目标 binary 在数据兼容性检查前替换，失败会留下不可用实例                                                         | 下文“#105”        |
-| [#106](https://github.com/elliothux/open-compute/issues/106) Service props 类型  | 属实：上传端接受 `props`，公开 SDK 类型没有                                                                            | 下文“#106 / #112” |
-| [#110](https://github.com/elliothux/open-compute/issues/110) AI Search binding   | 属实：公开 instance key 与内部 Resource name 不同                                                                      | 下文“#110”        |
-| [#111](https://github.com/elliothux/open-compute/issues/111) Workflow stale      | 属实：上传预留 definition，但未 stage/publish Workflow version                                                         | 下文“#111”        |
-| [#112](https://github.com/elliothux/open-compute/issues/112) SDK multipart       | 属实：SDK 展平 metadata，服务端要求单个 JSON part                                                                      | 下文“#106 / #112” |
-| [#113](https://github.com/elliothux/open-compute/issues/113) Artifacts lifecycle | 部分属实：官方 runtime 类型和服务端 binding 已有，标准项目工具链与管理 SDK 上传类型未闭环；namespace delete 非官方合同 | 下文“#113”        |
-| [#114](https://github.com/elliothux/open-compute/issues/114) 私有 Service        | 属实：当前 public-only 通用出网按设计拒绝私网；缺少 operator-owned 的限定能力                                          | 下文“#114”        |
-| [#115](https://github.com/elliothux/open-compute/issues/115) Queue messages      | 属实：Worker binding 支持 send/sendBatch，管理面没有公开 message 操作                                                  | 下文“#115”        |
+| Issue                                                                                  | 核实结论                                                                                                               | 方案位置          |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| [#87](https://github.com/elliothux/open-compute/issues/87) Git thin-pack               | 属实：当前 Gitserver pin 缺少既有对象 delta-base resolver                                                              | 下文“#87”         |
+| [#103](https://github.com/elliothux/open-compute/issues/103) upstream refresh          | 属实：Wrangler pin 变化需要同步配置、CLI 和产品证据                                                                    | 下文“#103”        |
+| [#104](https://github.com/elliothux/open-compute/issues/104) upgrade latest            | 属实：匿名 GitHub REST 配额耗尽导致默认升级失败                                                                        | 下文“#104”        |
+| [#105](https://github.com/elliothux/open-compute/issues/105) upgrade 恢复              | 属实：目标 binary 在数据兼容性检查前替换，失败会留下不可用实例                                                         | 下文“#105”        |
+| [#106](https://github.com/elliothux/open-compute/issues/106) Service props 类型        | 属实：上传端接受 `props`，公开 SDK 类型没有                                                                            | 下文“#106 / #112” |
+| [#110](https://github.com/elliothux/open-compute/issues/110) AI Search binding         | 属实：公开 instance key 与内部 Resource name 不同                                                                      | 下文“#110”        |
+| [#111](https://github.com/elliothux/open-compute/issues/111) Workflow stale            | 属实：上传预留 definition，但未 stage/publish Workflow version                                                         | 下文“#111”        |
+| [#112](https://github.com/elliothux/open-compute/issues/112) SDK multipart             | 属实：SDK 展平 metadata，服务端要求单个 JSON part                                                                      | 下文“#106 / #112” |
+| [#113](https://github.com/elliothux/open-compute/issues/113) Artifacts lifecycle       | 部分属实：官方 runtime 类型和服务端 binding 已有，标准项目工具链与管理 SDK 上传类型未闭环；namespace delete 非官方合同 | 下文“#113”        |
+| [#114](https://github.com/elliothux/open-compute/issues/114) 私有 Service              | 属实：当前 public-only 通用出网按设计拒绝私网；缺少 operator-owned 的限定能力                                          | 下文“#114”        |
+| [#115](https://github.com/elliothux/open-compute/issues/115) Queue messages            | 属实：Worker binding 支持 send/sendBatch，管理面没有公开 message 操作                                                  | 下文“#115”        |
+| [#116](https://github.com/elliothux/open-compute/issues/116) 历史 Version 阻止资源清理 | 属实：旧 Version 的 binding referrer 阻止 KV 删除，自动保留策略可能永不回收；缺少手动删除入口                          | 下文“#116”        |
 
 ## #87 Gitserver fork 与源码构建
 
@@ -72,6 +73,31 @@ Queue identity、既有大小/批次限制和幂等 request identity，记录超
 留在未支持范围：当前产品没有 `http_pull` consumer 的 lease、ack/retry 和 crash recovery 合同。验收包含单条/批量、超限、
 未授权、重放、enqueue 后重启；不能暴露内部 binding ID 或 runtime token。
 
+## #116 保留 Worker 的历史 Version 清理
+
+结论：这是管理面生命周期缺口，不是 Worker runtime 类型或行为不兼容。Cloudflare 的 [Scripts Versions API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/)
+只有 list/get/upload；[Beta Workers API](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/delete/)
+已有 `DELETE /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id}`，固定 `cloudflare@7.1.0` 也有
+`workers.beta.workers.versions.delete` 类型。Cloudflare 的 [Version 定义](https://developers.cloudflare.com/workers/versions-and-deployments/)
+包含 binding，但不随 Version 跟踪 KV 等资源的数据；据此本项目应只释放旧 Version 的 binding 引用，不删除 KV 数据或当前 Worker。
+
+本地证据：`resources::begin_delete` 见到 `resource_referrers` 即拒绝；`version_bindings` 删除时已有 SQL trigger 释放对应
+referrer。`WorkerRepository::begin_version_delete` / `finalize_version_delete` 已可 tombstone 非 active、无持久 referrer 的
+Version，并由 `VersionPins` fence/drain 在途调用；现有 v4 只有版本 GET。默认保留最近 10 个 ready Version 且最少 24 小时，
+稳定 Worker 的旧 binding 因此可能一直挡住资源删除。
+
+方案：只增加上述官方 Beta DELETE route 与 `@open-compute/sdk` 的对应窄方法，直接复用固定官方 SDK 的参数/响应类型，
+不在旧 Scripts Versions 路径发明 DELETE，也不实现整套 Beta Workers API。账户授权后按官方 worker ID/name 和 Version ID
+定位，保留官方 UUID prefix/`latest` 解析规则；在 SQLite 中检查目标不是当前 deployment 且无持久
+`version_referrers`，再走既有 begin → `VersionPins` fence/drain → finalize。阻塞时返回安全的 409 类别（active、in-flight、
+持久引用），不暴露 idempotency key；超时不释放 binding referrer，重试或既有重启恢复可继续。成功后旧版本不可回滚，
+但当前 Worker、活跃 Version 与 KV 数据不变；随后普通 KV DELETE 可收敛。无需改全局保留策略、强制删除 Worker、
+修改已发布 migration 或提供解绑不可变 Version 的旁路。
+
+验收：经公开 v4 创建 KV → 发布并激活旧 Version → 切换新 KV/Version → 旧 KV DELETE 返回 409 → 删除旧 Version →
+旧 KV DELETE 成功，当前 Worker 继续服务；再覆盖 active/跨账户/idempotency/in-flight 拒绝、前缀歧义、超时重试与
+daemon restart 恢复。官方 Beta DELETE 的托管端错误细节未做差分前，不宣称错误码完全一致。
+
 ## Cloudflare 兼容边界
 
 - Worker upload、AI Search binding、Workflow binding 和 Queue producer 行为保持官方字段、错误边界与 runtime 类型；本批不新增
@@ -79,6 +105,8 @@ Queue identity、既有大小/批次限制和幂等 request identity，记录超
   精确 JSON/wire 扩展，不改写 Cloudflare runtime declarations。
 - Queue management messages 使用 Cloudflare 当前公开路径和 `cloudflare` SDK 的 `BaseMessages` 类型；只公布本地实现并完成资格的
   push 操作。Queue pull HTTP endpoint 属于独立 external data-plane protocol，不因 Worker Queue runtime 已兼容而自动进入支持面。
+- #116 只采纳官方 Beta Worker Version DELETE 的窄管理入口；`cf-compatibility-check` 的 runtime inventory 不覆盖此管理 API，
+  版本删除与资源 referrer 的本地验收必须单独完成。
 - 单机 SQLite authority、at-least-once Queue/Workflow recovery 与 hosted placement/replication 差异继续由
   `OC-QUEUE-001`、`OC-WORKFLOW-001`、`OC-AI-SEARCH-001` 描述；本批不得新增缺方法式 deviation。
 

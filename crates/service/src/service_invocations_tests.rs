@@ -2,7 +2,7 @@ use super::*;
 use crate::local_extensions::LocalExtensionRegistry;
 use open_compute_core::clock::SystemClock;
 use open_compute_core::config::DataConfig;
-use open_compute_core::{AccountId, RequestId, WorkerId};
+use open_compute_core::{InstanceId, RequestId, WorkerId};
 use open_compute_storage::{
     NewVersion, NewVersionProducts, NewVersionService, PlatformStorage, ServiceTarget,
     VersionContentKind, WorkerRepository,
@@ -42,7 +42,7 @@ fn fixture_with_corrupt_props(corrupt_props: bool) -> Fixture {
         )
         .unwrap(),
     );
-    let account = storage.identity().default_account_id;
+    let account = storage.identity().instance_id;
     let request = RequestId::generate();
     let repo = WorkerRepository::new(storage.db());
     let caller = repo
@@ -123,7 +123,7 @@ fn fixture_with_corrupt_props(corrupt_props: bool) -> Fixture {
 
 fn insert_ready(
     repo: WorkerRepository<'_>,
-    account: AccountId,
+    account: InstanceId,
     worker: WorkerId,
     worker_digest: [u8; 32],
     services: &[NewVersionService],
@@ -134,7 +134,7 @@ fn insert_ready(
     repo.insert_staging_version(
         &NewVersion {
             id: version,
-            account_id: account,
+            instance_id: account,
             worker_id: worker,
             content_kind: VersionContentKind::Worker,
             artifact_sha256: Some(worker_digest),
@@ -235,7 +235,7 @@ fn admission_delivers_canonical_arbitrary_json_props() {
 #[test]
 fn extension_admission_reuses_only_the_current_generation_session() {
     let fixture = fixture();
-    let account = fixture.storage.identity().default_account_id;
+    let account = fixture.storage.identity().instance_id;
     let request = RequestId::generate();
     let repo = WorkerRepository::new(fixture.storage.db());
     let caller = repo
@@ -288,6 +288,10 @@ fn extension_admission_reuses_only_the_current_generation_session() {
         )]))
         .unwrap(),
     );
+    let other = self::fixture();
+    let other_registry = ServiceInvocationRegistry::new(other.storage, VersionPins::new())
+        .with_local_extensions(extensions.clone());
+    other_registry.activate_generation("first");
     let registry = ServiceInvocationRegistry::new(fixture.storage, VersionPins::new())
         .with_local_extensions(extensions);
     registry.activate_generation("first");
@@ -312,6 +316,11 @@ fn extension_admission_reuses_only_the_current_generation_session() {
         panic!("expected extension target");
     };
     assert_eq!(first_identity, second_identity);
+    assert!(
+        other_registry
+            .extension_for_session(&first_identity)
+            .is_none()
+    );
     assert_eq!(
         registry.extension_for_session(&first_identity).as_deref(),
         Some("local-files")

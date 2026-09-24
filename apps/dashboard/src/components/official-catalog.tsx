@@ -24,23 +24,23 @@ interface OfficialCatalogProps {
   description: string;
   load: (
     client: ManagementClient,
-    accountID: string,
+    instanceID: string,
     signal: AbortSignal,
   ) => Promise<readonly CatalogRow[]>;
   create?: (
     client: ManagementClient,
-    accountID: string,
+    instanceID: string,
     name: string,
   ) => Promise<unknown>;
   rename?: (
     client: ManagementClient,
-    accountID: string,
+    instanceID: string,
     row: CatalogRow,
     name: string,
   ) => Promise<unknown>;
   remove?: (
     client: ManagementClient,
-    accountID: string,
+    instanceID: string,
     row: CatalogRow,
   ) => Promise<unknown>;
   primaryAction?: React.ReactNode;
@@ -56,18 +56,18 @@ export function OfficialCatalog({
   remove,
   primaryAction,
 }: OfficialCatalogProps) {
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<CatalogRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CatalogRow | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const query = useQuery({
-    queryKey: ["cloudflare-v4", kind, accountId],
-    queryFn: ({ signal }) => load(client!, accountId!, signal),
-    enabled: client !== null && accountId !== null,
+    queryKey: ["cloudflare-v4", kind, instanceId],
+    queryFn: ({ signal }) => load(client!, instanceId!, signal),
+    enabled: client !== null && instanceId !== null,
   });
   const createMutation = useMutation({
-    mutationFn: (name: string) => create!(client!, accountId!, name),
+    mutationFn: (name: string) => create!(client!, instanceId!, name),
     onSuccess: async () => {
       setCreateOpen(false);
       setMutationError(null);
@@ -80,7 +80,7 @@ export function OfficialCatalog({
   });
   const renameMutation = useMutation({
     mutationFn: (name: string) =>
-      rename!(client!, accountId!, renameTarget!, name),
+      rename!(client!, instanceId!, renameTarget!, name),
     onSuccess: async () => {
       setRenameTarget(null);
       setMutationError(null);
@@ -92,7 +92,7 @@ export function OfficialCatalog({
       ),
   });
   const deleteMutation = useMutation({
-    mutationFn: () => remove!(client!, accountId!, deleteTarget!),
+    mutationFn: () => remove!(client!, instanceId!, deleteTarget!),
     onSuccess: async () => {
       setDeleteTarget(null);
       setMutationError(null);

@@ -23,15 +23,15 @@ export const Route = createFileRoute("/_authenticated/queues/$queueId")({
 
 function QueueDetailPage() {
   const { queueId } = Route.useParams();
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const feedback = useMutationFeedback();
-  const enabled = client !== null && accountId !== null;
+  const enabled = client !== null && instanceId !== null;
   const [configOpen, setConfigOpen] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const queue = useQuery({
     queryKey: ["cloudflare-v4", "queues", queueId],
     queryFn: ({ signal }) =>
-      client!.queues.get(queueId, { account_id: accountId! }, { signal }),
+      client!.queues.get(queueId, { account_id: instanceId! }, { signal }),
     enabled,
   });
   const metrics = useQuery({
@@ -39,7 +39,7 @@ function QueueDetailPage() {
     queryFn: ({ signal }) =>
       client!.queues.getMetrics(
         queueId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -49,7 +49,7 @@ function QueueDetailPage() {
     queryFn: ({ signal }) =>
       client!.queues.consumers.list(
         queueId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -57,7 +57,7 @@ function QueueDetailPage() {
   const configMutation = useMutation({
     mutationFn: (input: QueueConfigInput) =>
       client!.queues.update(queueId, {
-        account_id: accountId!,
+        account_id: instanceId!,
         settings: {
           ...(input.deliveryDelaySeconds !== undefined
             ? { delivery_delay: input.deliveryDelaySeconds }
@@ -85,7 +85,7 @@ function QueueDetailPage() {
   const deliveryMutation = useMutation({
     mutationFn: (paused: boolean) =>
       client!.queues.update(queueId, {
-        account_id: accountId!,
+        account_id: instanceId!,
         settings: { delivery_paused: paused },
       }),
     onSuccess: async (_result, paused) => {

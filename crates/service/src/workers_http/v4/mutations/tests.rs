@@ -2,7 +2,7 @@ use super::*;
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
-use open_compute_core::{PlatformId, RequestId, SecretBytes, VersionId};
+use open_compute_core::{InstanceId, RequestId, SecretBytes, VersionId};
 use open_compute_storage::{
     NewCronConfig, NewVersion, NewVersionProducts, StoredVersionSecret, VersionContentKind,
     WorkerObservabilitySettings,
@@ -108,7 +108,7 @@ fn settings_and_secret_validation_cover_supported_and_rejected_shapes() {
     }
     assert_eq!(
         v4_platform_error(V4Error::NotFound).code(),
-        ErrorCode::AccountNotFound
+        ErrorCode::InstanceNotFound
     );
     assert_eq!(
         v4_platform_error(V4Error::Unavailable).code(),
@@ -170,8 +170,7 @@ async fn active_script_management_routes_project_and_mutate_day1_state() {
     let replacement = seeded.replacement;
     let deployment = seeded.deployment;
 
-    let authority =
-        crate::cloudflare_v4::accounts::AccountAuthority::new(PlatformId::generate(), account, 1);
+    let authority = crate::cloudflare_v4::accounts::V4InstanceContext::new(account, 1);
     let public_account = authority.public_id().to_owned();
     let app: Router = crate::http::admin_router(
         state
@@ -180,7 +179,7 @@ async fn active_script_management_routes_project_and_mutate_day1_state() {
                 SecretString::new("deployer-token"),
                 SecretString::new("read-token"),
             )
-            .with_cloudflare_v4_account(authority),
+            .with_v4_instance_context(authority),
     );
     let prefix = format!("/client/v4/accounts/{public_account}/workers/scripts/settings-worker");
 
@@ -382,7 +381,7 @@ struct SeededScript {
 
 fn seed_script_versions(
     storage: &open_compute_storage::PlatformStorage,
-    account: open_compute_core::AccountId,
+    account: InstanceId,
 ) -> SeededScript {
     let repo = WorkerRepository::new(storage.db());
     let cron = empty_cron_config();
@@ -415,7 +414,7 @@ fn seed_script_versions(
     repo.insert_staging_version(
         &NewVersion {
             id: version,
-            account_id: account,
+            instance_id: account,
             worker_id: worker.id,
             content_kind: VersionContentKind::Worker,
             artifact_sha256: Some([7; 32]),
@@ -466,7 +465,7 @@ fn seed_script_versions(
     repo.insert_staging_version(
         &NewVersion {
             id: replacement,
-            account_id: account,
+            instance_id: account,
             worker_id: worker.id,
             content_kind: VersionContentKind::Worker,
             artifact_sha256: Some([9; 32]),
@@ -523,7 +522,7 @@ async fn exercise_settings_and_delete(
     app: &Router,
     prefix: &str,
     storage: &open_compute_storage::PlatformStorage,
-    account: open_compute_core::AccountId,
+    account: InstanceId,
     worker_id: open_compute_core::WorkerId,
 ) {
     let repo = WorkerRepository::new(storage.db());

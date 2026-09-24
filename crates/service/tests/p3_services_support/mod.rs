@@ -226,7 +226,7 @@ impl Harness {
         let do_storage = storage
             .data_dir()
             .prepare_durable_object_storage(
-                &storage.identity().platform_id.to_string(),
+                &storage.identity().instance_id.to_string(),
                 runtime.version_output(),
             )
             .unwrap();

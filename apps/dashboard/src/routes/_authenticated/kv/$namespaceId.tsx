@@ -22,9 +22,9 @@ export const Route = createFileRoute("/_authenticated/kv/$namespaceId")({
 
 function KvDetailPage() {
   const { namespaceId } = Route.useParams();
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const feedback = useMutationFeedback();
-  const enabled = client !== null && accountId !== null;
+  const enabled = client !== null && instanceId !== null;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [draftKey, setDraftKey] = useState("");
   const [draftValue, setDraftValue] = useState("");
@@ -38,7 +38,7 @@ function KvDetailPage() {
     queryFn: ({ signal }) =>
       client!.kv.namespaces.keys.list(
         namespaceId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -49,7 +49,7 @@ function KvDetailPage() {
       const response = await client!.kv.namespaces.values.get(
         selectedKey!,
         {
-          account_id: accountId!,
+          account_id: instanceId!,
           namespace_id: namespaceId,
         },
         { signal },
@@ -61,7 +61,7 @@ function KvDetailPage() {
   const backups = useQuery({
     queryKey: ["cloudflare-v4", "kv", namespaceId, "backups"],
     queryFn: ({ signal }) =>
-      client!.openCompute.backups.kv.list(accountId!, namespaceId, { signal }),
+      client!.openCompute.backups.kv.list(instanceId!, namespaceId, { signal }),
     enabled,
   });
   const put = useMutation({
@@ -74,7 +74,7 @@ function KvDetailPage() {
           "Expiration TTL must be an integer of at least 60 seconds.",
         );
       return client!.kv.namespaces.values.update(draftKey.trim(), {
-        account_id: accountId!,
+        account_id: instanceId!,
         namespace_id: namespaceId,
         value: draftValue,
         ...(metadata === undefined ? {} : { metadata }),
@@ -97,7 +97,7 @@ function KvDetailPage() {
   const remove = useMutation({
     mutationFn: (key: string) =>
       client!.kv.namespaces.values.delete(key, {
-        account_id: accountId!,
+        account_id: instanceId!,
         namespace_id: namespaceId,
       }),
     onSuccess: async () => {
@@ -116,7 +116,7 @@ function KvDetailPage() {
   });
   const createBackup = useMutation({
     mutationFn: () =>
-      client!.openCompute.backups.kv.create(accountId!, namespaceId),
+      client!.openCompute.backups.kv.create(instanceId!, namespaceId),
     onSuccess: async () => {
       await backups.refetch();
       feedback.success("KV backup created.");
@@ -126,7 +126,7 @@ function KvDetailPage() {
   });
   const restore = useMutation({
     mutationFn: ({ backupID, name }: { backupID: string; name: string }) =>
-      client!.openCompute.backups.kv.restore(accountId!, backupID, { name }),
+      client!.openCompute.backups.kv.restore(instanceId!, backupID, { name }),
     onSuccess: async (restored) => {
       setRestoreTarget(null);
       setMutationError(null);

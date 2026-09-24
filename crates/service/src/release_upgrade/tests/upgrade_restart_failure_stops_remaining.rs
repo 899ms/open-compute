@@ -21,18 +21,18 @@ async fn upgrade_restart_failure_stops_remaining() {
         temp.path().join("registry/user"),
     );
     let config = write_loadable_config(temp.path());
-    let record = registry
-        .register_owned(
+    registry
+        .register(
             &config.canonicalize().unwrap(),
-            &binary_path,
             ServiceScope::User,
-            None,
             SystemTime::now(),
         )
         .unwrap();
     let manager = FakeServiceManager::default();
-    manager.install(&record, &binary_path).unwrap();
-    manager.start(&record).unwrap();
+    manager
+        .install(ServiceScope::User, None, &binary_path)
+        .unwrap();
+    manager.start(ServiceScope::User).unwrap();
     manager.set_fail_restart(true);
     let options = base_options(
         &temp,
@@ -48,11 +48,7 @@ async fn upgrade_restart_failure_stops_remaining() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::PlatformUnavailable);
-    assert!(
-        String::from_utf8(out)
-            .unwrap()
-            .contains("UPGRADE_INSTANCE_FAILED")
-    );
+    assert!(!String::from_utf8(out).unwrap().contains("UPGRADE_OK"));
     // Binary already replaced before restart.
     assert_eq!(fs::read(&binary_path).unwrap(), next);
 }

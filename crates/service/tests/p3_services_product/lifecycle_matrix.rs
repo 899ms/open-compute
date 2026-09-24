@@ -10,7 +10,7 @@ pub(super) async fn run() {
     let version_pins = harness.version_pins.clone();
     let service_invocations = harness.service_invocations.clone();
 
-    let account = storage.identity().default_account_id;
+    let account = storage.identity().instance_id;
     let repository = WorkerRepository::new(storage.db());
     let (target, _) = repository
         .create_worker(

@@ -11,7 +11,7 @@ use axum::Router;
 use axum::extract::{Path, Request, State};
 use axum::response::Response;
 use axum::routing::get;
-use open_compute_core::{AccountId, ErrorCode, PlatformError, QueueId, WorkerId};
+use open_compute_core::{ErrorCode, InstanceId, PlatformError, QueueId, WorkerId};
 use open_compute_storage::{
     PlatformStorage, QueueConsumerConfig, QueueConsumerRecord, QueueConsumerRepository,
     QueueRecord, WorkerRepository,
@@ -282,7 +282,7 @@ pub(super) fn settings(
 
 fn resolve_worker(
     storage: &PlatformStorage,
-    account_id: AccountId,
+    account_id: InstanceId,
     name: &str,
 ) -> Result<WorkerId, PlatformError> {
     WorkerRepository::new(storage.db())
@@ -295,34 +295,34 @@ fn resolve_worker(
 
 fn resolve_queue_name(
     storage: &PlatformStorage,
-    account_id: AccountId,
+    account_id: InstanceId,
     name: &str,
 ) -> Result<QueueRecord, PlatformError> {
     open_compute_storage::QueueRepository::new(storage.db())
-        .list_account(account_id)?
+        .list_instance(account_id)?
         .into_iter()
         .find(|queue| queue.name == name)
         .ok_or_else(|| PlatformError::new(ErrorCode::QueueNotFound, "Queue not found"))
 }
 
 fn resolve_consumer(
-    authority: &crate::cloudflare_v4::accounts::AccountAuthority,
+    authority: &crate::cloudflare_v4::accounts::V4InstanceContext,
     storage: &PlatformStorage,
-    account_id: AccountId,
+    account_id: InstanceId,
     queue_id: QueueId,
     public: &str,
 ) -> Result<QueueConsumerRecord, PlatformError> {
     QueueConsumerRepository::new(storage.db())
         .live_for_queue(queue_id)?
         .filter(|record| {
-            record.account_id == account_id
+            record.instance_id == account_id
                 && authority.matches_public_queue_consumer_id(record.id, public)
         })
         .ok_or_else(|| PlatformError::new(ErrorCode::ResourceNotFound, "consumer not found"))
 }
 
 pub(super) fn consumer_response(
-    authority: &crate::cloudflare_v4::accounts::AccountAuthority,
+    authority: &crate::cloudflare_v4::accounts::V4InstanceContext,
     storage: &PlatformStorage,
     queue: &QueueRecord,
     record: &QueueConsumerRecord,
@@ -330,11 +330,11 @@ pub(super) fn consumer_response(
     let declaration =
         QueueConsumerRepository::new(storage.db()).declaration(record.declaration_id)?;
     let worker =
-        WorkerRepository::new(storage.db()).get_worker(record.account_id, record.worker_id)?;
+        WorkerRepository::new(storage.db()).get_worker(record.instance_id, record.worker_id)?;
     let dead_letter_queue = declaration
         .dlq_queue_id
         .map(|id| {
-            open_compute_storage::QueueRepository::new(storage.db()).get(record.account_id, id)
+            open_compute_storage::QueueRepository::new(storage.db()).get(record.instance_id, id)
         })
         .transpose()?
         .map_or_else(String::new, |queue| queue.name);

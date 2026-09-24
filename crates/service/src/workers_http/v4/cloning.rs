@@ -67,7 +67,7 @@ pub(super) async fn clone_active(
         )
     })?;
     let snapshot = WorkerRepository::new(api.storage.db()).version_snapshot(
-        worker.account_id,
+        worker.instance_id,
         worker.id,
         active,
         false,
@@ -178,7 +178,7 @@ pub(super) async fn clone_active(
     }
     controller
         .create_version(CreateVersionRequest {
-            account_id: worker.account_id,
+            instance_id: worker.instance_id,
             worker_id: worker.id,
             idempotency_key: format!("v4/{request_id}"),
             content,

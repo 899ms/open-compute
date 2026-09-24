@@ -6,7 +6,7 @@ use open_compute_artifacts::{
     ARTIFACT_KEY_VERSION, ArtifactCache, ArtifactRef, ArtifactStore, MapEnv, MockS3, ObjectBackend,
     resolve_s3_credentials_with,
 };
-use open_compute_core::config::ServerConfig;
+use open_compute_core::config::InstanceAuthConfig;
 use open_compute_core::{
     CacheConfig, DataConfig, PlatformConfig, Redactor, RuntimeConfig, StartupId, SystemClock,
 };
@@ -145,7 +145,7 @@ async fn dashboard_real_runtime_serves_spa_assets_and_cloudflare_v4_api() {
     let do_storage = storage
         .data_dir()
         .prepare_durable_object_storage(
-            &storage.identity().platform_id.to_string(),
+            &storage.identity().instance_id.to_string(),
             runtime.version_output(),
         )
         .unwrap();
@@ -180,13 +180,13 @@ async fn dashboard_real_runtime_serves_spa_assets_and_cloudflare_v4_api() {
         storage.clone(),
         artifacts.clone(),
         transport.clone(),
-        storage.identity().default_account_id,
+        storage.identity().instance_id,
         BundleLimits::default(),
     )
     .await
     .expect("dashboard bootstrap must succeed against stock workerd");
 
-    let account_id = storage.identity().default_account_id;
+    let account_id = storage.identity().instance_id;
     let repo = WorkerRepository::new(storage.db());
     let system_worker = repo
         .ensure_system_dashboard_worker(account_id, open_compute_core::RequestId::generate(), 1)
@@ -269,11 +269,14 @@ async fn dashboard_real_runtime_serves_spa_assets_and_cloudflare_v4_api() {
         )
         .unwrap(),
     );
-    let server = ServerConfig {
+    let server = open_compute_core::DaemonServerConfig {
         admin_auth: open_compute_core::config::SecretReference {
             env: None,
             file: Some(admin_token),
         },
+        ..open_compute_core::DaemonServerConfig::default()
+    };
+    let auth = InstanceAuthConfig {
         deployer_auth: open_compute_core::config::SecretReference {
             env: None,
             file: Some(write_admin_secret_with_value(
@@ -288,12 +291,18 @@ async fn dashboard_real_runtime_serves_spa_assets_and_cloudflare_v4_api() {
                 "dashboard-gate-read-only",
             )),
         },
-        ..ServerConfig::default()
     };
-    let state = HttpState::new(HealthCoordinator::new(), metrics, true, true, &server)
-        .expect("dashboard gate HTTP state")
-        .with_platform_storage(storage.clone())
-        .with_dashboard_dispatch(Arc::new(RwLock::new(Some(dispatch))));
+    let state = HttpState::new(
+        HealthCoordinator::new(),
+        metrics,
+        true,
+        true,
+        &server,
+        &auth,
+    )
+    .expect("dashboard gate HTTP state")
+    .with_platform_storage(storage.clone())
+    .with_dashboard_dispatch(Arc::new(RwLock::new(Some(dispatch))));
     let router = admin_router(state);
 
     let home = router

@@ -17,7 +17,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const { setToken, setAccountId } = useAuth();
+  const { setToken, setInstanceId } = useAuth();
   const navigate = useNavigate();
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +36,12 @@ function LoginPage() {
       const session = await mintSessionFromAdmin(trimmed);
       const nextClient = createManagementClient(session.session_token);
       const accounts = await nextClient.accounts.list();
-      const account = accounts.result[0];
-      if (account?.id === undefined)
-        throw new Error("No accessible account was returned.");
-      writeAuthSession(session.session_token, account.id);
+      const instance = accounts.result[0];
+      if (instance?.id === undefined)
+        throw new Error("No accessible instance was returned.");
+      writeAuthSession(session.session_token, instance.id);
       setToken(session.session_token);
-      setAccountId(account.id);
+      setInstanceId(instance.id);
       await navigate({ to: "/" });
     } catch (caught) {
       setToken(null);

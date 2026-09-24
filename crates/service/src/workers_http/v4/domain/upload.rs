@@ -129,7 +129,7 @@ impl UploadInput {
             if inherit_name(&secret.name, "secret_text") {
                 let plaintext = api.storage.crypto().decrypt(
                     &secret.envelope,
-                    previous.account_id,
+                    previous.instance_id,
                     previous.worker.id,
                     previous.version.id,
                     &secret.name,
@@ -312,8 +312,8 @@ impl UploadInput {
     pub(in crate::workers_http::v4) fn apply_explicit_bindings(
         &mut self,
         api: &WorkerApiState,
-        account_authority: &AccountAuthority,
-        account: AccountId,
+        account_authority: &V4InstanceContext,
+        account: InstanceId,
         worker: WorkerId,
         migration_tag: Option<&str>,
         allow_declared_do: bool,
@@ -591,7 +591,7 @@ impl UploadInput {
     pub(in crate::workers_http::v4) fn release_workflow_reservations(
         &self,
         api: &WorkerApiState,
-        account: AccountId,
+        account: InstanceId,
         now_ms: i64,
     ) -> Result<(), PlatformError> {
         release_workflow_reservations(api, account, &self.workflow_reservations, now_ms)
@@ -600,8 +600,8 @@ impl UploadInput {
     fn resource(
         &mut self,
         api: &WorkerApiState,
-        account_authority: &AccountAuthority,
-        account: AccountId,
+        account_authority: &V4InstanceContext,
+        account: InstanceId,
         name: String,
         kind: BindingKind,
         external: &str,
@@ -641,7 +641,7 @@ impl UploadInput {
     pub(in crate::workers_http::v4) async fn content(
         &self,
         api: &WorkerApiState,
-        account_id: AccountId,
+        instance_id: InstanceId,
         script_name: &str,
         bundle: Option<Vec<u8>>,
         reservation_id: Option<&str>,
@@ -670,7 +670,7 @@ impl UploadInput {
                 super::super::assets::redeem_assets(
                     api,
                     &assets.jwt,
-                    account_id,
+                    instance_id,
                     script_name,
                     reservation_id,
                     asset_binding,

@@ -11,8 +11,8 @@ Workflow 与 P6 management qualification 分别只记录在[既有剩余验收](
 和 [P6 远端差分验收](../acceptance/p6-cloudflare-v4-differential-acceptance.md)。
 
 固定契约输入见 [`baseline.json`](../../test/conformance/baseline.json)。当前 formal pin 是
-`workerd v1.20260918.1-open-compute-w3.40937077`，revision
-`40937077470ed7edec082329d3a10e4195b402cb`，唯一
+`workerd v1.20260918.1-open-compute-i102.1c7b89be`，revision
+`1c7b89bea323a39a8511271913820f9fcf39306d`，唯一
 `effectiveCompatibilityDate` 为 `2026-09-08`；stable types 是
 `@cloudflare/workers-types@5.20260830.1`。普通 Script/Version 配置不得选择其它 compatibility date 或任意 flags，也不保留旧
 open-compute schema、descriptor、runtime 或 API 的兼容路径。官方在 compatibility date `2026-08-04`
@@ -56,7 +56,7 @@ authority 差异；它不代表缺方法、占位返回或半截实现。
 | Version Metadata                             | `supported`                                     |     3 | `id`、`tag`、`timestamp` 由 immutable deployment authority 注入                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | —                                                 |
 | WebSocket hibernation                        | `supported`                                     |    19 | accept/tags/get、auto-response、serialize/deserialize attachment、reconstruction 和 restart 均闭环                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | —                                                 |
 | Vectorize                                    | `supported_with_deviation`                      |    27 | stable post-beta `Vectorize` 的 7 个方法、异步持久 mutation、三种公开 score/order、namespace、indexed metadata filter/projection、restart recovery 与全 stable response surface 均闭环；beta `VectorizeIndex` 不在当前 Day1 合同                                                                                                                                                                                                                                                                                                                                                                                              | `OC-VECTORIZE-001`                                |
-| Workers AI / Markdown Conversion / AI Search | `supported_with_deviation`                      |    54 | 标准 `[ai]` 注入 `env.AI.aiGatewayLogId`/`toMarkdown`；统一 registry 覆盖 62 个 Cloudflare 文档候选并安全公布 59 个 AI Search／18 个 Markdown 格式，本地三语言 OCR、扫描 PDF、可选 OpenAI-compatible VLM、`chunk: false`、bounded durable parse cache 与同 account R2 source 已接入同一 indexing contract；R2 pause、显式 item/job、extensionless MIME、`r2:<bucket>` source ID、metadata filter、排序、删除 payload 和 bounded completion wait 走同一 Day1 路径；namespaced `open-compute:manual` source 是隔离的 API superset，不进入这 54 个官方成员；完整 Workers AI inference、外部 R2/S3 source 与 AutoRAG 不在声明范围 | `OC-AI-MARKDOWN-001`、`OC-AI-SEARCH-001`          |
+| Workers AI / Markdown Conversion / AI Search | `supported_with_deviation`                      |    54 | 标准 `[ai]` 注入 `env.AI.aiGatewayLogId`/`toMarkdown`；统一 registry 覆盖 62 个 Cloudflare 文档候选并安全公布 59 个 AI Search／18 个 Markdown 格式，本地三语言 OCR、扫描 PDF、可选 OpenAI-compatible VLM、`chunk: false`、bounded durable parse cache 与同实例 R2 source 已接入同一 indexing contract；R2 pause、显式 item/job、extensionless MIME、`r2:<bucket>` source ID、metadata filter、排序、删除 payload 和 bounded completion wait 走同一 Day1 路径；namespaced `open-compute:manual` source 是隔离的 API superset，不进入这 54 个官方成员；完整 Workers AI inference、外部 R2/S3 source 与 AutoRAG 不在声明范围 | `OC-AI-MARKDOWN-001`、`OC-AI-SEARCH-001`          |
 | Artifacts                                    | `supported_with_deviation`                      |    53 | namespace/repository/token、公开 HTTPS import、独立 fork、对象读取、Git Smart HTTP v1/v2、固定 Wrangler 4.127.1 与 pinned Worker binding 闭环；bare Git repository 与 SQLite metadata 位于单机 data-dir                                                                                                                                                                                                                                                                                                                                                                                                                       | `OC-ARTIFACTS-001`                                |
 
 Workers observability 是管理面与平台 collector 能力，不计入 stable runtime-member denominator。当前
@@ -164,11 +164,11 @@ supervisor 自恢复已经资格化，见 [workerd W2](../implemented/w2-standar
 
 ### 本机 Worker origin
 
-tenant Worker 使用 `http://<worker>.<account-id>.localhost:<port>/` 的 exact-host origin，path 从 `/` 开始。它与 Cloudflare
+tenant Worker 使用 `http://<worker>.<instance-id>.localhost:<port>/` 的 exact-host origin，path 从 `/` 开始。它与 Cloudflare
 [`workers.dev`](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
 `<worker>.<account-subdomain>.workers.dev` 的 Worker/account host identity 同形，但 `.localhost`、本机 HTTP、单机 SQLite authority
 和只在 loopback listener 可达时发布 endpoint 都是自托管拓扑差异，不宣称提供 Cloudflare 公共 DNS、TLS、preview URL 或全球路由。
-Host-first dispatch、canonical authority 拒绝、V5→V6 route migration、endpoint OpenAPI/SDK shape 和真实进程调用均有回归覆盖。 可选 P18 Gateway 另投影 `https://<public-name>.<account-id>.<base-domain>/`；这是单机 operator 域名、Caddy DNS-01 和 SQLite authority 的明确拓扑偏差，不声明 Cloudflare `workers.dev`、全球路由或托管证书服务。公网 endpoint 仅在当前受管 Caddy PID 完成 TLS 资格化时发布。
+Host-first dispatch、canonical authority 拒绝、endpoint OpenAPI/SDK shape 和真实进程调用均有回归覆盖。可选 P18 Gateway 另投影 `https://<public-name>.<instance-id>.<base-domain>/`；这是单机 operator 域名、共享 Caddy DNS-01 和各实例 SQLite authority 的明确拓扑偏差，不声明 Cloudflare `workers.dev`、全球路由或托管证书服务。公网 endpoint 仅在当前受管 Caddy PID 完成 TLS 资格化时发布。
 
 ### 固定客户端的 Worker upload wire
 
@@ -242,11 +242,11 @@ producer 文档文字推翻 pinned CLI，也不能把本地无效果行为写成
 
 ### Dynamic Workers 生命周期
 
-普通 Worker 的 public Loader namespace 由 account / Script / binding 的不可变身份派生，跨 Version
+普通 Worker 的 public Loader namespace 由 InstanceId / Script / binding 的不可变身份派生，跨 Version
 回滚保持一致；删除重建同名 Script 使用新身份。原生 cache 有界且可撤销，命中不是公共保证。
 平台对已执行 Version 保留保守的 background-work hold，直到监督器证明 workerd generation 已退出；
 普通 Script DELETE 在 hold 或真实在途执行存在时返回 409。`force=true` 持久化删除 intent 并 fence 新 admission，
-必要时受控轮换单一 workerd generation，再原子 tombstone Worker authority 与释放全部历史 Version referrer；
+必要时受控轮换所属实例的 workerd generation，再原子 tombstone Worker authority 与释放全部历史 Version referrer；
 进程在轮换与提交之间退出时，下一次启动在 runtime admission 前幂等完成删除。轮换会短暂影响同机其他 Worker，
 但外部 D1/KV/R2/Queue 资源不会随 Worker 删除。
 

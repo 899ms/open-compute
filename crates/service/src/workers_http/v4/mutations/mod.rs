@@ -28,7 +28,7 @@ pub(super) async fn delete_script(
         Ok(value) => value,
         Err(error) => return error_response(error, context.request_id()),
     };
-    let account = match domain::resolve_account(&state, &account) {
+    let account = match domain::resolve_instance(&state, &account) {
         Ok(value) => value,
         Err(error) => return error_response(error, context.request_id()),
     };
@@ -231,7 +231,7 @@ pub(super) async fn get_script_settings(
         return error_response(V4Error::Unavailable, context.request_id());
     };
     match WorkerRepository::new(api.storage.db())
-        .get_observability_settings(worker.account_id, worker.id)
+        .get_observability_settings(worker.instance_id, worker.id)
     {
         Ok(value) => success_response(context, ScriptSettings::from_persisted(&value)),
         Err(error) => platform_error(context.request_id(), &error),
@@ -265,7 +265,7 @@ pub(super) async fn patch_script_settings(
         return error_response(V4Error::Unavailable, context.request_id());
     };
     let repo = WorkerRepository::new(api.storage.db());
-    let current = match repo.get_observability_settings(worker.account_id, worker.id) {
+    let current = match repo.get_observability_settings(worker.instance_id, worker.id) {
         Ok(value) => value,
         Err(error) => return platform_error(context.request_id(), &error),
     };
@@ -283,7 +283,7 @@ pub(super) async fn patch_script_settings(
     {
         return success_response(context, ScriptSettings::from_persisted(&current));
     }
-    let worker = match repo.get_worker(worker.account_id, worker.id) {
+    let worker = match repo.get_worker(worker.instance_id, worker.id) {
         Ok(value) => value,
         Err(error) => return platform_error(context.request_id(), &error),
     };
@@ -299,7 +299,7 @@ pub(super) async fn patch_script_settings(
                     return platform_error(context.request_id(), &error);
                 };
                 let prefix = open_compute_workers::worker_loader_generation_prefix(
-                    worker.account_id,
+                    worker.instance_id,
                     worker.id,
                     worker.route_generation,
                 );
@@ -317,7 +317,7 @@ pub(super) async fn patch_script_settings(
         }
     }
     match repo.update_observability_settings(
-        worker.account_id,
+        worker.instance_id,
         worker.id,
         worker.route_generation,
         &replacement,
@@ -452,7 +452,7 @@ pub(super) async fn get_settings(
     };
     let result = active_snapshot(&state, &account, &script).and_then(|(_, snapshot)| {
         let api = worker_api(&state)?;
-        let authority = state.cloudflare_v4_account().ok_or(V4Error::Unavailable)?;
+        let authority = state.v4_instance_context().ok_or(V4Error::Unavailable)?;
         Ok(VersionSettings {
             bindings: super::projection::public_bindings(api, authority, &snapshot)
                 .map_err(|error| V4Error::from(&error))?,
@@ -577,7 +577,7 @@ fn settings_response(
                     Ok(value) => value,
                     Err(error) => return error_response(error, context.request_id()),
                 },
-                match state.cloudflare_v4_account() {
+                match state.v4_instance_context() {
                     Some(value) => value,
                     None => {
                         return error_response(V4Error::Unavailable, context.request_id());
@@ -654,7 +654,7 @@ fn settings_context(
     permission: V4Permission,
 ) -> Result<(crate::cloudflare_v4::V4RequestContext, WorkerRecord), HttpError> {
     let context = authorize(request, permission)?;
-    let account = domain::resolve_account(state, account)
+    let account = domain::resolve_instance(state, account)
         .map_err(|error| error_response(error, context.request_id()))?;
     let api = worker_api(state).map_err(|error| error_response(error, context.request_id()))?;
     let worker = domain::worker_by_name(api, account, script)
@@ -667,7 +667,7 @@ fn active_snapshot(
     account: &str,
     script: &str,
 ) -> Result<(WorkerRecord, VersionSnapshot), V4Error> {
-    let account = domain::resolve_account(state, account)?;
+    let account = domain::resolve_instance(state, account)?;
     let api = worker_api(state)?;
     let worker =
         domain::worker_by_name(api, account, script).map_err(|error| V4Error::from(&error))?;
@@ -686,7 +686,7 @@ async fn mutate(
     crons: Option<Vec<String>>,
     request_id: open_compute_core::RequestId,
 ) -> Result<(), PlatformError> {
-    let account = domain::resolve_account(state, account).map_err(v4_platform_error)?;
+    let account = domain::resolve_instance(state, account).map_err(v4_platform_error)?;
     let api = state.worker_api().ok_or_else(unavailable)?;
     let worker = domain::worker_by_name(api, account, script)?;
     match domain::clone_active(
@@ -711,7 +711,7 @@ async fn mutate(
 fn v4_platform_error(error: V4Error) -> PlatformError {
     PlatformError::new(
         match error {
-            V4Error::NotFound => ErrorCode::AccountNotFound,
+            V4Error::NotFound => ErrorCode::InstanceNotFound,
             V4Error::Unavailable => ErrorCode::PlatformUnavailable,
             _ => ErrorCode::ConfigInvalid,
         },

@@ -778,13 +778,13 @@ wildcard 检查要求 IN 类 CNAME 严格指向 `ingress.<base_domain>`，不把
 | `ocd caddy list-modules` | 用正式 pinned binary 查看实际模块集合，和 lock inventory 一致，不安装模块                          |
 | `ocd caddy fmt <file>`   | 原生格式化用户文件到 stdout，保留原文件；不提供对托管文件的覆写路径                                |
 | `ocd caddy validate`     | 校验平台和全部用户文件的完整候选，不改变线上配置；输出阶段与脱敏诊断，不输出展开正文               |
-| `ocd caddy reload`       | 向所选在线实例请求 §9.4 的整体配置应用；daemon 不在线时明确失败，不自行启动 Caddy                  |
+| `ocd caddy reload`       | 向所选 OCD 作用域的在线 daemon 请求 §9.4 的整体配置应用；daemon 不在线时明确失败，不自行启动 Caddy       |
 | `ocd caddy status`       | 从 GatewayManager 查看 child、当前配置 digest、最近 reload 结果、平台 TLS/renewal 健康和未生效错误 |
 
 ```sh
-ocd --config ./compute.toml caddy validate
-ocd --config ./compute.toml caddy reload
-ocd --config ./compute.toml caddy status
+ocd caddy validate
+ocd caddy reload
+ocd caddy status
 ocd caddy fmt ./caddy/git.caddyfile
 ```
 

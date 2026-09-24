@@ -80,10 +80,10 @@ The control socket is only for session attach. Business bytes never go through `
 
 On standard input the Provider loops:
 
-1. Read 4 bytes plus one file descriptor (`SCM_RIGHTS`).
-2. Require magic `OCP1` and exactly one FD.
+1. Read 20 bytes plus one file descriptor (`SCM_RIGHTS`).
+2. Require magic `OCP2`, a 16-byte nonce, and exactly one FD.
 3. Treat that FD as a Cap'n Proto two-party session.
-4. Write a single ACK byte `0`.
+4. Write ACK byte `0` followed by the same 16-byte nonce.
 
 The session schema is:
 
@@ -117,7 +117,7 @@ The name `local-files` is a lowercase ASCII slug (1–63 characters, alphanumeri
 Check, then restart. Extensions do not hot-reload.
 
 ```sh
-ocd --config /etc/open-compute/config.toml config check
+ocd --config /var/lib/open-compute/instances/default/compute.toml config check
 ocd restart
 ```
 

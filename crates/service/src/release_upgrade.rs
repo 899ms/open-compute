@@ -2,10 +2,10 @@
 
 use crate::install_receipt::{
     self, InstallReceipt, cmp_stable_semver, is_stable_semver, path_looks_package_manager_owned,
-    read_receipt, receipt_path_for_binary, require_upgradeable_receipt, write_receipt,
+    receipt_path_in, require_upgradeable_receipt, write_receipt,
 };
-use crate::instance_ops::{INSTANCE_READY_TIMEOUT, wait_until_instance_ready_for_release};
-use crate::instance_registry::InstanceRegistry;
+use crate::instance_ops::wait_scoped_daemon_state;
+use crate::instance_registry::{InstanceRegistry, ServiceScope};
 use crate::service_manager::ServiceManager;
 use open_compute_core::{ErrorCode, PlatformError};
 use serde::{Deserialize, Serialize};
@@ -69,6 +69,8 @@ pub struct ReleaseArtifact {
 /// Options for [`run_upgrade`].
 #[derive(Clone, Debug)]
 pub struct UpgradeOptions {
+    /// Explicit OCD scope whose one service is upgraded.
+    pub scope: ServiceScope,
     /// Exact stable `SemVer`, or `None` for latest stable.
     pub version: Option<String>,
     /// Resolve and verify only; do not replace the binary.
@@ -97,6 +99,7 @@ impl UpgradeOptions {
         version: Option<String>,
         dry_run: bool,
         no_restart: bool,
+        scope: ServiceScope,
     ) -> Result<Self, PlatformError> {
         let binary_path = std::env::current_exe().map_err(|_| {
             PlatformError::new(
@@ -105,7 +108,7 @@ impl UpgradeOptions {
             )
         })?;
         let binary_path = binary_path.canonicalize().unwrap_or(binary_path);
-        let receipt_path = receipt_path_for_binary(&binary_path);
+        let receipt_path = receipt_path_in(InstanceRegistry::production()?.root_for(scope));
         let staging_dir = binary_path
             .parent()
             .ok_or_else(|| {
@@ -116,6 +119,7 @@ impl UpgradeOptions {
             })?
             .to_owned();
         Ok(Self {
+            scope,
             version,
             dry_run,
             no_restart,
@@ -261,54 +265,23 @@ pub async fn run_upgrade(
         }
     }
 
-    let instances = crate::instance_purge::owned_records(registry, &options.binary_path)?;
-    let active_instances = if options.no_restart {
-        Vec::new()
-    } else {
-        let mut active = Vec::new();
-        for record in &instances {
-            match manager.is_active(record) {
-                Ok(true) => active.push(record),
-                Ok(false) => {}
-                Err(error) => {
-                    writeln!(
-                        out,
-                        "UPGRADE_INSTANCE_STATE_FAILED {} config={} error={} recovery='ocd instance unregister --instance {}'",
-                        record.instance_id,
-                        record.config_path().display(),
-                        error.code().as_str(),
-                        record.instance_id,
-                    )
-                    .map_err(|_| io_failed())?;
-                    return Err(PlatformError::new(
-                        error.code(),
-                        "failed to inspect an owned upgrade instance; see the reported instance and recovery command",
-                    ));
-                }
-            }
-        }
-        active
-    };
-    let mut invalid_active = false;
-    for record in &active_instances {
+    let instances = registry.list_scope(options.scope)?;
+    let restart = !options.no_restart && manager.is_active(options.scope)?;
+    for record in &instances {
         if let Err(error) = registry.validate_registered_config(record) {
             writeln!(
                 out,
-                "UPGRADE_INVALID_INSTANCE {} config={} error={} recovery='ocd instance unregister --instance {}'",
+                "UPGRADE_INVALID_INSTANCE {} config={} error={} recovery='restore the config or stop the daemon and edit ocd.toml'",
                 record.instance_id,
                 record.config_path().display(),
                 error.code().as_str(),
-                record.instance_id,
             )
             .map_err(|_| io_failed())?;
-            invalid_active = true;
+            return Err(PlatformError::new(
+                ErrorCode::InstanceRegistryInvalid,
+                "an owned instance has invalid configuration; resolve the reported config before retrying",
+            ));
         }
-    }
-    if invalid_active {
-        return Err(PlatformError::new(
-            ErrorCode::InstanceRegistryInvalid,
-            "one or more active owned instances have invalid configuration; stop them and run the reported unregister command before retrying",
-        ));
     }
     writeln!(
         out,
@@ -317,7 +290,7 @@ pub async fn run_upgrade(
         manifest.version,
         options.binary_path.display(),
         instances.len(),
-        active_instances.len(),
+        restart,
         options.dry_run
     )
     .map_err(|_| io_failed())?;
@@ -325,26 +298,10 @@ pub async fn run_upgrade(
         writeln!(
             out,
             "UPGRADE_INSTANCE {} {}",
-            record.instance_id, record.service_identifier
+            record.instance_id,
+            record.config_path().display()
         )
         .map_err(|_| io_failed())?;
-        let inactive = !active_instances
-            .iter()
-            .any(|active| active.instance_id == record.instance_id);
-        if !options.no_restart
-            && inactive
-            && let Err(error) = registry.validate_registered_config(record)
-        {
-            writeln!(
-                out,
-                "UPGRADE_STALE_INSTANCE {} config={} error={} recovery='ocd instance unregister --instance {}'",
-                record.instance_id,
-                record.config_path().display(),
-                error.code().as_str(),
-                record.instance_id,
-            )
-            .map_err(|_| io_failed())?;
-        }
     }
     if options.dry_run {
         writeln!(out, "UPGRADE_DRY_RUN_OK {}", manifest.version).map_err(|_| io_failed())?;
@@ -395,33 +352,17 @@ pub async fn run_upgrade(
     if options.no_restart {
         writeln!(
             out,
-            "UPGRADE_OK {} binary replaced; managed instances were not restarted (--no-restart)",
+            "UPGRADE_OK {} binary replaced; scoped daemon was not restarted (--no-restart)",
             manifest.version
         )
         .map_err(|_| io_failed())?;
         return Ok(());
     }
 
-    for record in active_instances {
-        if let Err(err) = manager.restart(record) {
-            let _ = writeln!(
-                out,
-                "UPGRADE_INSTANCE_FAILED {} {}",
-                record.instance_id,
-                err.message()
-            );
-            return Err(PlatformError::new(
-                ErrorCode::PlatformUnavailable,
-                "managed instance restart failed after binary replace; remaining instances were not restarted",
-            ));
-        }
-        wait_until_instance_ready_for_release(
-            record,
-            manager.readiness_runtime_root().as_deref(),
-            INSTANCE_READY_TIMEOUT,
-            Some(&manifest.version),
-        )?;
-        writeln!(out, "UPGRADE_INSTANCE_RESTARTED {}", record.instance_id)
+    if restart {
+        manager.restart(options.scope)?;
+        wait_scoped_daemon_state(registry, manager, options.scope, true)?;
+        writeln!(out, "UPGRADE_DAEMON_RESTARTED {}", options.scope.as_str())
             .map_err(|_| io_failed())?;
     }
     writeln!(out, "UPGRADE_OK {}", manifest.version).map_err(|_| io_failed())?;
@@ -445,6 +386,7 @@ pub fn run_uninstall(
     binary_path: &Path,
     registry: &InstanceRegistry,
     manager: &dyn ServiceManager,
+    scope: ServiceScope,
     options: UninstallOptions,
     out: &mut impl Write,
 ) -> Result<(), PlatformError> {
@@ -467,7 +409,7 @@ pub fn run_uninstall(
             "install receipt binary_path does not match the running executable",
         ));
     }
-    let records = crate::instance_purge::owned_records(registry, &owned)?;
+    let records = registry.list_scope(scope)?;
     writeln!(
         out,
         "UNINSTALL_PLAN binary={} receipt={} instances={} purge={} dry_run={}",
@@ -479,10 +421,35 @@ pub fn run_uninstall(
     )
     .map_err(|_| io_failed())?;
     if purge {
-        crate::instance_purge::purge_records(&records, registry, manager, None, yes, dry_run, out)?;
+        crate::instance_purge::purge_records(
+            &records,
+            registry,
+            manager,
+            yes,
+            true,
+            &mut std::io::sink(),
+        )?;
     } else {
         crate::instance_purge::unregister_preserving_data(
-            &records, registry, manager, None, dry_run, out,
+            &records,
+            registry,
+            manager,
+            true,
+            &mut std::io::sink(),
+        )?;
+    }
+    if !dry_run {
+        if manager.is_active(scope)? {
+            manager.stop(scope)?;
+            wait_scoped_daemon_state(registry, manager, scope, false)?;
+        }
+        manager.uninstall(scope)?;
+    }
+    if purge {
+        crate::instance_purge::purge_records(&records, registry, manager, yes, dry_run, out)?;
+    } else {
+        crate::instance_purge::unregister_preserving_data(
+            &records, registry, manager, dry_run, out,
         )?;
     }
     if dry_run {
@@ -756,20 +723,6 @@ fn atomic_replace_binary(staged: &Path, destination: &Path) -> Result<(), Platfo
 
 fn io_failed() -> PlatformError {
     PlatformError::new(ErrorCode::Internal, "failed to write upgrade output")
-}
-
-/// Read the current install receipt when present (Dashboard / CLI helpers).
-pub fn load_receipt_for_exe() -> Result<(PathBuf, PathBuf, InstallReceipt), PlatformError> {
-    let binary = std::env::current_exe().map_err(|_| {
-        PlatformError::new(
-            ErrorCode::PlatformUnavailable,
-            "failed to resolve the current ocd executable path",
-        )
-    })?;
-    let binary = binary.canonicalize().unwrap_or(binary);
-    let receipt_path = receipt_path_for_binary(&binary);
-    let receipt = read_receipt(&receipt_path)?;
-    Ok((receipt_path, binary, receipt))
 }
 
 #[cfg(test)]

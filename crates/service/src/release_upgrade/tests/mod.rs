@@ -45,9 +45,7 @@ fn write_loadable_config(dir: &Path) -> PathBuf {
     }
     let body = format!(
         r#"
-[server]
-public_bind = "127.0.0.1:0"
-admin_auth = {{ file = "{admin}" }}
+[auth]
 deployer_auth = {{ file = "{deployer}" }}
 read_only_auth = {{ file = "{read_only}" }}
 
@@ -57,7 +55,6 @@ master_key_file = "{master}"
 
 [storage]
 backend = "local"
-path = "{objects}"
 prefix = "system/"
 
 [cache]
@@ -66,15 +63,21 @@ high_watermark_ratio = 0.9
 low_watermark_ratio = 0.8
 max_artifact_bytes = 65536
 "#,
-        admin = admin.display(),
         deployer = deployer.display(),
         read_only = read_only.display(),
         data = data.display(),
         master = master.display(),
-        objects = objects.display(),
     );
     let path = dir.join("compute.toml");
     fs::write(&path, body).unwrap();
+    let loaded = crate::config_load::load_platform_config_from(&path, Path::new("/")).unwrap();
+    drop(
+        open_compute_storage::PlatformStorage::bootstrap(
+            &loaded.config.data,
+            &open_compute_core::SystemClock,
+        )
+        .unwrap(),
+    );
     path
 }
 
@@ -142,6 +145,7 @@ fn base_options(
     current: &str,
 ) -> UpgradeOptions {
     UpgradeOptions {
+        scope: ServiceScope::User,
         version: version.map(str::to_owned),
         dry_run,
         no_restart,
@@ -168,7 +172,7 @@ fn write_upgradeable_pair(temp: &TempDir, version: &str) -> (PathBuf, PathBuf, V
         .unwrap();
     file.write_all(&current).unwrap();
     drop(file);
-    let receipt_path = temp.path().join("share/open-compute/install-receipt.json");
+    let receipt_path = temp.path().join("ocd/install-receipt.json");
     write_receipt(
         &receipt_path,
         &InstallReceipt {

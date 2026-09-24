@@ -514,7 +514,7 @@ impl ServiceInvocationRegistry {
                     ..
                 },
             ) => Ok(ServiceTargetPayload::Worker {
-                loader_key: format!("{}/{worker_id}/{version_id}", target.account_id),
+                loader_key: format!("{}/{worker_id}/{version_id}", target.instance_id),
                 worker_code_sha256: hex::encode(worker_code_sha256),
                 route_generation: *route_generation,
                 content_kind: *content_kind,
@@ -574,6 +574,17 @@ impl ServiceInvocationRegistry {
             .extension_sessions
             .get(identity)
             .map(|session| session.name.clone())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_extension_session(&self, name: &str) -> String {
+        let identity = token();
+        self.inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .extension_sessions
+            .insert(identity.clone(), ExtensionSession { name: name.into() });
+        identity
     }
 
     fn resolve_and_pin(

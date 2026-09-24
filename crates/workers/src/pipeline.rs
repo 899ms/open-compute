@@ -37,8 +37,8 @@ use bytes::Bytes;
 use futures::stream;
 use open_compute_artifacts::ArtifactStore;
 use open_compute_core::{
-    AccountId, BindingId, BindingKind, CanonicalBindingConfig, CanonicalPermissions,
-    CronActivationId, CronSchedule, ErrorCode, PlatformError, QueueConsumerId, QueueId, RequestId,
+    BindingId, BindingKind, CanonicalBindingConfig, CanonicalPermissions, CronActivationId,
+    CronSchedule, ErrorCode, InstanceId, PlatformError, QueueConsumerId, QueueId, RequestId,
     ResourceId, ResourceState, SecretBytes, SecretString, StartupId, VersionId, WorkerId,
 };
 use open_compute_storage::{
@@ -83,7 +83,7 @@ pub struct VersionBindingInput {
     pub config: CanonicalBindingConfig,
 }
 
-/// Control-plane declaration for one dynamic same-account Service binding.
+/// Control-plane declaration for one dynamic same-instance Service binding.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionServiceInput {
@@ -253,7 +253,7 @@ pub struct QueueConsumerInput {
     /// Delivery and retry policy.
     #[serde(flatten)]
     pub config: QueueConsumerConfig,
-    /// Optional ready dead-letter Queue in the same account.
+    /// Optional ready dead-letter Queue in the same instance.
     #[serde(default)]
     pub dead_letter_queue: Option<QueueId>,
 }
@@ -266,8 +266,8 @@ struct FailedResponse {
 /// Candidate identity passed to the real runtime validator.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValidationCandidate {
-    /// Account identity.
-    pub account_id: AccountId,
+    /// Instance identity.
+    pub instance_id: InstanceId,
     /// Worker identity.
     pub worker_id: WorkerId,
     /// Immutable version identity.
@@ -361,8 +361,8 @@ pub trait ProductPromotionCoordinator: Send + Sync + 'static {
 /// Immutable authority needed by the Queue/Cron promotion coordinator.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProductPromotionRequest {
-    /// Owning account.
-    pub account_id: AccountId,
+    /// Owning instance.
+    pub instance_id: InstanceId,
     /// Worker whose active version changes.
     pub worker_id: WorkerId,
     /// Validated ready target version.
@@ -386,8 +386,8 @@ mod test_validator;
 /// Secret-safe version request. Debug redacts secret values.
 #[derive(Clone, Debug)]
 pub struct CreateVersionRequest {
-    /// Account boundary.
-    pub account_id: AccountId,
+    /// Instance boundary.
+    pub instance_id: InstanceId,
     /// Parent Worker.
     pub worker_id: WorkerId,
     /// Required control idempotency key.

@@ -70,9 +70,9 @@ function liveLog(raw: unknown, fallbackID: string): LiveLogRow | undefined {
 function WorkerDetailPage() {
   const { workerId } = Route.useParams();
   const navigate = useNavigate();
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const feedback = useMutationFeedback();
-  const enabled = client !== null && accountId !== null;
+  const enabled = client !== null && instanceId !== null;
   const [activateTarget, setActivateTarget] = useState<string | null>(null);
   const [deleteDeploymentTarget, setDeleteDeploymentTarget] = useState<
     string | null
@@ -107,7 +107,7 @@ function WorkerDetailPage() {
     queryFn: ({ signal }) =>
       client!.workers.scripts.deployments.list(
         workerId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -117,7 +117,7 @@ function WorkerDetailPage() {
     queryFn: ({ signal }) =>
       client!.workers.scripts.versions.list(
         workerId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -125,13 +125,13 @@ function WorkerDetailPage() {
   const endpoints = useQuery({
     queryKey: ["cloudflare-v4", "workers", workerId, "endpoints"],
     queryFn: ({ signal }) =>
-      client!.openCompute.workers.endpoints(accountId!, workerId, { signal }),
+      client!.openCompute.workers.endpoints(instanceId!, workerId, { signal }),
     enabled,
   });
   const publicOrigin = useQuery({
     queryKey: ["cloudflare-v4", "workers", workerId, "public-origin"],
     queryFn: ({ signal }) =>
-      client!.openCompute.workers.publicOrigin.get(accountId!, workerId, {
+      client!.openCompute.workers.publicOrigin.get(instanceId!, workerId, {
         signal,
       }),
     enabled,
@@ -164,7 +164,7 @@ function WorkerDetailPage() {
       );
       return client!.workers.observability.telemetry.query(
         {
-          account_id: accountId!,
+          account_id: instanceId!,
           queryId: `dashboard-worker-${workerId}`,
           timeframe: { from: to - timeframe, to },
           view: "events",
@@ -189,7 +189,7 @@ function WorkerDetailPage() {
     refetchInterval: 10_000,
   });
   useEffect(() => {
-    if (!enabled || !liveEnabled || client === null || accountId === null)
+    if (!enabled || !liveEnabled || client === null || instanceId === null)
       return;
     const abort = new AbortController();
     let disposed = false;
@@ -206,7 +206,7 @@ function WorkerDetailPage() {
       try {
         await client.workers.observability.telemetry.liveTailHeartbeat(
           {
-            account_id: accountId,
+            account_id: instanceId,
             scriptId: workerId,
           },
           { signal: abort.signal },
@@ -221,7 +221,7 @@ function WorkerDetailPage() {
       try {
         const prepared = await client.workers.observability.telemetry.liveTail(
           {
-            account_id: accountId,
+            account_id: instanceId,
             scriptId: workerId,
             filterCombination: "and",
             filters: [
@@ -277,7 +277,7 @@ function WorkerDetailPage() {
       socket?.close(1000, "Live Tail stopped");
     };
   }, [
-    accountId,
+    instanceId,
     clearLiveError,
     client,
     enabled,
@@ -295,7 +295,7 @@ function WorkerDetailPage() {
       if (!deployment)
         throw new Error("The selected deployment is no longer available.");
       return client!.workers.scripts.deployments.create(workerId, {
-        account_id: accountId!,
+        account_id: instanceId!,
         strategy: "percentage",
         versions: deployment.versions.map((version) => ({
           version_id: version.version_id,
@@ -324,7 +324,7 @@ function WorkerDetailPage() {
   const deleteDeploymentMutation = useMutation({
     mutationFn: (deploymentID: string) =>
       client!.workers.scripts.deployments.delete(deploymentID, {
-        account_id: accountId!,
+        account_id: instanceId!,
         script_name: workerId,
       }),
     onSuccess: async () => {
@@ -345,7 +345,7 @@ function WorkerDetailPage() {
   const deleteWorkerMutation = useMutation({
     mutationFn: () =>
       client!.workers.scripts.delete(workerId, {
-        account_id: accountId!,
+        account_id: instanceId!,
       }),
     onSuccess: async () => {
       feedback.success("Worker deleted.");
@@ -360,7 +360,7 @@ function WorkerDetailPage() {
   });
   const setPublicOrigin = useMutation({
     mutationFn: (name: string) =>
-      client!.openCompute.workers.publicOrigin.set(accountId!, workerId, {
+      client!.openCompute.workers.publicOrigin.set(instanceId!, workerId, {
         name,
       }),
     onSuccess: async () => {
@@ -380,7 +380,7 @@ function WorkerDetailPage() {
   });
   const removePublicOrigin = useMutation({
     mutationFn: () =>
-      client!.openCompute.workers.publicOrigin.delete(accountId!, workerId),
+      client!.openCompute.workers.publicOrigin.delete(instanceId!, workerId),
     onSuccess: async () => {
       setRemovePublicOpen(false);
       setPublicError(null);

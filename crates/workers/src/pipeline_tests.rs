@@ -33,7 +33,7 @@ fn version_assets(binding: Option<&str>, worker_first: RunWorkerFirst) -> Versio
 
 fn assets_only_request(assets: &VersionAssets) -> CreateVersionRequest {
     CreateVersionRequest {
-        account_id: AccountId::generate(),
+        instance_id: InstanceId::generate(),
         worker_id: WorkerId::generate(),
         idempotency_key: "asset-test".to_owned(),
         content: VersionContent::AssetsOnly {
@@ -54,7 +54,7 @@ fn assets_only_request(assets: &VersionAssets) -> CreateVersionRequest {
 }
 
 fn worker_request(
-    account_id: AccountId,
+    account_id: InstanceId,
     worker_id: WorkerId,
     source: &[u8],
 ) -> CreateVersionRequest {
@@ -69,7 +69,7 @@ fn worker_request(
     )
     .unwrap();
     CreateVersionRequest {
-        account_id,
+        instance_id: account_id,
         worker_id,
         idempotency_key: "migration-replay".to_owned(),
         content: VersionContent::Worker {
@@ -94,7 +94,7 @@ fn worker_request(
 async fn default_entrypoint_validation_and_internal_error_are_stable() {
     let validator: Arc<dyn RuntimeValidator> = Arc::new(|_: ValidationCandidate| async { Ok(()) });
     let candidate = ValidationCandidate {
-        account_id: AccountId::generate(),
+        instance_id: InstanceId::generate(),
         worker_id: WorkerId::generate(),
         version_id: VersionId::generate(),
         worker_code_sha256: [3; 32],
@@ -317,7 +317,7 @@ fn runtime_features_prepare_every_builtin_and_enforce_the_pinned_compatibility()
 
 #[test]
 fn migration_replay_identity_includes_version_content_and_exact_plan() {
-    let account_id = AccountId::generate();
+    let account_id = InstanceId::generate();
     let worker_id = WorkerId::generate();
     let first = worker_request(account_id, worker_id, b"export default { fetch() {} }");
     let changed = worker_request(
@@ -400,7 +400,7 @@ async fn binding_preparation_rejects_stale_or_cross_authority_inputs() {
         &SystemClock,
     )
     .unwrap();
-    let account = storage.identity().default_account_id;
+    let account = storage.identity().instance_id;
     let workers = WorkerRepository::new(storage.db());
     let worker = workers
         .create_worker(
@@ -508,7 +508,7 @@ prefix = "system/"
     let fingerprint = [7; 32];
     let resource_id = ResourceId::generate();
     let reservation = open_compute_storage::ReserveResourceCreate {
-        account_id: account,
+        instance_id: account,
         kind: BindingKind::KvNamespace,
         name: "binding-kv",
         idempotency_key: "binding-kv",
@@ -550,7 +550,7 @@ prefix = "system/"
     let namespace = match resources
         .reserve_create(
             &open_compute_storage::ReserveResourceCreate {
-                account_id: account,
+                instance_id: account,
                 kind: BindingKind::DoNamespace,
                 name: "cross-authority-do",
                 idempotency_key: "cross-authority-do",

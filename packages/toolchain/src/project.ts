@@ -6,7 +6,6 @@ interface NormalizedWranglerConfig {
   configPath?: string;
   userConfigPath?: string;
   name?: string;
-  account_id?: string;
   main?: string;
   tsconfig?: string;
   vars: Record<string, JsonValue>;
@@ -150,7 +149,6 @@ export interface WorkerProject {
   readonly runtimeFeatures: RuntimeFeatures;
   readonly limits: EffectiveResourceLimits;
   readonly assets?: AssetsProject;
-  readonly accountId?: string;
 }
 
 const STANDARD_DEFAULT_CPU_MS = 30_000;
@@ -614,8 +612,5 @@ export async function loadProject(path: string): Promise<WorkerProject> {
     ),
     limits,
     ...(assets === undefined ? {} : { assets }),
-    ...(config.account_id === undefined
-      ? {}
-      : { accountId: config.account_id }),
   };
 }

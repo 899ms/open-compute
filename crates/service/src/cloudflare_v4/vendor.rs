@@ -10,7 +10,7 @@ use axum::body::to_bytes;
 use axum::extract::{Path, Request, State};
 use axum::response::Response;
 use axum::routing::{get, post};
-use open_compute_core::{AccountId, BindingKind, ErrorCode, PlatformError, ResourceId};
+use open_compute_core::{BindingKind, ErrorCode, InstanceId, PlatformError, ResourceId};
 use open_compute_storage::{DurableObjectRepository, ResourceRepository, WorkerRepository};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -348,7 +348,12 @@ async fn upgrade_check(State(_state): State<HttpState>, request: Request) -> Res
     let current = env!("CARGO_PKG_VERSION");
     let result = match (
         crate::release_upgrade::LiveReleaseHttp::new(),
-        crate::release_upgrade::UpgradeOptions::production(None, true, true),
+        crate::release_upgrade::UpgradeOptions::production(
+            None,
+            true,
+            true,
+            crate::instance_registry::ServiceScope::User,
+        ),
     ) {
         (Ok(http), Ok(options)) => {
             match crate::release_upgrade::check_upgrade_available(
@@ -364,7 +369,7 @@ async fn upgrade_check(State(_state): State<HttpState>, request: Request) -> Res
             {
                 Ok(result) => result,
                 Err(_) => {
-                    // Fall back to cache-only / local allowance without failing the page.
+                    // The live check is optional; never read another OCD scope's cache.
                     let (allowed, blocked) =
                         match crate::install_receipt::require_upgradeable_receipt(
                             &options.receipt_path,
@@ -373,18 +378,7 @@ async fn upgrade_check(State(_state): State<HttpState>, request: Request) -> Res
                             Ok(_) => (true, None),
                             Err(err) => (false, Some(err.message().to_owned())),
                         };
-                    let cached = crate::update_check::default_cache_path()
-                        .ok()
-                        .and_then(|path| crate::update_check::read_cache(&path))
-                        .and_then(|cache| {
-                            cache.success().then_some(cache.latest_version).flatten()
-                        });
-                    crate::upgrade_api::check_result(
-                        current,
-                        cached.as_deref(),
-                        allowed,
-                        blocked.as_deref(),
-                    )
+                    crate::upgrade_api::check_result(current, None, allowed, blocked.as_deref())
                 }
             }
         }
@@ -414,7 +408,7 @@ async fn durable_object_namespaces(
     let Some(storage) = state.platform_storage() else {
         return error_response(V4Error::Unavailable, context.request_id());
     };
-    let Some(authority) = state.cloudflare_v4_account() else {
+    let Some(authority) = state.v4_instance_context() else {
         return error_response(V4Error::Unavailable, context.request_id());
     };
     let workers = WorkerRepository::new(storage.db());
@@ -487,9 +481,9 @@ async fn durable_object_records(
     }
 }
 
-fn resolve_account(state: &HttpState, public: &str) -> Result<AccountId, V4Error> {
+fn resolve_account(state: &HttpState, public: &str) -> Result<InstanceId, V4Error> {
     state
-        .cloudflare_v4_account()
+        .v4_instance_context()
         .ok_or(V4Error::Unavailable)?
         .resolve(public)
 }
@@ -500,9 +494,9 @@ pub(super) fn resolve_resource(
     public_resource: &str,
     kind: V4ResourceKind,
     binding_kind: BindingKind,
-) -> Result<(AccountId, ResourceId), V4Error> {
+) -> Result<(InstanceId, ResourceId), V4Error> {
     let account = resolve_account(state, public_account)?;
-    let authority = state.cloudflare_v4_account().ok_or(V4Error::Unavailable)?;
+    let authority = state.v4_instance_context().ok_or(V4Error::Unavailable)?;
     let storage = state.platform_storage().ok_or(V4Error::Unavailable)?;
     let resource = ResourceRepository::new(storage.db())
         .list(account, Some(binding_kind))

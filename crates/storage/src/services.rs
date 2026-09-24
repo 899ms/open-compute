@@ -1,7 +1,7 @@
 //! Immutable cross-Worker Service declarations and dynamic target authority.
 
 use crate::{ControlDb, VersionContentKind, VersionState};
-use open_compute_core::{AccountId, DeploymentId, ErrorCode, PlatformError, VersionId, WorkerId};
+use open_compute_core::{DeploymentId, ErrorCode, InstanceId, PlatformError, VersionId, WorkerId};
 use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -15,7 +15,7 @@ use std::str::FromStr;
     deny_unknown_fields
 )]
 pub enum ServiceTarget {
-    /// Same-account Worker selected dynamically through its active deployment.
+    /// Same-instance Worker selected dynamically through its active deployment.
     Worker {
         /// Stable logical Worker identity.
         worker_id: WorkerId,
@@ -51,7 +51,7 @@ pub struct VersionServiceRecord {
 pub struct NewVersionService {
     /// Tenant environment binding name.
     pub binding_name: String,
-    /// Existing same-account Worker or configured local extension target.
+    /// Existing same-instance Worker or configured local extension target.
     pub target: ServiceTarget,
     /// Optional named `WorkerEntrypoint` export.
     pub entrypoint: Option<String>,
@@ -66,8 +66,8 @@ pub struct NewVersionService {
 pub struct ResolvedServiceTarget {
     /// Verified immutable declaration.
     pub service: VersionServiceRecord,
-    /// Same account shared by caller and target.
-    pub account_id: AccountId,
+    /// Instance shared by caller and target.
+    pub instance_id: InstanceId,
     /// Caller Worker owning the declaration.
     pub caller_worker_id: WorkerId,
     /// Resolved current target.
@@ -143,7 +143,7 @@ impl<'a> ServiceRepository<'a> {
                     "SELECT s.version_id, s.binding_name, s.target_kind, s.target_worker_id,
                             s.target_extension_name, s.entrypoint, s.props_json,
                             s.descriptor_sha256, s.created_at_ms,
-                            caller.account_id, caller.id, caller.deleted_at_ms, cd.state,
+                            (SELECT instance_id FROM instance_identity), caller.id, caller.deleted_at_ms, cd.state,
                             target.deleted_at_ms, target.route_generation, active.id,
                             td.id, td.content_kind, td.state, td.worker_code_sha256
                      FROM version_services s
@@ -157,7 +157,7 @@ impl<'a> ServiceRepository<'a> {
                     params![caller_version_id.to_string(), binding_name],
                     |row| {
                         let service = map_service(row)?;
-                        let account: String = row.get(9)?;
+                        let instance: String = row.get(9)?;
                         let caller_worker: String = row.get(10)?;
                         let caller_deleted: Option<i64> = row.get(11)?;
                         let caller_state: String = row.get(12)?;
@@ -170,7 +170,7 @@ impl<'a> ServiceRepository<'a> {
                         let target_digest: Option<Vec<u8>> = row.get(19)?;
                         Ok((
                             service,
-                            account,
+                            instance,
                             caller_worker,
                             caller_deleted,
                             caller_state,
@@ -188,7 +188,7 @@ impl<'a> ServiceRepository<'a> {
                 .map_err(|_| db_error())?;
             let Some((
                 service,
-                account,
+                instance,
                 caller_worker,
                 caller_deleted,
                 caller_state,
@@ -241,7 +241,7 @@ impl<'a> ServiceRepository<'a> {
             };
             Ok(ResolvedServiceTarget {
                 service,
-                account_id: AccountId::from_str(&account).map_err(|_| invariant())?,
+                instance_id: InstanceId::from_str(&instance).map_err(|_| invariant())?,
                 caller_worker_id: WorkerId::from_str(&caller_worker).map_err(|_| invariant())?,
                 target,
             })
@@ -251,7 +251,7 @@ impl<'a> ServiceRepository<'a> {
     /// Return effective inbound declarations from other Workers.
     pub fn inbound_referrers(
         &self,
-        account_id: AccountId,
+        instance_id: InstanceId,
         target_worker_id: WorkerId,
         limit: u32,
     ) -> Result<Vec<ServiceReferrer>, PlatformError> {
@@ -271,8 +271,7 @@ impl<'a> ServiceRepository<'a> {
                      JOIN workers target ON target.id = s.target_worker_id
                      WHERE s.target_worker_id = ?1
                        AND s.target_kind = 'worker'
-                       AND target.account_id = ?2
-                       AND caller.account_id = target.account_id
+                       AND (SELECT instance_id FROM instance_identity) = ?2
                        AND caller.id != target.id
                        AND caller.deleted_at_ms IS NULL
                        AND d.state IN ('staging', 'validating', 'ready')
@@ -283,7 +282,7 @@ impl<'a> ServiceRepository<'a> {
                 .query_map(
                     params![
                         target_worker_id.to_string(),
-                        account_id.to_string(),
+                        instance_id.to_string(),
                         i64::from(limit)
                     ],
                     |row| {

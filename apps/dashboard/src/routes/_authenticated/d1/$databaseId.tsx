@@ -20,9 +20,9 @@ export const Route = createFileRoute("/_authenticated/d1/$databaseId")({
 
 function D1DetailPage() {
   const { databaseId } = Route.useParams();
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const feedback = useMutationFeedback();
-  const enabled = client !== null && accountId !== null;
+  const enabled = client !== null && instanceId !== null;
   const [sql, setSql] = useState(
     "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",
   );
@@ -33,7 +33,7 @@ function D1DetailPage() {
     queryFn: ({ signal }) =>
       client!.d1.database.get(
         databaseId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -41,13 +41,13 @@ function D1DetailPage() {
   const backups = useQuery({
     queryKey: ["cloudflare-v4", "d1", databaseId, "backups"],
     queryFn: ({ signal }) =>
-      client!.openCompute.backups.d1.list(accountId!, databaseId, { signal }),
+      client!.openCompute.backups.d1.list(instanceId!, databaseId, { signal }),
     enabled,
   });
   const query = useMutation({
     mutationFn: () =>
       client!.d1.database.query(databaseId, {
-        account_id: accountId!,
+        account_id: instanceId!,
         sql,
       }),
     onError: (error) =>
@@ -55,7 +55,7 @@ function D1DetailPage() {
   });
   const createBackup = useMutation({
     mutationFn: () =>
-      client!.openCompute.backups.d1.create(accountId!, databaseId),
+      client!.openCompute.backups.d1.create(instanceId!, databaseId),
     onSuccess: async () => {
       await backups.refetch();
       feedback.success("D1 backup created.");
@@ -65,7 +65,7 @@ function D1DetailPage() {
   });
   const restore = useMutation({
     mutationFn: ({ backupID, name }: { backupID: string; name: string }) =>
-      client!.openCompute.backups.d1.restore(accountId!, backupID, { name }),
+      client!.openCompute.backups.d1.restore(instanceId!, backupID, { name }),
     onSuccess: async (restored) => {
       setRestoreTarget(null);
       setMutationError(null);

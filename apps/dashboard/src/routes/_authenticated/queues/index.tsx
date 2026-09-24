@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_authenticated/queues/")({
 });
 
 function QueuesPage() {
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const queryClient = useQueryClient();
   const feedback = useMutationFeedback();
   const [createOpen, setCreateOpen] = useState(false);
@@ -23,7 +23,7 @@ function QueuesPage() {
   const create = useMutation({
     mutationFn: async (input: QueueConfigInput) => {
       const queue = await client!.queues.create({
-        account_id: accountId!,
+        account_id: instanceId!,
         queue_name: input.name!,
       });
       if (
@@ -32,7 +32,7 @@ function QueuesPage() {
           input.retentionSeconds !== undefined)
       ) {
         await client!.queues.update(queue.queue_id, {
-          account_id: accountId!,
+          account_id: instanceId!,
           settings: {
             ...(input.deliveryDelaySeconds === undefined
               ? {}
@@ -49,7 +49,7 @@ function QueuesPage() {
       setCreateOpen(false);
       setMutationError(null);
       await queryClient.invalidateQueries({
-        queryKey: ["cloudflare-v4", "Queues", accountId],
+        queryKey: ["cloudflare-v4", "Queues", instanceId],
       });
       feedback.success("Queue created.");
     },
@@ -64,9 +64,9 @@ function QueuesPage() {
     <OfficialCatalog
       kind="Queues"
       description="Create and configure Queues through the official Queues API."
-      load={async (management, accountID, signal) => {
+      load={async (management, instanceID, signal) => {
         const page = await management.queues.list(
-          { account_id: accountID },
+          { account_id: instanceID },
           { signal },
         );
         return page.result.map((queue) => ({
@@ -78,14 +78,14 @@ function QueuesPage() {
           href: `/queues/${encodeURIComponent(queue.queue_id ?? "unknown")}`,
         }));
       }}
-      rename={(management, accountID, row, name) =>
+      rename={(management, instanceID, row, name) =>
         management.queues.update(row.id, {
-          account_id: accountID,
+          account_id: instanceID,
           queue_name: name,
         })
       }
-      remove={(management, accountID, row) =>
-        management.queues.delete(row.id, { account_id: accountID })
+      remove={(management, instanceID, row) =>
+        management.queues.delete(row.id, { account_id: instanceID })
       }
       primaryAction={
         <>

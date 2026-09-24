@@ -14,14 +14,14 @@ export const Route = createFileRoute(
 
 function DurableObjectDetailPage() {
   const { namespaceId } = Route.useParams();
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const objects = useQuery({
     queryKey: ["cloudflare-v4", "durable-objects", namespaceId],
     queryFn: ({ signal }) =>
-      client!.openCompute.durableObjects.objects(accountId!, namespaceId, {
+      client!.openCompute.durableObjects.objects(instanceId!, namespaceId, {
         signal,
       }),
-    enabled: client !== null && accountId !== null,
+    enabled: client !== null && instanceId !== null,
   });
   return (
     <div>

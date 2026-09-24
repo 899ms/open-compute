@@ -79,7 +79,7 @@ function isActivePath(pathname: string, target: string) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { accountId, clearAuth } = useAuth();
+  const { instanceId, clearAuth } = useAuth();
   const { resolved, toggle } = useTheme();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -111,9 +111,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-kumo-subtle text-xs group-data-[collapsible=icon]:hidden">
             Operator dashboard
           </span>
-          {accountId ? (
+          {instanceId ? (
             <code className="text-kumo-subtle max-w-full truncate [font-size:0.9em] group-data-[collapsible=icon]:hidden">
-              Account {accountId.slice(0, 8)}…
+              Instance {instanceId.slice(0, 8)}…
             </code>
           ) : null}
         </Sidebar.Header>

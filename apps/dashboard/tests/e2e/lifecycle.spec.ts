@@ -14,7 +14,7 @@ function liveClient() {
   });
 }
 
-async function accountId(client: Cloudflare): Promise<string> {
+async function instanceId(client: Cloudflare): Promise<string> {
   const accounts = await client.accounts.list();
   const id = accounts.result[0]?.id;
   if (id === undefined) throw new Error("dashboard E2E account is missing");
@@ -211,11 +211,11 @@ test.describe("operator dashboard live lifecycle", () => {
     await deleteCatalogResource(page, renamedQueueName);
 
     const client = liveClient();
-    const accountID = await accountId(client);
+    const instanceID = await instanceId(client);
     const scriptName = `pw-workflow-worker-${crypto.randomUUID().replaceAll("-", "")}`;
     const workflowName = `pw-workflow-${crypto.randomUUID().replaceAll("-", "")}`;
     await client.workers.scripts.update(scriptName, {
-      account_id: accountID,
+      account_id: instanceID,
       metadata: {
         main_module: "index.js",
         compatibility_date: "2026-09-08",
@@ -259,7 +259,7 @@ test.describe("operator dashboard live lifecycle", () => {
       await deleteCatalogResource(page, workflowName);
     } finally {
       await client.workers.scripts.delete(scriptName, {
-        account_id: accountID,
+        account_id: instanceID,
       });
     }
   });

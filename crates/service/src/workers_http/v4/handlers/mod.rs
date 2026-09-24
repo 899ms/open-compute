@@ -128,8 +128,8 @@ async fn get_service_metadata(
         Err(response) => return response.into_response(),
     };
     let result = (|| {
-        let account = domain::resolve_account(&state, &account)?;
-        let authority = state.cloudflare_v4_account().ok_or(V4Error::Unavailable)?;
+        let account = domain::resolve_instance(&state, &account)?;
+        let authority = state.v4_instance_context().ok_or(V4Error::Unavailable)?;
         let api = worker_api(&state)?;
         let worker =
             domain::worker_by_name(api, account, &script).map_err(|error| V4Error::from(&error))?;
@@ -233,7 +233,7 @@ struct VersionCpuLimits {
 impl VersionItem {
     fn from_snapshot(
         api: &crate::workers_http::WorkerApiState,
-        authority: &crate::cloudflare_v4::accounts::AccountAuthority,
+        authority: &crate::cloudflare_v4::accounts::V4InstanceContext,
         snapshot: &VersionSnapshot,
     ) -> Result<Self, V4Error> {
         let version = &snapshot.version;

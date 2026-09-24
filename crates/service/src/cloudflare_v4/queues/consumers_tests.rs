@@ -2,7 +2,7 @@ use super::*;
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use open_compute_core::{
-    DeterministicSchedulerClock, PlatformId, RequestId, SchedulerConfig, SecretString, VersionId,
+    DeterministicSchedulerClock, InstanceId, RequestId, SchedulerConfig, SecretString, VersionId,
     WorkflowsConfig,
 };
 use open_compute_runtime::GenerationAuthRegistry;
@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt as _;
 
-fn seed_active_worker(storage: &PlatformStorage, account: AccountId) {
+fn seed_active_worker(storage: &PlatformStorage, account: InstanceId) {
     let repository = WorkerRepository::new(storage.db());
     let worker = repository
         .create_worker(account, "consumer-worker", RequestId::generate(), 1, 100)
@@ -25,7 +25,7 @@ fn seed_active_worker(storage: &PlatformStorage, account: AccountId) {
         .insert_staging_version(
             &NewVersion {
                 id: version,
-                account_id: account,
+                instance_id: account,
                 worker_id: worker.id,
                 content_kind: VersionContentKind::Worker,
                 artifact_sha256: Some([1; 32]),
@@ -55,7 +55,7 @@ fn seed_active_worker(storage: &PlatformStorage, account: AccountId) {
 fn seed_queue(
     storage: &PlatformStorage,
     scheduler: &SchedulerStore,
-    account: AccountId,
+    account: InstanceId,
     name: &str,
 ) -> QueueId {
     let id = QueueId::generate();
@@ -66,7 +66,7 @@ fn seed_queue(
     scheduler
         .create_queue_projection(&QueueProjection {
             queue_id: id,
-            account_id: account,
+            instance_id: account,
             lifecycle_generation: 1,
             config_generation: 1,
             config,
@@ -103,7 +103,13 @@ async fn consumer_routes_cover_create_read_update_delete_and_validation() {
         .create_worker(account, "inactive-worker", RequestId::generate(), 2, 100)
         .unwrap();
     let scheduler_store = Arc::new(
-        SchedulerStore::open(&storage.data_dir().ensure_scheduler_db().unwrap(), 100, 1).unwrap(),
+        SchedulerStore::open(
+            &storage.data_dir().ensure_scheduler_db().unwrap(),
+            100,
+            1,
+            storage.identity().instance_id,
+        )
+        .unwrap(),
     );
     let queue = seed_queue(&storage, &scheduler_store, account, "source-queue");
     seed_queue(&storage, &scheduler_store, account, "dead-letter");
@@ -139,8 +145,7 @@ async fn consumer_routes_cover_create_read_update_delete_and_validation() {
             .state,
         open_compute_storage::QueueState::Ready
     );
-    let authority =
-        super::super::super::accounts::AccountAuthority::new(PlatformId::generate(), account, 1);
+    let authority = super::super::super::accounts::V4InstanceContext::new(account, 1);
     let public_account = authority.public_id().to_owned();
     let public_queue = authority.public_queue_id(queue);
     let app = crate::http::admin_router(
@@ -152,7 +157,7 @@ async fn consumer_routes_cover_create_read_update_delete_and_validation() {
                 SecretString::new("deployer-token"),
                 SecretString::new("read-token"),
             )
-            .with_cloudflare_v4_account(authority),
+            .with_v4_instance_context(authority),
     );
     let prefix = format!("/client/v4/accounts/{public_account}/queues/{public_queue}/consumers");
     let catalog = format!("/client/v4/accounts/{public_account}/queues");
@@ -380,7 +385,7 @@ async fn consumer_routes_cover_create_read_update_delete_and_validation() {
         .unwrap();
     assert_eq!(
         api.delete_consumer(
-            AccountId::generate(),
+            InstanceId::generate(),
             internal_consumer.id,
             RequestId::generate(),
             10,

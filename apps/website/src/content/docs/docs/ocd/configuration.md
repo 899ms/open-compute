@@ -4,11 +4,19 @@ title: "Configuration"
 
 `--config` names one exact regular file. A relative value is resolved once against the startup working directory; an absolute value keeps its absolute meaning. The file leaf is opened without following symlinks, and no parent or `$HOME` search occurs. Relative filesystem paths inside TOML are resolved against the canonical directory containing the opened config. `.` and `..` are normalized; `~`, environment references, globs, and URIs are not expanded. Parse time does not read `.env` or resolve secret values. Unknown fields are rejected.
 
-Path examples on this page use `/etc/open-compute/config.toml`. Some embedded runbooks write `platform.toml`; the flag is only `--config`, not a second format keyed by filename.
+Managed instances are listed explicitly in `<OCD_DIR>/ocd.toml`. Its `[server]` section owns the shared `public_bind` and optional `admin_bind`; `[artifacts].max_concurrent_requests` (default 16) bounds Git requests across all instances, and `[metrics].max_series` (default 1024) bounds the daemon's exposed metric series. Each `[[instances]]` entry contains only `config` and `autostart`; identity, data paths, digests, and process state are not copied into the manifest. The user OCD directory is the running UID's account home plus `.open-compute`, independent of an overridden `HOME`; the system OCD directory is `/var/lib/open-compute`.
+
+`<OCD_DIR>/instances/` is only the setup default location. It is never scanned, does not register or start an instance, and does not derive identity or data location. External configuration and data paths remain supported.
+
+Each enabled instance currently exposes 752 fixed metric series. The shared default of 1024 admits one complete instance scrape; another new scrape gets `503` without stopping either instance. Raise `[metrics].max_series` in `ocd.toml` for multiple concurrent metric targets. Stopping an instance releases its registered series.
+
+Registered instances cannot claim the same public base domain or parent/child domains. Registration and daemon startup reject those conflicts before selecting any winner.
+
+Path examples on this page use the system default instance. Some embedded runbooks use other exact filenames; the flag is only `--config`, not a second format keyed by filename.
 
 ```sh
-ocd config init --data-dir /var/lib/open-compute > /etc/open-compute/config.toml
-ocd --config /etc/open-compute/config.toml config check
+ocd config init --data-dir /var/lib/open-compute/instances/default/data > /var/lib/open-compute/instances/default/compute.toml
+ocd --config /var/lib/open-compute/instances/default/compute.toml config check
 ```
 
 `config init` resolves `data-dir` against the startup working directory, writes absolute paths into the template, and prints it to stdout. It does not create directories or write secrets. `config check` is static parse and validation only.
@@ -31,7 +39,7 @@ The selected value must be a credential-free canonical `http://host:port` URL. `
 
 Secrets are references only. Do not put them in units, images, the repository, or config plaintext.
 
-- `server.admin_auth`, `server.deployer_auth`, and `server.read_only_auth`: three required, mutually distinct Bearer token references using `env` and/or a `file` path.
+- `server.admin_auth` in the scoped `ocd.toml` is the single global admin Bearer token reference. Each `compute.toml` has only `auth.deployer_auth` and `auth.read_only_auth`; their tokens must be distinct from each other and the global admin token. References use `env` and/or a `file` path.
 - S3 backend only: `storage.access_key_id_env` / `storage.access_key_id_file` and `storage.secret_access_key_env` / `storage.secret_access_key_file`; each pair needs at least one. Local never reads these variables.
 - Master key: `data.master_key_file`; optional `data.master_key_env`.
 - Environment variable names must be non-empty ASCII uppercase, digits, and underscore, and must not start with a digit.
@@ -68,7 +76,7 @@ Profiles keep model facts reusable without making them implicit. Dimensions, max
 
 ## `[data]`: platform state and lock
 
-`[data]`:
+`[data]` is required, and `path` is required inside it. The runtime never infers a data directory from the config filename, its parent, or an `instances/` directory:
 
 | Field                    | Role                                                                             |
 | ------------------------ | -------------------------------------------------------------------------------- |
@@ -78,7 +86,9 @@ Profiles keep model facts reusable without making them implicit. Dimensions, max
 | `free_space_soft_bytes`  | Health degrades below this                                                       |
 | `free_space_hard_bytes`  | Mutations refused below this; must be ≤ soft                                     |
 
-One `ocd` per data-dir. The exclusive lock is `<data_dir>/platform.lock`. A second instance gets `DATA_DIR_IN_USE`; do not bypass it. The data-dir must be writable and executable (the extracted workerd runs from here).
+Relative `data.path` values resolve against the directory containing `compute.toml`. If the resolved data root is inside OCD_DIR, it must be a strict descendant of `<OCD_DIR>/instances/`; OCD_DIR itself, the `instances/` container, `instances-old/`, and every other OCD subtree are rejected. An external data root is allowed, but it cannot contain OCD_DIR. Registered data roots cannot overlap.
+
+One scoped `ocd` daemon owns the registered instances. Each instance has an exclusive `<data.path>/platform.lock`; do not bypass it. The data directory must be writable and executable.
 
 ## `[storage]`: object bytes
 
@@ -86,14 +96,13 @@ One `ocd` per data-dir. The exclusive lock is `<data_dir>/platform.lock`. A seco
 
 Local fields:
 
-| Field                   | Constraint                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `path`                  | Secure local object root; either `<data.path>/objects` or disjoint from `data.path` |
-| `free_space_soft_bytes` | Object-storage health degrades below this                                           |
-| `free_space_hard_bytes` | Object writes are refused below this; must be ≤ soft                                |
-| `partial_grace_ms`      | Minimum age before strictly owned crash remnants are reclaimed                      |
+| Field                   | Constraint                                                     |
+| ----------------------- | -------------------------------------------------------------- |
+| `free_space_soft_bytes` | Object-storage health degrades below this                      |
+| `free_space_hard_bytes` | Object writes are refused below this; must be ≤ soft           |
+| `partial_grace_ms`      | Minimum age before strictly owned crash remnants are reclaimed |
 
-The local root must be a mode-0700 directory on a supported local filesystem. Symlinks, special files, unexpected entries, insecure modes, and network/FUSE filesystems fail closed. Local is direct filesystem storage; it does not start an S3 server or rclone.
+The local root is always `<data.path>/objects`; `storage.path` is not accepted. It must be a mode-0700 directory on a supported local filesystem. Symlinks, special files, unexpected entries, insecure modes, and network/FUSE filesystems fail closed. Local is direct filesystem storage; it does not start an S3 server or rclone.
 
 S3 uses AWS SDK SigV4:
 
@@ -105,6 +114,8 @@ S3 uses AWS SDK SigV4:
 | `force_path_style`     | Default `true`                 |
 | `verify_tls`           | Cannot be disabled             |
 | `prefix` / `r2_prefix` | Must be canonical and disjoint |
+
+Instances sharing one S3 endpoint and bucket must configure separate, non-overlapping `prefix` and `r2_prefix` values; the defaults cannot be reused for both. Registration rejects overlaps across either prefix, and startup binds both remote prefix markers to the instance ID. Missing or mismatched markers fail closed.
 
 A failed upload is not committed. An initialized platform is bound to its backend kind and authority fingerprint. Do not temporarily switch backend, root, provider, bucket, or prefix to "just get it running".
 
@@ -121,6 +132,6 @@ The path is resolved relative to the loaded config file. The directory must cont
 
 ## Other sections
 
-The template also includes `[server]`, `[runtime]`, `[cache]`, `[response_cache]`, `[images]`, `[ai]`, `[metrics]`, `[hardening]`, `[workers]`, `[kv]`, `[r2]`, `[d1]`, `[queues]`, `[durable_objects]`, `[scheduler]` (including pools), optional `[extensions.<name>]`, and `[workflows]`. These are local quotas and timeouts, not Cloudflare plan SKUs. Run `config check` before changing them, then `capabilities --json` for actual `limits`.
+The instance template also includes `[auth]`, `[runtime]`, `[cache]`, `[response_cache]`, `[images]`, `[ai]`, `[metrics]`, `[hardening]`, `[workers]`, `[kv]`, `[r2]`, `[d1]`, `[queues]`, `[durable_objects]`, `[scheduler]` (including pools), optional `[extensions.<name>]`, and `[workflows]`. Public listener settings belong only in `ocd.toml`, not `compute.toml`. These are local quotas and timeouts, not Cloudflare plan SKUs. Run `config check` before changing them, then `capabilities --json` for actual `limits`.
 
 `hardening.emergency_reserve_bytes` must be below the `[data]` hard reserve.

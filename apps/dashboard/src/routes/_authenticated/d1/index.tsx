@@ -10,9 +10,9 @@ function D1Page() {
     <OfficialCatalog
       kind="D1 databases"
       description="Databases returned by the official D1 API."
-      load={async (client, accountID, signal) => {
+      load={async (client, instanceID, signal) => {
         const page = await client.d1.database.list(
-          { account_id: accountID },
+          { account_id: instanceID },
           { signal },
         );
         return page.result.map((database) => ({
@@ -24,11 +24,11 @@ function D1Page() {
           href: `/d1/${encodeURIComponent(database.uuid ?? "unknown")}`,
         }));
       }}
-      create={(client, accountID, name) =>
-        client.d1.database.create({ account_id: accountID, name })
+      create={(client, instanceID, name) =>
+        client.d1.database.create({ account_id: instanceID, name })
       }
-      remove={(client, accountID, row) =>
-        client.d1.database.delete(row.id, { account_id: accountID })
+      remove={(client, instanceID, row) =>
+        client.d1.database.delete(row.id, { account_id: instanceID })
       }
     />
   );

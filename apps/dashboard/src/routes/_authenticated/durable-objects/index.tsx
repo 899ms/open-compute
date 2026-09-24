@@ -10,9 +10,9 @@ function DurableObjectsPage() {
     <OfficialCatalog
       kind="Durable Objects"
       description="Read-only namespace inventory from the open-compute extension."
-      load={async (client, accountID, signal) => {
+      load={async (client, instanceID, signal) => {
         const namespaces = await client.openCompute.durableObjects.list(
-          accountID,
+          instanceID,
           { signal },
         );
         return namespaces.map((namespace) => ({

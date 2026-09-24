@@ -25,7 +25,7 @@ import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
 curl -fsSL https://open-compute.dev/install.sh | sh
 ```
 
-Installer 会选择当前平台对应的二进制文件，验证 release checksum，并把 `ocd` 与 receipt 安装到 `~/.local`。需要时它会更新支持的 shell 配置以加入 `~/.local/bin`，无法自动更新时会打印一条精确的 `export PATH=...` 命令。安装器不会创建 config、data、secret 或 service。
+Installer 会选择当前平台对应的二进制文件并验证 release checksum。它把 `ocd` 安装到 `~/.local`，把私有 receipt 存入 `~/.open-compute/install-receipt.json`，临时下载存入 `~/.open-compute/tmp/`。需要时它会更新支持的 shell 配置以加入 `~/.local/bin`，无法自动更新时会打印一条精确的 `export PATH=...` 命令。安装器不会创建配置、实例数据、密钥或 service。
 
 ## 2. 初始化平台
 

@@ -13,7 +13,7 @@ function liveClient() {
   });
 }
 
-async function accountId(client: Cloudflare): Promise<string> {
+async function instanceId(client: Cloudflare): Promise<string> {
   const accounts = await client.accounts.list();
   const id = accounts.result[0]?.id;
   if (id === undefined) throw new Error("dashboard E2E account is missing");
@@ -25,10 +25,10 @@ test.describe("operator dashboard detail pages", () => {
     page,
   }) => {
     const client = liveClient();
-    const accountID = await accountId(client);
+    const instanceID = await instanceId(client);
     const name = `pw-worker-${crypto.randomUUID().replaceAll("-", "")}`;
     await client.workers.scripts.update(name, {
-      account_id: accountID,
+      account_id: instanceID,
       metadata: {
         main_module: "index.js",
         compatibility_date: "2026-09-08",
@@ -57,16 +57,16 @@ test.describe("operator dashboard detail pages", () => {
         page.getByRole("button", { name: "Delete Worker" }),
       ).toBeVisible();
     } finally {
-      await client.workers.scripts.delete(name, { account_id: accountID });
+      await client.workers.scripts.delete(name, { account_id: instanceID });
     }
   });
 
   test("KV namespace detail opens from the catalog name", async ({ page }) => {
     const client = liveClient();
-    const accountID = await accountId(client);
+    const instanceID = await instanceId(client);
     const name = `PW_KV_${crypto.randomUUID().replaceAll("-", "")}`;
     const namespace = await client.kv.namespaces.create({
-      account_id: accountID,
+      account_id: instanceID,
       title: name,
     });
     try {
@@ -86,7 +86,7 @@ test.describe("operator dashboard detail pages", () => {
       ).toBeVisible();
     } finally {
       await client.kv.namespaces.delete(namespace.id, {
-        account_id: accountID,
+        account_id: instanceID,
       });
     }
   });

@@ -15,7 +15,7 @@ async fn dry_run_rejects_downgrade() {
         .unwrap();
     file.write_all(&current).unwrap();
     drop(file);
-    let receipt_path = temp.path().join("share/open-compute/install-receipt.json");
+    let receipt_path = temp.path().join("ocd/install-receipt.json");
     write_receipt(
         &receipt_path,
         &InstallReceipt {
@@ -43,6 +43,7 @@ async fn dry_run_rejects_downgrade() {
         &older,
     );
     let options = UpgradeOptions {
+        scope: ServiceScope::User,
         version: Some("0.1.0".to_owned()),
         dry_run: true,
         no_restart: false,

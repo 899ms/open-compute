@@ -266,7 +266,7 @@ async fn dispatch_ingress(
         );
     };
     let target = DispatchTarget {
-        account_id: snapshot.route.account_id,
+        instance_id: snapshot.route.instance_id,
         worker_id: snapshot.route.worker_id,
         version_id: snapshot.version.id,
         worker_code_sha256: hex::encode(snapshot.version.worker_code_sha256),
@@ -293,7 +293,7 @@ fn request_id(request: &Request) -> RequestId {
         .unwrap_or_else(RequestId::generate)
 }
 
-fn canonical_request_host(
+pub(crate) fn canonical_request_host(
     value: &str,
     expected_port: Option<u16>,
 ) -> Result<String, PlatformError> {

@@ -98,7 +98,7 @@ The Cap'n Proto schema on the session socket is `HostExtension` / `HostExtension
 | Identity          | Executable bytes and FD pinned at `ocd` startup                                                                                                  |
 | Environment       | Cleared; argv empty; control socket is standard input (fd 0)                                                                                     |
 | Working directory | `<data.path>/runtime/extensions/<name>`                                                                                                          |
-| Attach            | Magic `OCP1`, exactly one `SCM_RIGHTS` FD, ACK byte `0`                                                                                          |
+| Attach            | Magic `OCP2` + 16-byte nonce, exactly one `SCM_RIGHTS` FD, ACK byte `0` + matching nonce                                                         |
 | Crash             | In-flight calls fail; later acquire retries with 200 ms–5 s backoff; six consecutive failures keep the extension unavailable for this `ocd` life |
 | Shutdown          | Broker EOF or workerd generation change closes sessions; Providers may be reused by a new generation and are reaped on `ocd` shutdown            |
 

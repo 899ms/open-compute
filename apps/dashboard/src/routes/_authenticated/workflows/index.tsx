@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_authenticated/workflows/")({
 });
 
 function WorkflowsPage() {
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const queryClient = useQueryClient();
   const feedback = useMutationFeedback();
   const [createOpen, setCreateOpen] = useState(false);
@@ -25,7 +25,7 @@ function WorkflowsPage() {
     }) => {
       if (!input.name) throw new Error("Workflow name is required.");
       return client!.workflows.update(input.name, {
-        account_id: accountId!,
+        account_id: instanceId!,
         script_name: input.scriptName,
         class_name: input.className,
       });
@@ -34,7 +34,7 @@ function WorkflowsPage() {
       setCreateOpen(false);
       setMutationError(null);
       await queryClient.invalidateQueries({
-        queryKey: ["cloudflare-v4", "Workflows", accountId],
+        queryKey: ["cloudflare-v4", "Workflows", instanceId],
       });
       feedback.success("Workflow created.");
     },
@@ -51,9 +51,9 @@ function WorkflowsPage() {
     <OfficialCatalog
       kind="Workflows"
       description="Create definitions and manage Workflows through the official Workflows API."
-      load={async (management, accountID, signal) => {
+      load={async (management, instanceID, signal) => {
         const page = await management.workflows.list(
-          { account_id: accountID },
+          { account_id: instanceID },
           { signal },
         );
         return page.result.map((workflow) => ({
@@ -63,9 +63,9 @@ function WorkflowsPage() {
           href: `/workflows/${encodeURIComponent(workflow.name)}`,
         }));
       }}
-      remove={(management, accountID, row) =>
+      remove={(management, instanceID, row) =>
         management.workflows.delete(row.id, {
-          account_id: accountID,
+          account_id: instanceID,
         })
       }
       primaryAction={

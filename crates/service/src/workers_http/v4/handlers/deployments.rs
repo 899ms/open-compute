@@ -11,7 +11,7 @@ pub(super) async fn list_versions(
     };
     let result = (|| {
         let query = query::version_list(request.uri().query())?;
-        let account = domain::resolve_account(&state, &account)?;
+        let account = domain::resolve_instance(&state, &account)?;
         let api = worker_api(&state)?;
         let worker =
             domain::worker_by_name(api, account, &script).map_err(|error| V4Error::from(&error))?;
@@ -76,9 +76,9 @@ pub(super) async fn get_version(
         Err(response) => return response.into_response(),
     };
     let result = (|| {
-        let account = domain::resolve_account(&state, &account)?;
+        let account = domain::resolve_instance(&state, &account)?;
         let api = worker_api(&state)?;
-        let authority = state.cloudflare_v4_account().ok_or(V4Error::Unavailable)?;
+        let authority = state.v4_instance_context().ok_or(V4Error::Unavailable)?;
         let worker =
             domain::worker_by_name(api, account, &script).map_err(|error| V4Error::from(&error))?;
         let version = VersionId::from_str(&version).map_err(|_| V4Error::InvalidRequest)?;
@@ -100,7 +100,7 @@ pub(super) async fn list_deployments(
         Err(response) => return response.into_response(),
     };
     let result = (|| {
-        let account = domain::resolve_account(&state, &account)?;
+        let account = domain::resolve_instance(&state, &account)?;
         let api = worker_api(&state)?;
         let worker =
             domain::worker_by_name(api, account, &script).map_err(|error| V4Error::from(&error))?;
@@ -160,7 +160,7 @@ pub(super) async fn create_deployment(
     }) {
         return error_response(V4Error::InvalidRequest, context.request_id());
     }
-    let account = match domain::resolve_account(&state, &account) {
+    let account = match domain::resolve_instance(&state, &account) {
         Ok(value) => value,
         Err(error) => return error_response(error, context.request_id()),
     };
@@ -176,7 +176,7 @@ pub(super) async fn create_deployment(
     let result = if let Some(promoter) = &api.product_promoter {
         promoter
             .promote(ProductPromotionRequest {
-                account_id: account,
+                instance_id: account,
                 worker_id: worker.id,
                 version_id: target,
                 source: DeploymentSource::VersionsApi,
@@ -225,7 +225,7 @@ pub(super) async fn get_deployment(
         Err(response) => return response.into_response(),
     };
     let result = (|| {
-        let account = domain::resolve_account(&state, &account)?;
+        let account = domain::resolve_instance(&state, &account)?;
         let api = worker_api(&state)?;
         let worker =
             domain::worker_by_name(api, account, &script).map_err(|error| V4Error::from(&error))?;
@@ -248,7 +248,7 @@ pub(super) async fn delete_deployment(
         Err(response) => return response.into_response(),
     };
     let result = (|| {
-        let account = domain::resolve_account(&state, &account)?;
+        let account = domain::resolve_instance(&state, &account)?;
         let api = worker_api(&state)?;
         let worker =
             domain::worker_by_name(api, account, &script).map_err(|error| V4Error::from(&error))?;

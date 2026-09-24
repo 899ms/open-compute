@@ -16,7 +16,7 @@ fn snapshot_policy_covers_the_current_workflow_configuration() {
     loaded.config.response_cache.max_object_bytes /= 2;
     assert_ne!(platform_config_policy_sha256(&loaded).unwrap(), initial);
     loaded.config.response_cache = open_compute_core::ResponseCacheConfig::default();
-    loaded.config.images.max_concurrency = 2;
+    loaded.config.images.max_concurrency = 3;
     assert_ne!(platform_config_policy_sha256(&loaded).unwrap(), initial);
     loaded.config.images = open_compute_core::ImagesConfig::default();
     assert_eq!(platform_config_policy_sha256(&loaded).unwrap(), initial);

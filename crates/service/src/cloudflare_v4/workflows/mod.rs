@@ -12,7 +12,7 @@ use crate::workflow_http::WorkflowApiState;
 use axum::Router;
 use axum::extract::Request;
 use axum::routing::{get, post};
-use open_compute_core::{AccountId, ResourceState, WorkflowId};
+use open_compute_core::{InstanceId, ResourceState, WorkflowId};
 use open_compute_storage::scheduler::WorkflowState;
 use open_compute_storage::{CatalogDirection, CatalogSort, WorkflowDefinition, WorkflowRepository};
 use std::sync::Arc;
@@ -66,7 +66,7 @@ fn authenticated(
     request: &Request,
     permission: V4Permission,
     public_account: &str,
-) -> Result<(V4RequestContext, AccountId, Arc<WorkflowApiState>), HttpError> {
+) -> Result<(V4RequestContext, InstanceId, Arc<WorkflowApiState>), HttpError> {
     let context = context(request, permission)?;
     let account = account(state, public_account)
         .map_err(|error| error_response(error, context.request_id()))?;
@@ -79,7 +79,7 @@ fn authenticated(
 
 fn definition(
     api: &WorkflowApiState,
-    account: AccountId,
+    account: InstanceId,
     name: &str,
 ) -> Result<WorkflowDefinition, V4Error> {
     valid_name(name)?;

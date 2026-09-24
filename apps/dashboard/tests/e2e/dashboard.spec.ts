@@ -181,7 +181,7 @@ test.describe("operator dashboard", () => {
       const key = "open-compute.operator.auth";
       const raw = sessionStorage.getItem(key);
       if (!raw) throw new Error("expected persisted auth session");
-      const parsed = JSON.parse(raw) as { token: string; accountId: string };
+      const parsed = JSON.parse(raw) as { token: string; instanceId: string };
       parsed.token = "revoked-admin-token";
       sessionStorage.setItem(key, JSON.stringify(parsed));
     });

@@ -1,7 +1,7 @@
 //! Cloudflare Worker binding response projection from immutable Version snapshots.
 
 use crate::cloudflare_v4::V4ResourceKind;
-use crate::cloudflare_v4::accounts::AccountAuthority;
+use crate::cloudflare_v4::accounts::V4InstanceContext;
 use crate::workers_http::WorkerApiState;
 use open_compute_core::{BindingKind, ErrorCode, PlatformError};
 use open_compute_storage::{
@@ -12,7 +12,7 @@ use open_compute_workers::ServiceDescriptor;
 
 pub(super) fn public_bindings(
     api: &WorkerApiState,
-    authority: &AccountAuthority,
+    authority: &V4InstanceContext,
     snapshot: &VersionSnapshot,
 ) -> Result<Vec<serde_json::Value>, PlatformError> {
     let mut values = Vec::new();
@@ -32,7 +32,7 @@ pub(super) fn public_bindings(
     );
     let resources = ResourceRepository::new(api.storage.db());
     for binding in &snapshot.bindings {
-        let resource = resources.get(snapshot.account_id, binding.resource_id)?;
+        let resource = resources.get(snapshot.instance_id, binding.resource_id)?;
         let value = match binding.kind {
             BindingKind::KvNamespace => serde_json::json!({
                 "name": binding.name,
@@ -73,7 +73,7 @@ pub(super) fn public_bindings(
     }
     let artifacts = open_compute_storage::CloudflareArtifactsRepository::new(api.storage.db());
     for binding in artifacts.version_bindings(snapshot.version.id)? {
-        let namespace = artifacts.namespace(snapshot.account_id, binding.namespace_id)?;
+        let namespace = artifacts.namespace(snapshot.instance_id, binding.namespace_id)?;
         values.push(serde_json::json!({
             "name": binding.name,
             "type": "artifacts",
@@ -82,7 +82,7 @@ pub(super) fn public_bindings(
     }
     let queues = QueueRepository::new(api.storage.db());
     for binding in &snapshot.queue_bindings {
-        let queue = queues.get(snapshot.account_id, binding.queue_id)?;
+        let queue = queues.get(snapshot.instance_id, binding.queue_id)?;
         values.push(serde_json::json!({
             "name": binding.name,
             "type": "queue",
@@ -92,7 +92,7 @@ pub(super) fn public_bindings(
     let workflows = WorkflowRepository::new(api.storage.db());
     for binding in &snapshot.workflow_bindings {
         let definition =
-            workflows.definition(snapshot.account_id, binding.descriptor.definition_id)?;
+            workflows.definition(snapshot.instance_id, binding.descriptor.definition_id)?;
         values.push(serde_json::json!({
             "name": binding.descriptor.name,
             "type": "workflow",
@@ -100,7 +100,7 @@ pub(super) fn public_bindings(
             "class_name": binding.descriptor.class_name,
         }));
     }
-    let workers = WorkerRepository::new(api.storage.db()).list_workers(snapshot.account_id)?;
+    let workers = WorkerRepository::new(api.storage.db()).list_workers(snapshot.instance_id)?;
     for binding in &snapshot.services {
         let props = binding
             .props_json

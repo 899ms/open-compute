@@ -14,12 +14,12 @@ export const Route = createFileRoute("/_authenticated/r2/$bucketId")({
 
 function R2DetailPage() {
   const { bucketId } = Route.useParams();
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const bucket = useQuery({
     queryKey: ["cloudflare-v4", "r2", bucketId],
     queryFn: ({ signal }) =>
-      client!.r2.buckets.get(bucketId, { account_id: accountId! }, { signal }),
-    enabled: client !== null && accountId !== null,
+      client!.r2.buckets.get(bucketId, { account_id: instanceId! }, { signal }),
+    enabled: client !== null && instanceId !== null,
   });
   return (
     <div>

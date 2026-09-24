@@ -16,7 +16,7 @@ use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, header};
 use axum::response::Response;
 use axum::routing::get;
-use open_compute_core::{AccountId, ErrorCode, PlatformError};
+use open_compute_core::{ErrorCode, InstanceId, PlatformError};
 use open_compute_storage::{QueueConfig, QueueConsumerRepository, QueueRecord, QueueRepository};
 use open_compute_workers::{CreateQueueOutcome, CreateQueueRequest, QueueController};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -90,7 +90,7 @@ async fn list_queues(
     let storage = api.storage().clone();
     let authority = authority.clone();
     let result = tokio::task::spawn_blocking(move || {
-        let all = QueueRepository::new(storage.db()).list_account(account_id)?;
+        let all = QueueRepository::new(storage.db()).list_instance(account_id)?;
         let filtered = all
             .into_iter()
             .filter(|queue| query.name.as_ref().is_none_or(|name| &queue.name == name))
@@ -158,7 +158,7 @@ async fn create_queue(
         let settings = body.settings.unwrap_or_default();
         let outcome = QueueController::new(api.storage(), api.scheduler().clone()).create(
             &CreateQueueRequest {
-                account_id,
+                instance_id: account_id,
                 name: body.queue_name,
                 config: QueueConfig {
                     delivery_delay_seconds: settings.delivery_delay.unwrap_or_default(),
@@ -355,25 +355,25 @@ pub(super) fn authority<'a>(
 ) -> Result<
     (
         &'a std::sync::Arc<QueueApiState>,
-        &'a super::accounts::AccountAuthority,
-        AccountId,
+        &'a super::accounts::V4InstanceContext,
+        InstanceId,
     ),
     V4Error,
 > {
     let api = state.queue_api().ok_or(V4Error::Unavailable)?;
-    let authority = state.cloudflare_v4_account().ok_or(V4Error::Unavailable)?;
+    let authority = state.v4_instance_context().ok_or(V4Error::Unavailable)?;
     let account = authority.resolve(public_account)?;
     Ok((api, authority, account))
 }
 
 pub(super) fn resolve_queue(
-    authority: &super::accounts::AccountAuthority,
+    authority: &super::accounts::V4InstanceContext,
     storage: &open_compute_storage::PlatformStorage,
-    account_id: AccountId,
+    account_id: InstanceId,
     public_id: &str,
 ) -> Result<QueueRecord, PlatformError> {
     QueueRepository::new(storage.db())
-        .list_account(account_id)?
+        .list_instance(account_id)?
         .into_iter()
         .find(|queue| authority.matches_public_queue_id(queue.id, public_id))
         .ok_or_else(not_found)
@@ -490,7 +490,7 @@ fn result_response<T: Serialize>(
 }
 
 fn queue_response(
-    authority: &super::accounts::AccountAuthority,
+    authority: &super::accounts::V4InstanceContext,
     storage: &open_compute_storage::PlatformStorage,
     queue: QueueRecord,
 ) -> Result<QueueResponse, PlatformError> {
@@ -500,7 +500,7 @@ fn queue_response(
         .map(|record| consumers::consumer_response(authority, storage, &queue, &record))
         .collect::<Result<Vec<_>, _>>()?;
     let producers = QueueRepository::new(storage.db())
-        .active_producer_names(queue.account_id, queue.id)?
+        .active_producer_names(queue.instance_id, queue.id)?
         .into_iter()
         .map(|script| ProducerResponse {
             kind: "worker",

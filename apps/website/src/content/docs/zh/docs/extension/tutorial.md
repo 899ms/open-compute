@@ -81,9 +81,9 @@ control socket 只用于 session attach。业务字节不经过 `ocd`。
 Provider 在标准输入上循环：
 
 1. 读取 4 字节外加一个文件描述符（`SCM_RIGHTS`）。
-2. 要求 magic 为 `OCP1`，且恰好一个 FD。
+2. 要求 magic 为 `OCP2`、16 字节 nonce，且恰好一个 FD。
 3. 把该 FD 当作 Cap'n Proto two-party session。
-4. 写一个 ACK 字节 `0`。
+4. 写 ACK 字节 `0`，随后回显相同的 16 字节 nonce。
 
 session schema 是：
 
@@ -117,7 +117,7 @@ path = "./extensions/files"
 检查后重启。扩展不热更新。
 
 ```sh
-ocd --config /etc/open-compute/config.toml config check
+ocd --config /var/lib/open-compute/instances/default/compute.toml config check
 ocd restart
 ```
 

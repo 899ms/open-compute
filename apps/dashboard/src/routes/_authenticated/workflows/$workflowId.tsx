@@ -24,9 +24,9 @@ export const Route = createFileRoute("/_authenticated/workflows/$workflowId")({
 
 function WorkflowDetailPage() {
   const { workflowId } = Route.useParams();
-  const { client, accountId } = useAuth();
+  const { client, instanceId } = useAuth();
   const feedback = useMutationFeedback();
-  const enabled = client !== null && accountId !== null;
+  const enabled = client !== null && instanceId !== null;
   const [definitionOpen, setDefinitionOpen] = useState(false);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
     null,
@@ -41,7 +41,11 @@ function WorkflowDetailPage() {
   const workflow = useQuery({
     queryKey: ["cloudflare-v4", "workflows", workflowId],
     queryFn: ({ signal }) =>
-      client!.workflows.get(workflowId, { account_id: accountId! }, { signal }),
+      client!.workflows.get(
+        workflowId,
+        { account_id: instanceId! },
+        { signal },
+      ),
     enabled,
   });
   const versions = useQuery({
@@ -49,7 +53,7 @@ function WorkflowDetailPage() {
     queryFn: ({ signal }) =>
       client!.workflows.versions.list(
         workflowId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -59,7 +63,7 @@ function WorkflowDetailPage() {
     queryFn: ({ signal }) =>
       client!.workflows.instances.list(
         workflowId,
-        { account_id: accountId! },
+        { account_id: instanceId! },
         { signal },
       ),
     enabled,
@@ -76,7 +80,7 @@ function WorkflowDetailPage() {
       client!.workflows.instances.get(
         selectedInstanceId!,
         {
-          account_id: accountId!,
+          account_id: instanceId!,
           workflow_name: workflowId,
         },
         { signal },
@@ -92,7 +96,7 @@ function WorkflowDetailPage() {
   const definitionMutation = useMutation({
     mutationFn: (input: { scriptName: string; className: string }) =>
       client!.workflows.update(workflowId, {
-        account_id: accountId!,
+        account_id: instanceId!,
         script_name: input.scriptName,
         class_name: input.className,
       }),
@@ -114,7 +118,7 @@ function WorkflowDetailPage() {
   const actionMutation = useMutation({
     mutationFn: (action: WorkflowAction) =>
       client!.workflows.instances.status.edit(selectedInstanceId!, {
-        account_id: accountId!,
+        account_id: instanceId!,
         workflow_name: workflowId,
         status: action,
       }),
@@ -140,7 +144,7 @@ function WorkflowDetailPage() {
         body = JSON.parse(eventBody) as unknown;
       }
       return client!.workflows.instances.events.create(eventType.trim(), {
-        account_id: accountId!,
+        account_id: instanceId!,
         workflow_name: workflowId,
         instance_id: selectedInstanceId!,
         body,

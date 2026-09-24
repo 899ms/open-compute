@@ -1,6 +1,6 @@
 use super::*;
 use open_compute_core::{
-    BindingId, BindingKind, CanonicalBindingConfig, CanonicalPermissions, PlatformId, QueueId,
+    BindingId, BindingKind, CanonicalBindingConfig, CanonicalPermissions, InstanceId, QueueId,
     ResourceId, SecretBytes, VersionId,
 };
 use open_compute_storage::{
@@ -13,7 +13,7 @@ use open_compute_workers::{BuiltinBindingDescriptorKindV1, BuiltinBindingDescrip
 
 fn ready_resource(
     api: &WorkerApiState,
-    account: AccountId,
+    account: InstanceId,
     kind: BindingKind,
     name: &str,
 ) -> ResourceId {
@@ -22,7 +22,7 @@ fn ready_resource(
     let ResourceCreateReservation::Reserved(resource) = ResourceRepository::new(api.storage.db())
         .reserve_create(
             &ReserveResourceCreate {
-                account_id: account,
+                instance_id: account,
                 kind,
                 name,
                 idempotency_key: &key,
@@ -46,13 +46,13 @@ fn ready_resource(
     resource.id
 }
 
-fn ready_bucket_with_id(api: &WorkerApiState, account: AccountId, name: &str, id: ResourceId) {
+fn ready_bucket_with_id(api: &WorkerApiState, account: InstanceId, name: &str, id: ResourceId) {
     let key = id.to_string();
     let fingerprint = api.storage.crypto().fingerprint_request(key.as_bytes());
     let ResourceCreateReservation::Reserved(resource) = ResourceRepository::new(api.storage.db())
         .reserve_create(
             &ReserveResourceCreate {
-                account_id: account,
+                instance_id: account,
                 kind: BindingKind::R2Bucket,
                 name,
                 idempotency_key: &key,
@@ -102,7 +102,7 @@ async fn r2_binding_uses_recreated_bucket_instead_of_tombstone() {
         "bindings": [{"name":"BUCKET","type":"r2_bucket","bucket_name":"reused"}]
     }))
     .unwrap();
-    let authority = AccountAuthority::new(PlatformId::generate(), account, 1);
+    let authority = V4InstanceContext::new(account, 1);
     let mut upload = UploadInput::new(metadata.clone());
     upload
         .apply_explicit_bindings(
@@ -160,7 +160,7 @@ async fn named_vectorize_binding_uses_recreated_index() {
     upload
         .apply_explicit_bindings(
             api,
-            &AccountAuthority::new(PlatformId::generate(), account, 1),
+            &V4InstanceContext::new(account, 1),
             account,
             WorkerId::generate(),
             None,
@@ -204,7 +204,7 @@ async fn deprecated_queue_binding_delay_does_not_change_queue_authority() {
     input
         .apply_explicit_bindings(
             api,
-            &AccountAuthority::new(PlatformId::generate(), account, 1),
+            &V4InstanceContext::new(account, 1),
             account,
             WorkerId::generate(),
             None,
@@ -249,7 +249,7 @@ async fn service_binding_props_are_projected_into_the_immutable_version_input() 
     input
         .apply_explicit_bindings(
             api,
-            &AccountAuthority::new(PlatformId::generate(), account, 1),
+            &V4InstanceContext::new(account, 1),
             account,
             WorkerId::generate(),
             None,
@@ -290,7 +290,7 @@ async fn failed_upload_content_releases_its_unconsumed_workflow_reservation() {
     input
         .apply_explicit_bindings(
             api,
-            &AccountAuthority::new(PlatformId::generate(), account, 1),
+            &V4InstanceContext::new(account, 1),
             account,
             WorkerId::generate(),
             None,
@@ -331,7 +331,7 @@ async fn explicit_binding_projection_accepts_every_day1_binding_kind() {
     let (_temp, _mock, state, account, _storage) =
         crate::tests::initialized_worker_http_fixture().await;
     let api = state.worker_api().unwrap();
-    let authority = AccountAuthority::new(PlatformId::generate(), account, 1);
+    let authority = V4InstanceContext::new(account, 1);
     let worker = WorkerId::generate();
     let kv = ready_resource(api, account, BindingKind::KvNamespace, "kv-resource");
     let d1 = ready_resource(api, account, BindingKind::D1Database, "d1-resource");
@@ -424,7 +424,7 @@ async fn explicit_binding_projection_rejects_cross_script_and_missing_resources(
     let (_temp, _mock, state, account, _storage) =
         crate::tests::initialized_worker_http_fixture().await;
     let api = state.worker_api().unwrap();
-    let authority = AccountAuthority::new(PlatformId::generate(), account, 1);
+    let authority = V4InstanceContext::new(account, 1);
     for binding in [
         serde_json::json!({"name":"DO","type":"durable_object_namespace","class_name":"State","script_name":"other"}),
         serde_json::json!({"name":"FLOW","type":"workflow","workflow_name":"flow","class_name":"Flow","script_name":"other"}),
@@ -603,7 +603,7 @@ async fn strict_inheritance_restores_each_persisted_binding_family() {
     builtins.sort_by(|left, right| left.name.cmp(&right.name));
     let input = NewVersion {
         id: version,
-        account_id: account,
+        instance_id: account,
         worker_id: source.id,
         content_kind: VersionContentKind::Worker,
         artifact_sha256: Some([4; 32]),
@@ -649,7 +649,7 @@ async fn strict_inheritance_restores_each_persisted_binding_family() {
         .unwrap();
     let public = crate::workers_http::v4::projection::public_bindings(
         api,
-        &AccountAuthority::new(PlatformId::generate(), account, 1),
+        &V4InstanceContext::new(account, 1),
         &previous,
     )
     .unwrap();
