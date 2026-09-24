@@ -484,6 +484,11 @@ pub(crate) fn recover_unleased_staging(
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn private_staging_dir(_lease_path: &Path, _directory: &Path) -> bool {
+    false
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn private_staging_dir(lease_path: &Path, directory: &Path) -> bool {
     let Some(name) = directory.file_name().and_then(|name| name.to_str()) else {
