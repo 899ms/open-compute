@@ -85,7 +85,7 @@ impl HostExtensionBroker {
             }
         }
         let work_dirs = extensions
-            .names()
+            .native_names()
             .map(|name| {
                 let path = storage.data_dir().prepare_extension_provider_dir(name)?;
                 let extension = extensions.get(name).ok_or_else(unavailable)?;
@@ -404,7 +404,10 @@ impl LocalExtensionRuntimeForTest {
         storage: &Arc<open_compute_storage::PlatformStorage>,
         pins: open_compute_workers::VersionPins,
     ) -> Result<Self, PlatformError> {
-        let extensions = Arc::new(LocalExtensionRegistry::load(configs)?);
+        let extensions = Arc::new(LocalExtensionRegistry::load(
+            configs,
+            &std::collections::BTreeMap::new(),
+        )?);
         let invocations = Arc::new(
             ServiceInvocationRegistry::new(storage.clone(), pins)
                 .with_local_extensions(extensions.clone()),
@@ -439,6 +442,15 @@ impl LocalExtensionRuntimeForTest {
     #[must_use]
     pub fn socket_registry(&self) -> HostExtensionBrokerRegistry {
         self.broker.socket_registry()
+    }
+
+    /// Current policy revision for a configured native extension.
+    #[must_use]
+    pub fn policy_revision(&self, name: &str) -> Option<String> {
+        self.broker
+            .extensions
+            .get(name)
+            .map(|extension| extension.policy_revision.clone())
     }
 
     /// Stop the broker and every supervised Provider.

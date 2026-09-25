@@ -2,6 +2,8 @@
 
 #[path = "queues/consumers.rs"]
 mod consumers;
+#[path = "queues/messages.rs"]
+mod messages;
 
 use super::wire::V4OfficialError;
 use super::{
@@ -42,6 +44,7 @@ pub(super) fn router() -> Router<HttpState> {
             get(get_queue_metrics),
         )
         .merge(consumers::router())
+        .merge(messages::router())
 }
 
 #[derive(Deserialize)]
@@ -473,6 +476,16 @@ pub(super) fn platform_error(error: &PlatformError, context: V4RequestContext) -
         | ErrorCode::QueueConsumerConflict
         | ErrorCode::QueueConfigPending
         | ErrorCode::QueueConsumerProjectionPending => V4Error::Conflict,
+        ErrorCode::QueueMessageTooLarge | ErrorCode::QueueBatchLimitExceeded => {
+            V4Error::Official(V4OfficialError::RequestTooLarge)
+        }
+        ErrorCode::QueueInvalidMessage
+        | ErrorCode::QueueContentTypeUnsupported
+        | ErrorCode::QueueDelayInvalid => V4Error::InvalidRequest,
+        ErrorCode::QueueBacklogLimitExceeded => V4Error::RateLimited,
+        ErrorCode::QueueNotReady
+        | ErrorCode::QueueStorageUnavailable
+        | ErrorCode::QueueSendResultUnknown => V4Error::Unavailable,
         _ => V4Error::from(error),
     };
     error_response(mapped, context.request_id())

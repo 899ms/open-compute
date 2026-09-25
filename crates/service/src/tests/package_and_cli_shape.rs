@@ -50,7 +50,8 @@ fn package_and_cli_shape() {
         Command::Upgrade {
             dry_run: true,
             no_restart: false,
-            version: None
+            version: None,
+            restore: false,
         }
     ));
     let parsed = parse_from(["ocd", "upgrade", "0.1.1", "--no-restart"]).unwrap();
@@ -59,7 +60,8 @@ fn package_and_cli_shape() {
         Command::Upgrade {
             dry_run: false,
             no_restart: true,
-            version: Some(ref version)
+            version: Some(ref version),
+            restore: false,
         } if version == "0.1.1"
     ));
     assert!(matches!(

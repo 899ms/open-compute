@@ -375,14 +375,36 @@ impl UploadInput {
                     BindingKind::AiSearchNamespace,
                     namespace.as_str(),
                 )?,
-                WorkerUploadBinding::AiSearch { instance_name, .. } => self.resource(
-                    api,
-                    account_authority,
-                    account,
-                    name,
-                    BindingKind::AiSearchInstance,
-                    instance_name.as_str(),
-                )?,
+                WorkerUploadBinding::AiSearch {
+                    instance_name,
+                    namespace,
+                    ..
+                } => {
+                    let namespace_name = namespace.as_deref().unwrap_or("default");
+                    let namespace = ResourceRepository::new(api.storage.db())
+                        .list(account, Some(BindingKind::AiSearchNamespace))?
+                        .into_iter()
+                        .find(|resource| {
+                            resource.state == ResourceState::Ready
+                                && resource.name == namespace_name
+                        })
+                        .ok_or_else(|| invalid("AI Search namespace was not found"))?;
+                    let instance = AiSearchCatalog::new(api.storage.db())
+                        .get_instance_by_key(account, namespace.id, instance_name)
+                        .map_err(|_| invalid("AI Search instance was not found"))?;
+                    if instance.resource.state != ResourceState::Ready {
+                        return Err(invalid("AI Search instance is unavailable"));
+                    }
+                    self.bindings.insert(
+                        name,
+                        VersionBindingInput {
+                            kind: BindingKind::AiSearchInstance,
+                            id: instance.resource.id,
+                            permissions: CanonicalPermissions::default(),
+                            config: CanonicalBindingConfig::default(),
+                        },
+                    );
+                }
                 WorkerUploadBinding::Artifacts { namespace, .. } => {
                     let namespace =
                         open_compute_storage::CloudflareArtifactsRepository::new(api.storage.db())
@@ -547,9 +569,14 @@ impl UploadInput {
                     ..
                 } => {
                     let target = if api.local_extension_exists(service) {
-                        ServiceTarget::Extension {
-                            name: service.clone(),
-                        }
+                        api.local_service_target(
+                            service,
+                            account,
+                            worker,
+                            None,
+                            entrypoint.as_deref(),
+                        )
+                        .ok_or_else(|| invalid("Service target is not authorized"))?
                     } else {
                         ServiceTarget::Worker {
                             worker_id: worker_by_name(api, account, service.as_str())?.id,

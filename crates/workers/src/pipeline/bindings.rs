@@ -46,23 +46,22 @@ impl VersionController<'_> {
                     .config
                     .workflow_reservation_fence
                     .map(|_| request.request_id.to_string());
-                let binding = open_compute_storage::WorkflowRepository::new(self.storage.db())
-                    .prepare_binding(
-                        request.instance_id,
-                        version,
-                        name,
-                        definition,
-                        input.config.workflow_class_name.as_deref().ok_or_else(|| {
-                            PlatformError::new(
-                                ErrorCode::WorkflowBindingStale,
-                                "Workflow binding requires an exact class name",
-                            )
-                        })?,
-                        reservation_owner.as_deref(),
-                        input.config.workflow_reservation_fence,
-                        input.config.workflow_schedules.clone(),
-                        request.now_ms,
-                    )?;
+                let binding = WorkflowRepository::new(self.storage.db()).prepare_binding(
+                    request.instance_id,
+                    version,
+                    name,
+                    definition,
+                    input.config.workflow_class_name.as_deref().ok_or_else(|| {
+                        PlatformError::new(
+                            ErrorCode::WorkflowBindingStale,
+                            "Workflow binding requires an exact class name",
+                        )
+                    })?,
+                    reservation_owner.as_deref(),
+                    input.config.workflow_reservation_fence,
+                    input.config.workflow_schedules.clone(),
+                    request.now_ms,
+                )?;
                 workflow_descriptors.push(binding.descriptor.clone());
                 workflow_rows.push(binding);
                 continue;

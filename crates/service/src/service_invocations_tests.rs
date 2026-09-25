@@ -7,6 +7,7 @@ use open_compute_storage::{
     NewVersion, NewVersionProducts, NewVersionService, PlatformStorage, ServiceTarget,
     VersionContentKind, WorkerRepository,
 };
+use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -14,6 +15,7 @@ use std::os::unix::fs::PermissionsExt;
 struct Fixture {
     _temp: tempfile::TempDir,
     storage: Arc<PlatformStorage>,
+    caller_worker: WorkerId,
     caller_version: VersionId,
     target_version: VersionId,
     caller_digest: [u8; 32],
@@ -113,6 +115,7 @@ fn fixture_with_corrupt_props(corrupt_props: bool) -> Fixture {
     Fixture {
         _temp: temp,
         storage,
+        caller_worker: caller.id,
         caller_version,
         target_version,
         caller_digest,
@@ -244,6 +247,14 @@ fn extension_admission_reuses_only_the_current_generation_session() {
         .0;
     let target = ServiceTarget::Extension {
         name: "local-files".to_owned(),
+        policy_revision: hex::encode(Sha256::digest(
+            [
+                b"facade.js".as_slice(),
+                b"export default {};".as_slice(),
+                hex::encode(Sha256::digest(b"provider")).as_bytes(),
+            ]
+            .concat(),
+        )),
     };
     let descriptor =
         ServiceDescriptor::new("FILES".to_owned(), target.clone(), None, None).unwrap();
@@ -280,12 +291,15 @@ fn extension_admission_reuses_only_the_current_generation_session() {
     permissions.set_mode(0o700);
     fs::set_permissions(&provider, permissions).unwrap();
     let extensions = Arc::new(
-        LocalExtensionRegistry::load(&BTreeMap::from([(
-            "local-files".to_owned(),
-            open_compute_core::LocalExtensionConfig {
-                path: extension_dir,
-            },
-        )]))
+        LocalExtensionRegistry::load(
+            &BTreeMap::from([(
+                "local-files".to_owned(),
+                open_compute_core::LocalExtensionConfig {
+                    path: extension_dir,
+                },
+            )]),
+            &BTreeMap::new(),
+        )
         .unwrap(),
     );
     let other = self::fixture();
@@ -364,6 +378,94 @@ fn extension_admission_reuses_only_the_current_generation_session() {
         ErrorCode::ServiceLimitExceeded
     );
     assert_eq!(registry.counts(), counts_before_limit);
+}
+
+#[test]
+fn private_http_admission_rechecks_grants_reuses_sessions_and_allows_only_fetch() {
+    let fixture = fixture();
+    let account = fixture.storage.identity().instance_id;
+    let config = open_compute_core::PrivateHttpServiceConfig {
+        scheme: "http".to_owned(),
+        host: "127.0.0.1".to_owned(),
+        port: 8080,
+        path_prefixes: vec!["/v1".to_owned()],
+        methods: ["POST".to_owned()].into_iter().collect(),
+        credential_header: None,
+        credential: None,
+        allow: vec![open_compute_core::PrivateHttpGrant {
+            account_id: account,
+            worker_id: fixture.caller_worker,
+            version_id: None,
+            entrypoint: None,
+        }],
+    };
+    let extensions = Arc::new(
+        LocalExtensionRegistry::load(
+            &BTreeMap::new(),
+            &BTreeMap::from([("inventory".to_owned(), config)]),
+        )
+        .unwrap(),
+    );
+    let policy_revision = extensions
+        .private_http_by_name("inventory")
+        .unwrap()
+        .policy_revision
+        .clone();
+    let target = ServiceTarget::Extension {
+        name: "inventory".to_owned(),
+        policy_revision,
+    };
+    let descriptor =
+        ServiceDescriptor::new("INVENTORY".to_owned(), target.clone(), None, None).unwrap();
+    let digest = descriptor.sha256().unwrap();
+    let request = RequestId::generate();
+    let version = insert_ready(
+        WorkerRepository::new(fixture.storage.db()),
+        account,
+        fixture.caller_worker,
+        [8; 32],
+        &[NewVersionService {
+            binding_name: "INVENTORY".to_owned(),
+            target,
+            entrypoint: None,
+            props_json: None,
+            descriptor_sha256: digest,
+        }],
+        request,
+        30,
+    );
+    let registry = ServiceInvocationRegistry::new(fixture.storage, VersionPins::new())
+        .with_local_extensions(extensions);
+    registry.activate_generation("private-http");
+    let first = registry
+        .resolve(&fetch_request(version, "INVENTORY", digest))
+        .unwrap();
+    let second = registry
+        .resolve(&fetch_request(version, "INVENTORY", digest))
+        .unwrap();
+    let ServiceTargetPayload::PrivateHttp {
+        session_identity: first_identity,
+    } = first.target
+    else {
+        panic!("expected private HTTP target");
+    };
+    let ServiceTargetPayload::PrivateHttp {
+        session_identity: second_identity,
+    } = second.target
+    else {
+        panic!("expected private HTTP target");
+    };
+    assert_eq!(first_identity, second_identity);
+    assert!(registry.private_http_for_session(&first_identity).is_some());
+    assert_eq!(
+        registry
+            .resolve(&resolve_request(version, "INVENTORY", digest, None))
+            .unwrap_err()
+            .code(),
+        ErrorCode::ServiceBindingDenied
+    );
+    registry.activate_generation("replacement");
+    assert!(registry.private_http_for_session(&first_identity).is_none());
 }
 
 #[test]

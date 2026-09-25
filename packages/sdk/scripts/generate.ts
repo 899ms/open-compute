@@ -581,14 +581,14 @@ function renderRuntimeTree(node: TreeNode, indent: string): string {
       "POST /accounts/{account_id}/workers/scripts/{script_name}/versions"
     ) {
       lines.push(
-        `${inner}create: (scriptName, params, options) => ${method.variable}.create(scriptName, params as VersionCreateParams, options),`,
+        `${inner}create: (scriptName, params, options) => workerUpload(transport, "POST", scriptName, params, options),`,
       );
     } else if (
       method.operation ===
       "PUT /accounts/{account_id}/workers/scripts/{script_name}"
     ) {
       lines.push(
-        `${inner}update: (scriptName, params, options) => ${method.variable}.update(scriptName, params as ScriptUpdateParams, params.files?.length ? scriptUploadOptions(options) : options),`,
+        `${inner}update: (scriptName, params, options) => workerUpload(transport, "PUT", scriptName, params, options),`,
       );
     } else if (
       method.operation === "POST /accounts/{account_id}/workers/assets/upload"
@@ -965,10 +965,10 @@ function renderGenerated(input: {
   const aliases = new Map<string, string>();
   const usedAliases = new Set<string>();
   const importStatements: string[] = [
-    `import type { APIPromise } from "cloudflare";`,
+    `import { toFile, type APIPromise } from "cloudflare";`,
     `import type { BaseCloudflare, Cloudflare } from "cloudflare/client";`,
-    `import type { VersionCreateParams } from "cloudflare/resources/workers/scripts/versions";`,
-    `import type { ScriptUpdateParams } from "cloudflare/resources/workers/scripts/scripts";`,
+    `import type { VersionCreateParams, VersionCreateResponse } from "cloudflare/resources/workers/scripts/versions";`,
+    `import type { ScriptUpdateParams, ScriptUpdateResponse } from "cloudflare/resources/workers/scripts/scripts";`,
     `import type { UploadCreateParams } from "cloudflare/resources/workers/assets/upload";`,
     `import { Artifacts } from "./artifacts.ts";`,
   ];
@@ -1030,6 +1030,22 @@ export type OpenComputeWorkerLoaderBinding = {
   readonly name: string;
 };
 
+/** Artifacts binding wire supported by Wrangler and open-compute uploads. */
+export type OpenComputeArtifactsBinding = {
+  readonly type: "artifacts";
+  readonly name: string;
+  readonly namespace: string;
+};
+
+/** JSON values accepted by Service binding props. */
+export type OpenComputeJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly OpenComputeJsonValue[]
+  | { readonly [key: string]: OpenComputeJsonValue };
+
 type OfficialWorkerVersionBinding = NonNullable<
   VersionCreateParams["metadata"]["bindings"]
 >[number];
@@ -1038,30 +1054,31 @@ type OfficialWorkerScriptBinding = NonNullable<
   ScriptUpdateParams["metadata"]["bindings"]
 >[number];
 
+type OpenComputeWorkerVersionBinding =
+  | Exclude<OfficialWorkerVersionBinding, { type: "service" }>
+  | (Extract<OfficialWorkerVersionBinding, { type: "service" }> & {
+      readonly props?: { readonly [key: string]: OpenComputeJsonValue };
+    })
+  | OpenComputeArtifactsBinding
+  | OpenComputeWorkerLoaderBinding;
+
+type OpenComputeWorkerScriptBinding =
+  | Exclude<OfficialWorkerScriptBinding, { type: "service" }>
+  | (Extract<OfficialWorkerScriptBinding, { type: "service" }> & {
+      readonly props?: { readonly [key: string]: OpenComputeJsonValue };
+    })
+  | OpenComputeArtifactsBinding
+  | OpenComputeWorkerLoaderBinding;
+
 /** Official script upload parameters plus the runtime-supported Worker Loader binding. */
 export type OpenComputeWorkerScriptUpdateParams = Omit<
   ScriptUpdateParams,
   "metadata"
 > & {
   readonly metadata: Omit<ScriptUpdateParams["metadata"], "bindings"> & {
-    readonly bindings?: readonly (
-      | OfficialWorkerScriptBinding
-      | OpenComputeWorkerLoaderBinding
-    )[];
+    readonly bindings?: readonly OpenComputeWorkerScriptBinding[];
   };
 };
-
-// The official update delegate sets application/javascript even for multipart files.
-// Null removes that default so the request encoder supplies the form boundary.
-function scriptUploadOptions(options?: OpenComputeRequestOptions): OpenComputeRequestOptions {
-  const original = options?.headers;
-  const entries = original instanceof Headers
-    ? [...original.entries()]
-    : Array.isArray(original)
-      ? [...original]
-      : Object.entries(original ?? {});
-  return { ...options, headers: [...entries, ["Content-Type", null]] };
-}
 
 /** Official Version upload parameters plus the runtime-supported Worker Loader binding. */
 export type OpenComputeWorkerVersionCreateParams = Omit<
@@ -1069,12 +1086,61 @@ export type OpenComputeWorkerVersionCreateParams = Omit<
   "metadata"
 > & {
   readonly metadata: Omit<VersionCreateParams["metadata"], "bindings"> & {
-    readonly bindings?: readonly (
-      | OfficialWorkerVersionBinding
-      | OpenComputeWorkerLoaderBinding
-    )[];
+    readonly bindings?: readonly OpenComputeWorkerVersionBinding[];
   };
 };
+
+type OpenComputeWorkerUploadParams =
+  | OpenComputeWorkerScriptUpdateParams
+  | OpenComputeWorkerVersionCreateParams;
+
+function workerUpload(
+  transport: BaseCloudflare,
+  method: "POST",
+  scriptName: string,
+  params: OpenComputeWorkerVersionCreateParams,
+  options?: OpenComputeRequestOptions,
+): APIPromise<VersionCreateResponse>;
+function workerUpload(
+  transport: BaseCloudflare,
+  method: "PUT",
+  scriptName: string,
+  params: OpenComputeWorkerScriptUpdateParams,
+  options?: OpenComputeRequestOptions,
+): APIPromise<ScriptUpdateResponse>;
+function workerUpload(
+  transport: BaseCloudflare,
+  method: "POST" | "PUT",
+  scriptName: string,
+  params: OpenComputeWorkerUploadParams,
+  options?: OpenComputeRequestOptions,
+): APIPromise<VersionCreateResponse | ScriptUpdateResponse> {
+  const { account_id, bindings_inherit, metadata, files = [] } = params;
+  const body = new FormData();
+  const bindings = metadata.bindings?.map((binding) => {
+    if (binding.type !== "d1" || !("database_id" in binding)) return binding;
+    const { database_id, ...rest } = binding;
+    return { ...rest, id: database_id };
+  });
+  body.append("metadata", JSON.stringify({ ...metadata, bindings }));
+  const request = Promise.all(files.map((file) => toFile(file))).then((parts) => {
+    for (const part of parts) body.append(part.name, part, part.name);
+    return {
+      ...options,
+      query: { bindings_inherit },
+      body,
+    };
+  });
+  const path =
+    "/accounts/" + segment(account_id) + "/workers/scripts/" +
+    segment(scriptName) + (method === "POST" ? "/versions" : "");
+  return transport[method === "POST" ? "post" : "put"]<
+    V4Envelope<VersionCreateResponse | ScriptUpdateResponse>
+  >(
+    path,
+    request,
+  )._thenUnwrap((envelope) => envelope.result);
+}
 
 /** Official Static Assets upload parameters with browser-native File parts. */
 export type OpenComputeAssetsUploadCreateParams = Omit<

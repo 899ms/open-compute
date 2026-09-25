@@ -282,6 +282,7 @@ pub(super) async fn run_loaded(
         | Command::Uninstall { .. }
         | Command::Purge { .. }
         | Command::UpdateCheck
+        | Command::UpgradePreflight
         | Command::Target { .. }
         | Command::Wrangler { .. }
         | Command::Config {

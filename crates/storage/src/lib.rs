@@ -241,6 +241,16 @@ pub struct PlatformStorage {
 }
 
 impl PlatformStorage {
+    /// Verify an existing data layout and run pending control migrations on an in-memory snapshot.
+    pub fn preflight_upgrade(config: &DataConfig, clock: &dyn Clock) -> Result<(), PlatformError> {
+        fs::validate_root(&config.path)?;
+        ControlDb::preflight_migrations(
+            &config.path.join("control.sqlite"),
+            config.sqlite_busy_timeout_ms,
+            clock,
+        )
+    }
+
     /// Acquire the data-dir lock, resolve the master key, then open/migrate the DB and identity.
     pub fn bootstrap(config: &DataConfig, clock: &dyn Clock) -> Result<Self, PlatformError> {
         let mut hardening = HardeningConfig::default();

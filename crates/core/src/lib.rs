@@ -47,11 +47,11 @@ pub use config::{
     DurableObjectsConfig, GatewayDnsRecord, GatewayDnsRecordKind, HardeningConfig, ImagesConfig,
     InstanceAuthConfig, InstanceMetadataConfig, KvConfig, LocalExtensionConfig,
     LocalObjectStorageConfig, MetricsConfig, ObjectStorageConfig, ObjectStorageKind,
-    PlatformConfig, PublicDomainConfig, PublicGatewayConfig, QueuesConfig, R2Config,
-    ResolvedEmbeddingModelContract, ResolvedTokenizerContract, ResolvedVlmModelContract,
-    ResponseCacheConfig, RuntimeConfig, S3Config, SchedulerConfig, SchedulerPoolConfig,
-    SchedulerPoolsConfig, SecretReference, WorkersConfig, validate_bootstrap_config_path,
-    validate_local_extension_name,
+    PlatformConfig, PrivateHttpGrant, PrivateHttpServiceConfig, PublicDomainConfig,
+    PublicGatewayConfig, QueuesConfig, R2Config, ResolvedEmbeddingModelContract,
+    ResolvedTokenizerContract, ResolvedVlmModelContract, ResponseCacheConfig, RuntimeConfig,
+    S3Config, SchedulerConfig, SchedulerPoolConfig, SchedulerPoolsConfig, SecretReference,
+    WorkersConfig, validate_bootstrap_config_path, validate_local_extension_name,
 };
 pub use cron::CronSchedule;
 pub use durable_objects::{

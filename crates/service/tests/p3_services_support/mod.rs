@@ -67,6 +67,17 @@ impl Harness {
         Self::start_inner(release, Some(provider)).await
     }
 
+    #[allow(
+        dead_code,
+        reason = "only the local-extension product Gate consumes this shared helper"
+    )]
+    pub(super) fn local_extension_policy_revision(&self, name: &str) -> String {
+        self.local_extension
+            .as_ref()
+            .and_then(|runtime| runtime.policy_revision(name))
+            .expect("configured local extension policy revision")
+    }
+
     async fn start_inner(release: &str, provider: Option<&Path>) -> Self {
         let workerd = std::env::var_os("OPEN_COMPUTE_TEST_WORKERD")
             .map(PathBuf::from)

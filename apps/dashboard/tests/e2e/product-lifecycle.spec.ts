@@ -52,7 +52,7 @@ test.describe("Cloudflare v4 dashboard consumers", () => {
     const instanceID = accounts.result[0]?.id;
     expect(instanceID).toBeTruthy();
     const capabilities = await client.openCompute.capabilities.get();
-    expect(capabilities.wrangler_version).toBe("4.127.1");
+    expect(capabilities.wrangler_version).toBe("4.138.0");
 
     const title = `pw-kv-${crypto.randomUUID().replaceAll("-", "")}`;
     const namespace = await client.kv.namespaces.create({

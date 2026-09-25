@@ -179,7 +179,10 @@ async fn run(
 ) -> Result<ExitCode, PlatformError> {
     let skip_reminder = matches!(
         &cli.command,
-        Command::UpdateCheck | Command::Upgrade { .. } | Command::Uninstall { .. }
+        Command::UpdateCheck
+            | Command::UpgradePreflight
+            | Command::Upgrade { .. }
+            | Command::Uninstall { .. }
     );
     let allow_network_refresh =
         !matches!(&cli.command, Command::Run | Command::UpdateCheck) && !skip_reminder;
@@ -217,6 +220,10 @@ async fn run(
         return Ok(ExitCode::from(ExitClass::Ok.code()));
     }
 
+    if matches!(&cli.command, Command::UpgradePreflight) {
+        return run_upgrade_preflight(&cli, stdout, startup_cwd);
+    }
+
     if run_project_command(&cli, stdout, stderr, startup_cwd, deps).await? {
         return Ok(ExitCode::from(ExitClass::Ok.code()));
     }
@@ -225,6 +232,7 @@ async fn run(
         version,
         dry_run,
         no_restart,
+        restore,
     } = &cli.command
     {
         let deps = require_operator_deps(deps)?;
@@ -238,6 +246,15 @@ async fn run(
                 ServiceScope::User
             },
         )?;
+        if *restore {
+            crate::release_upgrade::run_upgrade_restore(
+                &options,
+                &deps.registry,
+                deps.manager.as_ref(),
+                stdout,
+            )?;
+            return Ok(ExitCode::from(ExitClass::Ok.code()));
+        }
         let http = crate::release_upgrade::LiveReleaseHttp::new()?;
         crate::release_upgrade::run_upgrade(
             &options,
@@ -448,6 +465,33 @@ async fn run(
         stdout,
     )
     .await
+}
+
+fn run_upgrade_preflight(
+    cli: &Cli,
+    stdout: &mut impl Write,
+    startup_cwd: &Path,
+) -> Result<ExitCode, PlatformError> {
+    let config = cli.config.as_deref().ok_or_else(|| {
+        PlatformError::new(
+            ErrorCode::ConfigPathInvalid,
+            "upgrade preflight requires an explicit --config path",
+        )
+    })?;
+    if cli.instance.is_some() {
+        return Err(PlatformError::new(
+            ErrorCode::ConfigPathInvalid,
+            "upgrade preflight does not accept --instance",
+        ));
+    }
+    let loaded = load_platform_config_from(config, startup_cwd)?;
+    open_compute_storage::PlatformStorage::preflight_upgrade(
+        &loaded.config.data,
+        &open_compute_core::SystemClock,
+    )?;
+    writeln!(stdout, "UPGRADE_PREFLIGHT_OK")
+        .map_err(|_| PlatformError::new(ErrorCode::Internal, "failed to write upgrade output"))?;
+    Ok(ExitCode::SUCCESS)
 }
 
 async fn run_project_command(

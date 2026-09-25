@@ -112,7 +112,7 @@ open-compute **就是这一层**——而且只有**一个文件**。
 | 表面                         | 状态                                                                 |
 | ---------------------------- | -------------------------------------------------------------------- |
 | Cloudflare v4 API            | █████████░ 90% — 本地 `/client/v4` 可与 Wrangler 及官方 SDK 配合使用 |
-| Wrangler                     | █████████▉ 99% ✅ — Wrangler `4.127.1` 可部署和管理已支持产品        |
+| Wrangler                     | █████████▉ 99% ✅ — Wrangler `4.138.0` 可部署和管理已支持产品        |
 | Dashboard                    | ████████░░ 80% — 基于同一套 `/client/v4` API 的 operator UI          |
 | Workers Logs / realtime tail | █████████░ 90% — 单机 logs、query、`wrangler tail` 与 live tail      |
 
@@ -182,7 +182,7 @@ sudo ocd setup --system --yes
 普通 Worker project 保持 Wrangler 为项目内 dependency；本地开发使用 Wrangler，真实 open-compute target 使用 `ocd wrangler`：
 
 ```sh
-npm install --save-dev wrangler@4.127.1
+npm install --save-dev wrangler@4.138.0
 npx wrangler dev
 ocd wrangler deploy
 ```

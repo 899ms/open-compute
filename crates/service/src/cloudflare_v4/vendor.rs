@@ -15,7 +15,7 @@ use open_compute_storage::{DurableObjectRepository, ResourceRepository, WorkerRe
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
-const WRANGLER_VERSION: &str = "4.127.1";
+const WRANGLER_VERSION: &str = "4.138.0";
 
 mod backups;
 mod migrations;
@@ -358,7 +358,6 @@ async fn upgrade_check(State(_state): State<HttpState>, request: Request) -> Res
         (Ok(http), Ok(options)) => {
             match crate::release_upgrade::check_upgrade_available(
                 &http,
-                &options.api_base,
                 &options.download_base,
                 current,
                 &options.receipt_path,

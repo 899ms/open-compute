@@ -94,7 +94,7 @@ async function identityContract() {
   assert.equal(memberships.result[0].account.id, accountID);
 
   const capabilities = await client.openCompute.capabilities.get();
-  assert.equal(capabilities.wrangler_version, "4.127.1");
+  assert.equal(capabilities.wrangler_version, "4.138.0");
   assert.equal(capabilities.compatibility_date.minimum, "2026-09-08");
   assert.equal(capabilities.compatibility_date.maximum, "2026-09-08");
   assert.ok(Object.keys(capabilities.endpoints).length > 0);

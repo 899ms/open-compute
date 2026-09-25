@@ -84,7 +84,7 @@ max_artifact_bytes = 65536
 fn fixture_release(
     http: &FixtureReleaseHttp,
     download_base: &str,
-    api_base: &str,
+    _api_base: &str,
     version: &str,
     target: &str,
     binary: &[u8],
@@ -118,9 +118,10 @@ fn fixture_release(
     let manifest_digest = hex::encode(Sha256::digest(&manifest_bytes));
     let sums = format!("{digest}  {filename}\n{manifest_digest}  release.json\n");
     let base = format!("{download_base}/{tag}");
+    let releases_base = download_base.strip_suffix("/download").unwrap();
     http.insert(
-        format!("{api_base}/repos/elliothux/open-compute/releases/latest"),
-        format!(r#"{{"tag_name":"{tag}","prerelease":false,"draft":false}}"#),
+        format!("{releases_base}/latest/download/release.json"),
+        manifest_bytes.clone(),
     );
     http.insert(format!("{base}/release.json"), manifest_bytes);
     http.insert(format!("{base}/SHA256SUMS"), sums.into_bytes());
@@ -153,7 +154,6 @@ fn base_options(
         receipt_path,
         staging_dir: binary_path.parent().unwrap().to_path_buf(),
         download_base: "https://fixture.test/download".to_owned(),
-        api_base: "https://fixture.test/api".to_owned(),
         target: host_target().to_owned(),
         current_version: current.to_owned(),
     }

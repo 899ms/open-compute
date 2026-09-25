@@ -51,7 +51,6 @@ async fn dry_run_rejects_downgrade() {
         receipt_path,
         staging_dir: bin_dir,
         download_base,
-        api_base,
         target: host_target().to_owned(),
         current_version: "0.2.0".to_owned(),
     };

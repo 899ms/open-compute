@@ -50,6 +50,7 @@ use open_compute_storage::{
     QueueConsumerConfig, QueueConsumerRepository, QueueRepository, QueueState, ResourceRepository,
     StoredVersionSecret, VersionBuiltinBindingRecord, VersionCachePolicyRecord, VersionContentKind,
     VersionObjectKind, VersionRecord, VersionState, WorkerObservabilityPatch, WorkerRepository,
+    WorkflowDefinitionReservation, WorkflowRepository, WorkflowTarget,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -344,6 +345,19 @@ pub trait RuntimeValidator: Send + Sync + 'static {
             Err(PlatformError::new(
                 ErrorCode::DoClassNotFound,
                 "runtime validator cannot prove the Durable Object class",
+            ))
+        })
+    }
+
+    /// Prove that a frozen Workflow target exports a constructible Workflow class.
+    fn validate_workflow(
+        &self,
+        _target: WorkflowTarget,
+    ) -> Pin<Box<dyn Future<Output = Result<(), PlatformError>> + Send + '_>> {
+        Box::pin(async {
+            Err(PlatformError::new(
+                ErrorCode::WorkflowRuntimeUnavailable,
+                "runtime validator cannot prove the Workflow class",
             ))
         })
     }

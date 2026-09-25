@@ -21,7 +21,9 @@ pub use ai::{
     AiTokenizerConfig, AiVlmModelConfig, ResolvedEmbeddingModelContract, ResolvedTokenizerContract,
     ResolvedVlmModelContract,
 };
-pub use extensions::{LocalExtensionConfig, validate_local_extension_name};
+pub use extensions::{
+    LocalExtensionConfig, PrivateHttpGrant, PrivateHttpServiceConfig, validate_local_extension_name,
+};
 pub use public_gateway::{
     CaddyFileConfig, DaemonGatewayConfig, GatewayDnsRecord, GatewayDnsRecordKind,
     PublicDomainConfig, PublicGatewayConfig,
@@ -172,6 +174,9 @@ pub struct PlatformConfig {
     /// Statically configured local native extensions keyed by service name.
     #[serde(default)]
     pub extensions: std::collections::BTreeMap<String, LocalExtensionConfig>,
+    /// Operator-owned private HTTP targets keyed by Service Binding name.
+    #[serde(default)]
+    pub private_services: std::collections::BTreeMap<String, PrivateHttpServiceConfig>,
 }
 
 impl PlatformConfig {
@@ -250,6 +255,16 @@ impl PlatformConfig {
             validate_local_extension_name(name)?;
             extension.validate()?;
         }
+        for (name, service) in &self.private_services {
+            validate_local_extension_name(name)?;
+            if self.extensions.contains_key(name) {
+                return Err(PlatformError::new(
+                    ErrorCode::ConfigInvalid,
+                    "private Service target collides with a local extension",
+                ));
+            }
+            service.validate()?;
+        }
         Ok(())
     }
 
@@ -263,6 +278,11 @@ impl PlatformConfig {
         self.ai.resolve_paths(base)?;
         for extension in self.extensions.values_mut() {
             extension.path = resolve_host_path(base, &extension.path)?;
+        }
+        for service in self.private_services.values_mut() {
+            if let Some(secret) = &mut service.credential {
+                resolve_secret_path(base, secret)?;
+            }
         }
         Ok(())
     }
@@ -303,6 +323,7 @@ impl PlatformConfig {
             dashboard: DashboardConfig::default(),
             public_gateway: None,
             extensions: std::collections::BTreeMap::new(),
+            private_services: std::collections::BTreeMap::new(),
         }
     }
 }

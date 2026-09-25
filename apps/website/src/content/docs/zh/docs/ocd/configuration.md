@@ -130,8 +130,26 @@ path = "./extensions/local-files"
 
 路径相对实际加载的 config file 解析。目录必须包含严格的 `extension.toml`，指向一个已打包 facade module 与一个可执行 Provider。扩展是 operator 信任的代码，只在 `ocd` 启动时加载；`ocd` 不向它注入 tenant secret 或平台凭据，也不负责安装、下载、版本管理、热更新或 OS sandbox。扩展名与 Worker service name 共用 namespace，不得与 live Worker 冲突。完整说明见[扩展](/zh/docs/extension/)。
 
+## `[private_services.<name>]`：固定私网 HTTP Service target
+
+operator 可以通过标准 Service Binding `fetch()` 暴露一个固定的私网或回环 HTTP endpoint，而不向租户开放通用私网出站：
+
+```toml
+[private_services.inventory]
+scheme = "http"
+host = "10.20.0.15"
+port = 8080
+path_prefixes = ["/v1/"]
+methods = ["GET", "POST"]
+credential_header = "x-api-key"
+credential = { file = "/run/secrets/inventory-key" }
+allow = [{ account_id = "<instance-id>", worker_id = "<worker-id>", entrypoint = "api" }]
+```
+
+`ocd` 启动时把 endpoint 解析并固定到私网地址；重定向只返回给调用方，绝不跟随。调用 Worker 不能选择 URL 或 credential；内部 header 与租户认证 header 会被移除，配置 credential 只在 host 侧请求中注入。上传准入和每次调用都会重新检查精确 instance、Worker、可选 Version、entrypoint 与 policy revision。因此新建 Worker 必须先取得稳定 Worker ID，才能添加该 binding。私网 target 只支持 Service Binding HTTP `fetch()`；RPC 与 `connect()` fail closed。普通租户 `fetch()` 仍只允许公网地址。
+
 ## 其它段
 
-实例模板还包含 `[auth]`、`[runtime]`、`[cache]`、`[response_cache]`、`[images]`、`[ai]`、`[metrics]`、`[hardening]`、`[workers]`、`[kv]`、`[r2]`、`[d1]`、`[queues]`、`[durable_objects]`、`[scheduler]`（含 pool）、可选 `[extensions.<name>]` 和 `[workflows]`。公共监听设置只属于 `ocd.toml`，不属于 `compute.toml`。这些是本机配额与超时，不是 Cloudflare 套餐。改之前用 `config check`，改完用 `capabilities --json` 看实际 `limits`。
+实例模板还包含 `[auth]`、`[runtime]`、`[cache]`、`[response_cache]`、`[images]`、`[ai]`、`[metrics]`、`[hardening]`、`[workers]`、`[kv]`、`[r2]`、`[d1]`、`[queues]`、`[durable_objects]`、`[scheduler]`（含 pool）、可选 `[extensions.<name>]`、`[private_services.<name>]` 和 `[workflows]`。公共监听设置只属于 `ocd.toml`，不属于 `compute.toml`。这些是本机配额与超时，不是 Cloudflare 套餐。改之前用 `config check`，改完用 `capabilities --json` 看实际 `limits`。
 
 `hardening.emergency_reserve_bytes` 必须低于 `[data]` 的 hard reserve。

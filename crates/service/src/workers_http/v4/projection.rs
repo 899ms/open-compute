@@ -5,8 +5,8 @@ use crate::cloudflare_v4::accounts::V4InstanceContext;
 use crate::workers_http::WorkerApiState;
 use open_compute_core::{BindingKind, ErrorCode, PlatformError};
 use open_compute_storage::{
-    BuiltinBindingKind, QueueRepository, ResourceRepository, VersionSnapshot, WorkerRepository,
-    WorkflowRepository,
+    AiSearchCatalog, BuiltinBindingKind, QueueRepository, ResourceRepository, VersionSnapshot,
+    WorkerRepository, WorkflowRepository,
 };
 use open_compute_workers::ServiceDescriptor;
 
@@ -63,7 +63,16 @@ pub(super) fn public_bindings(
                 &resource.name,
             ),
             BindingKind::AiSearchInstance => {
-                named_binding(&binding.name, "ai_search", "instance_name", &resource.name)
+                let catalog = AiSearchCatalog::new(api.storage.db());
+                let instance = catalog.get_instance(snapshot.instance_id, resource.id)?;
+                let namespace =
+                    catalog.get_namespace(snapshot.instance_id, instance.namespace_resource_id)?;
+                serde_json::json!({
+                    "name": binding.name,
+                    "type": "ai_search",
+                    "instance_name": instance.instance_key,
+                    "namespace": namespace.resource.name,
+                })
             }
             BindingKind::ArtifactsNamespace
             | BindingKind::QueueProducer
@@ -132,7 +141,7 @@ pub(super) fn public_bindings(
                 .find(|worker| worker.id == *worker_id)
                 .map(|worker| worker.name.as_str())
                 .ok_or_else(invariant)?,
-            open_compute_storage::ServiceTarget::Extension { name } => name,
+            open_compute_storage::ServiceTarget::Extension { name, .. } => name,
         };
         let mut value = serde_json::json!({
             "name": binding.binding_name,

@@ -145,7 +145,7 @@
       {
         "id": "workers.scripts.tails",
         "status": "supported_with_deviation",
-        "source": "cloudflare-openapi+wrangler-4.127.1",
+        "source": "cloudflare-openapi+wrangler-4.138.0",
         "constraint": "Process-local selected-Script stream with target-only attribution",
         "deviations": ["OC-OBSERVABILITY-001"]
       },

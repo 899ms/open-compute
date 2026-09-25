@@ -3,7 +3,7 @@
   "managementApi": {
     "authority": "openapi/p6-capability.json",
     "status": "planned",
-    "routeCount": 185,
+    "routeCount": 189,
     "legacyRouteCount": 4,
     "deviations": [
       "OC-ACCOUNT-SUBDOMAIN-001",
@@ -15,9 +15,9 @@
   },
   "wrangler": {
     "authority": "openapi/p6-capability.json",
-    "version": "4.127.1",
+    "version": "4.138.0",
     "status": "planned",
-    "fieldCount": 96,
+    "fieldCount": 95,
     "bindingCount": 30,
     "commandCount": 71
   },

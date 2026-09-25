@@ -56,7 +56,7 @@
     "@cloudflare/kumo": "2.12.0",
     "@cloudflare/workers-types": "5.20260830.1",
     "cloudflare": "7.1.0",
-    "wrangler": "4.127.1",
+    "wrangler": "4.138.0",
     "@phosphor-icons/react": "2.1.10",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.102.8",

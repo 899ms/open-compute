@@ -1156,6 +1156,61 @@ fn parse_upgrade_uninstall_update_check() {
     assert!(parse_from(["ocd", "instance", "remove", "--instance", TEST_INSTANCE_ID,]).is_err());
 }
 
+#[tokio::test]
+async fn upgrade_preflight_requires_one_initialized_explicit_config() {
+    let temp = TempDir::new().unwrap();
+    let deps = test_deps(&temp);
+    let config = write_loadable_config(temp.path());
+    initialize_config(&config);
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let code = execute_with_deps(
+        parse_from([
+            "ocd",
+            "--no-update-check",
+            "--config",
+            config.to_str().unwrap(),
+            "__upgrade_preflight",
+        ])
+        .unwrap(),
+        &mut stdout,
+        &mut stderr,
+        temp.path(),
+        &deps,
+    )
+    .await;
+    assert_eq!(
+        code,
+        ExitCode::SUCCESS,
+        "{}",
+        String::from_utf8_lossy(&stderr)
+    );
+    assert_eq!(stdout, b"UPGRADE_PREFLIGHT_OK\n");
+
+    let missing = parse_from(["ocd", "--no-update-check", "__upgrade_preflight"]).unwrap();
+    assert_eq!(
+        run_upgrade_preflight(&missing, &mut Vec::new(), temp.path())
+            .unwrap_err()
+            .code(),
+        ErrorCode::ConfigPathInvalid
+    );
+    let mut conflicting = parse_from([
+        "ocd",
+        "--no-update-check",
+        "--config",
+        config.to_str().unwrap(),
+        "__upgrade_preflight",
+    ])
+    .unwrap();
+    conflicting.instance = Some(TEST_INSTANCE_ID.parse().unwrap());
+    assert_eq!(
+        run_upgrade_preflight(&conflicting, &mut Vec::new(), temp.path())
+            .unwrap_err()
+            .code(),
+        ErrorCode::ConfigPathInvalid
+    );
+}
+
 #[test]
 fn setup_scope_requires_system_mode_for_root() {
     let error = validate_setup_scope(true, false).unwrap_err();

@@ -63,7 +63,7 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
   assert.equal(surface.schemaVersion, 1);
   assert.equal(surface.package, "@open-compute/sdk");
   assert.equal(surface.packageVersion, packageJson.version);
-  assert.equal(surface.operations.length, 141);
+  assert.equal(surface.operations.length, 144);
   assert.equal(surface.observedStandardOperations.length, 18);
   assert.equal(surface.excludedOperations.length, 1);
   const byNode = (list) =>
@@ -214,6 +214,47 @@ test("standard and vendor methods issue official transport requests", async () =
   );
 });
 
+test("queue message and beta version delete delegates preserve official wire", async () => {
+  const { client, requests } = await mockClient();
+  await client.queues.messages.push("queue/1", {
+    account_id: "acc/1",
+    body: { job: 42 },
+    content_type: "json",
+  });
+  await client.queues.messages.bulkPush("queue/1", {
+    account_id: "acc/1",
+    messages: [{ body: "one", content_type: "text" }],
+  });
+  await client.workers.beta.workers.versions.delete("version/1", {
+    account_id: "acc/1",
+    worker_id: "worker/1",
+  });
+  assert.deepEqual(
+    requests.map(({ url, request }) => [request.method, url]),
+    [
+      [
+        "POST",
+        "https://compute.example/client/v4/accounts/acc%2F1/queues/queue%2F1/messages",
+      ],
+      [
+        "POST",
+        "https://compute.example/client/v4/accounts/acc%2F1/queues/queue%2F1/messages/batch",
+      ],
+      [
+        "DELETE",
+        "https://compute.example/client/v4/accounts/acc%2F1/workers/workers/worker%2F1/versions/version%2F1",
+      ],
+    ],
+  );
+  assert.deepEqual(await requests[0].request.json(), {
+    body: { job: 42 },
+    content_type: "json",
+  });
+  assert.deepEqual(await requests[1].request.json(), {
+    messages: [{ body: "one", content_type: "text" }],
+  });
+});
+
 test("vendor methods encode path segments and unwrap the v4 envelope", async () => {
   const { client, requests } = await mockClient({
     responses: [
@@ -290,7 +331,7 @@ test("vendor methods encode path segments and unwrap the v4 envelope", async () 
   assert.deepEqual(await requests[2].request.json(), { name: "app" });
 });
 
-test("signature overrides preserve worker_loader metadata and asset File parts", async () => {
+test("worker uploads send one JSON metadata part and named module parts", async () => {
   const { client, requests } = await mockClient();
   const module = new File(["export default {}"], "index.js", {
     type: "application/javascript+module",
@@ -299,7 +340,29 @@ test("signature overrides preserve worker_loader metadata and asset File parts",
     account_id: "account",
     metadata: {
       main_module: "index.js",
-      bindings: [{ type: "worker_loader", name: "LOADER" }],
+      bindings: [
+        { type: "worker_loader", name: "LOADER" },
+        { type: "d1", name: "DB", database_id: "database-id" },
+        {
+          type: "service",
+          name: "CATALOG",
+          service: "catalog",
+          props: { mode: "read", nested: [1, true] },
+        },
+        {
+          type: "artifacts",
+          name: "ARTIFACTS",
+          namespace: "team",
+        },
+      ],
+      migrations: {
+        old_tag: "v0",
+        new_tag: "v2",
+        steps: [
+          { new_classes: ["Counter"] },
+          { renamed_classes: [{ from: "Counter", to: "Total" }] },
+        ],
+      },
     },
     files: [module],
   });
@@ -312,9 +375,20 @@ test("signature overrides preserve worker_loader metadata and asset File parts",
     /Content-Type: application\/javascript\+module/,
   );
   const scriptForm = await scriptRequest.formData();
-  assert.equal(scriptForm.get("metadata[main_module]"), "index.js");
-  assert.equal(scriptForm.get("metadata[bindings][][type]"), "worker_loader");
-  assert.equal(scriptForm.get("metadata[bindings][][name]"), "LOADER");
+  const scriptMetadata = JSON.parse(scriptForm.get("metadata"));
+  assert.equal(scriptMetadata.main_module, "index.js");
+  assert.deepEqual(scriptMetadata.bindings[1], {
+    type: "d1",
+    name: "DB",
+    id: "database-id",
+  });
+  assert.deepEqual(scriptMetadata.bindings[2].props, {
+    mode: "read",
+    nested: [1, true],
+  });
+  assert.equal(scriptMetadata.bindings[3].type, "artifacts");
+  assert.equal(scriptMetadata.migrations.steps.length, 2);
+  assert.equal(await scriptForm.get("index.js").text(), "export default {}");
   await client.workers.scripts.update(
     "app-custom",
     {
@@ -329,7 +403,7 @@ test("signature overrides preserve worker_loader metadata and asset File parts",
   ).request;
   assert.equal(customRequest.headers.get("x-request-label"), "upload");
   assert.equal(
-    (await customRequest.formData()).get("metadata[main_module]"),
+    JSON.parse((await customRequest.formData()).get("metadata")).main_module,
     "index.js",
   );
 
@@ -345,9 +419,12 @@ test("signature overrides preserve worker_loader metadata and asset File parts",
     url.endsWith("/workers/scripts/app/versions"),
   ).request;
   const versionForm = await versionRequest.formData();
-  assert.equal(versionForm.get("metadata[main_module]"), "index.js");
-  assert.equal(versionForm.get("metadata[bindings][][type]"), "worker_loader");
-  assert.equal(versionForm.get("metadata[bindings][][name]"), "LOADER");
+  assert.equal(JSON.parse(versionForm.get("metadata")).main_module, "index.js");
+  assert.equal(
+    JSON.parse(versionForm.get("metadata")).bindings[0].type,
+    "worker_loader",
+  );
+  assert.equal(await versionForm.get("index.js").text(), "export default {}");
 
   const html = new File(["PGgxPm9rPC9oMT4="], "index.html", {
     type: "text/html",

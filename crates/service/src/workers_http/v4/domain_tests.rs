@@ -4,6 +4,7 @@ use open_compute_core::{
     ResourceId, SecretBytes, VersionId,
 };
 use open_compute_storage::{
+    AI_SEARCH_NAMESPACE_SCHEMA_VERSION, AI_SEARCH_SCHEMA_VERSION, AiSearchCatalog,
     BuiltinBindingKind, NewQueueProducerBinding, NewVersion, NewVersionBinding, NewVersionProducts,
     NewVersionService, QueueConfig, R2_SCHEMA_VERSION, R2BucketRepository, ReserveResourceCreate,
     ResourceCreateReservation, ResourceRepository, ServiceTarget, StoredVersionSecret,
@@ -44,6 +45,66 @@ fn ready_resource(
         .mark_ready(resource.id, 2)
         .unwrap();
     resource.id
+}
+
+fn ready_ai_search_instance(
+    api: &WorkerApiState,
+    account: InstanceId,
+    namespace_name: &str,
+    instance_key: &str,
+) -> (ResourceId, ResourceId) {
+    let resources = ResourceRepository::new(api.storage.db());
+    let reserve = |kind, name: &str, schema| {
+        let key = uuid::Uuid::now_v7().to_string();
+        let fingerprint = api.storage.crypto().fingerprint_request(key.as_bytes());
+        let ResourceCreateReservation::Reserved(resource) = resources
+            .reserve_create(
+                &ReserveResourceCreate {
+                    instance_id: account,
+                    kind,
+                    name,
+                    idempotency_key: &key,
+                    fingerprint_key_id: api.storage.crypto().fingerprint_key_id(),
+                    request_fingerprint: &fingerprint,
+                    resource_id: ResourceId::generate(),
+                    driver_schema_version: schema,
+                    request_id: RequestId::generate(),
+                    now_ms: 1,
+                    expires_at_ms: i64::MAX,
+                },
+                100,
+            )
+            .unwrap()
+        else {
+            panic!("expected resource reservation");
+        };
+        resource
+    };
+    let catalog = AiSearchCatalog::new(api.storage.db());
+    let namespace = reserve(
+        BindingKind::AiSearchNamespace,
+        namespace_name,
+        AI_SEARCH_NAMESPACE_SCHEMA_VERSION,
+    );
+    catalog.ensure_namespace(&namespace).unwrap();
+    resources.mark_ready(namespace.id, 2).unwrap();
+    let instance = reserve(
+        BindingKind::AiSearchInstance,
+        &format!("{}:{instance_key}", namespace.id),
+        AI_SEARCH_SCHEMA_VERSION,
+    );
+    catalog
+        .ensure_instance(
+            &instance,
+            namespace.id,
+            instance_key,
+            &format!("ai-search/v1/{}/{instance_key}", namespace.id),
+            AI_SEARCH_SCHEMA_VERSION,
+            [7; 32],
+        )
+        .unwrap();
+    resources.mark_ready(instance.id, 2).unwrap();
+    (namespace.id, instance.id)
 }
 
 fn ready_bucket_with_id(api: &WorkerApiState, account: InstanceId, name: &str, id: ResourceId) {
@@ -171,6 +232,40 @@ async fn named_vectorize_binding_uses_recreated_index() {
         )
         .unwrap();
     assert_eq!(upload.bindings["INDEX"].id, current);
+}
+
+#[tokio::test]
+async fn ai_search_binding_resolves_public_instance_key_inside_the_requested_namespace() {
+    let (_temp, _mock, state, account, _storage) =
+        crate::tests::initialized_worker_http_fixture().await;
+    let api = state.worker_api().unwrap();
+    let (_, default_instance) = ready_ai_search_instance(api, account, "default", "catalog");
+    let (_, team_instance) = ready_ai_search_instance(api, account, "team", "catalog");
+    let metadata: WorkerUploadMetadata = serde_json::from_value(serde_json::json!({
+        "main_module": "index.js",
+        "compatibility_date": "2026-09-08",
+        "bindings": [
+            {"name":"DEFAULT","type":"ai_search","instance_name":"catalog"},
+            {"name":"TEAM","type":"ai_search","instance_name":"catalog","namespace":"team"}
+        ]
+    }))
+    .unwrap();
+    let mut input = UploadInput::new(metadata);
+    input
+        .apply_explicit_bindings(
+            api,
+            &V4InstanceContext::new(account, 1),
+            account,
+            WorkerId::generate(),
+            None,
+            false,
+            false,
+            None,
+            3,
+        )
+        .unwrap();
+    assert_eq!(input.bindings["DEFAULT"].id, default_instance);
+    assert_eq!(input.bindings["TEAM"].id, team_instance);
 }
 
 #[tokio::test]
@@ -338,11 +433,11 @@ async fn explicit_binding_projection_accepts_every_day1_binding_kind() {
     for (kind, name) in [
         (BindingKind::R2Bucket, "r2-resource"),
         (BindingKind::VectorizeIndex, "vector-resource"),
-        (BindingKind::AiSearchNamespace, "search-namespace"),
-        (BindingKind::AiSearchInstance, "search-instance"),
     ] {
         ready_resource(api, account, kind, name);
     }
+    let _ = ready_ai_search_instance(api, account, "default", "search-instance");
+    let _ = ready_ai_search_instance(api, account, "search-namespace", "other-instance");
     let target = WorkerRepository::new(api.storage.db())
         .create_worker(
             account,
@@ -431,6 +526,7 @@ async fn explicit_binding_projection_rejects_cross_script_and_missing_resources(
         serde_json::json!({"name":"KV","type":"kv_namespace","namespace_id":"missing"}),
         serde_json::json!({"name":"QUEUE","type":"queue","queue_name":"missing"}),
         serde_json::json!({"name":"SERVICE","type":"service","service":"missing"}),
+        serde_json::json!({"name":"SEARCH","type":"ai_search","instance_name":"missing","namespace":"other"}),
     ] {
         let metadata: WorkerUploadMetadata = serde_json::from_value(serde_json::json!({
             "main_module": "index.js",
@@ -484,6 +580,8 @@ async fn strict_inheritance_restores_each_persisted_binding_family() {
         ),
         ("SEARCH", BindingKind::AiSearchInstance, "inherit-search"),
     ];
+    let (search_namespace, search_instance) =
+        ready_ai_search_instance(api, account, "inherit-search-namespace", "inherit-search");
     let queue_id = QueueId::generate();
     QueueRepository::new(storage.db())
         .insert_creating(
@@ -518,7 +616,11 @@ async fn strict_inheritance_restores_each_persisted_binding_family() {
             id: BindingId::generate(),
             name: (*name).to_owned(),
             kind: *kind,
-            resource_id: ready_resource(api, account, *kind, resource_name),
+            resource_id: match kind {
+                BindingKind::AiSearchNamespace => search_namespace,
+                BindingKind::AiSearchInstance => search_instance,
+                _ => ready_resource(api, account, *kind, resource_name),
+            },
             resource_spec_generation: 1,
             capability_version: 1,
             permissions_json: serde_json::to_vec(&CanonicalPermissions::default()).unwrap(),
@@ -655,6 +757,15 @@ async fn strict_inheritance_restores_each_persisted_binding_family() {
     .unwrap();
     assert_eq!(public.len(), 18);
     assert!(public.iter().all(|value| value.get("name").is_some()));
+    assert!(public.iter().any(|value| {
+        value
+            == &serde_json::json!({
+                "name": "SEARCH",
+                "type": "ai_search",
+                "instance_name": "inherit-search",
+                "namespace": "inherit-search-namespace",
+            })
+    }));
 
     let names = [
         "PLAIN",

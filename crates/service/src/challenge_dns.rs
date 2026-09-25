@@ -284,21 +284,24 @@ impl ChallengeDnsServer {
         address: SocketAddr,
         authority: Arc<ChallengeAuthority>,
     ) -> Result<Self, PlatformError> {
-        let udp = UdpSocket::bind(address)
-            .await
-            .map_err(|_| invalid_challenge())?;
-        let actual = SocketAddr::new(
-            address.ip(),
-            udp.local_addr().map_err(|_| invalid_challenge())?.port(),
-        );
-        let tcp = TcpListener::bind(actual)
-            .await
-            .map_err(|_| invalid_challenge())?;
-        Ok(Self {
-            udp,
-            tcp,
-            authority,
-        })
+        let attempts = if address.port() == 0 { 32 } else { 1 };
+        for _ in 0..attempts {
+            let udp = UdpSocket::bind(address)
+                .await
+                .map_err(|_| invalid_challenge())?;
+            let actual = SocketAddr::new(
+                address.ip(),
+                udp.local_addr().map_err(|_| invalid_challenge())?.port(),
+            );
+            if let Ok(tcp) = TcpListener::bind(actual).await {
+                return Ok(Self {
+                    udp,
+                    tcp,
+                    authority,
+                });
+            }
+        }
+        Err(invalid_challenge())
     }
 
     #[cfg(test)]

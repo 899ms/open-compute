@@ -119,7 +119,7 @@ Write standard module workers (`export default { fetch }`) with the bindings you
 | Surface                      | Status                                                                            |
 | ---------------------------- | --------------------------------------------------------------------------------- |
 | Cloudflare v4 API            | █████████░ 90% — local `/client/v4` works with Wrangler and the official SDK      |
-| Wrangler                     | █████████▉ 99% ✅ — Wrangler `4.127.1` deploys and manages the supported products |
+| Wrangler                     | █████████▉ 99% ✅ — Wrangler `4.138.0` deploys and manages the supported products |
 | Dashboard                    | ████████░░ 80% — operator UI built on the same `/client/v4` API                   |
 | Workers Logs / realtime tail | █████████░ 90% — logs, queries, `wrangler tail`, and live tail on one node        |
 
@@ -189,7 +189,7 @@ sudo ocd setup --system --yes
 In a normal Worker project, keep Wrangler project-local for development and use `ocd wrangler` for a real open-compute target:
 
 ```sh
-npm install --save-dev wrangler@4.127.1
+npm install --save-dev wrangler@4.138.0
 npx wrangler dev
 ocd wrangler deploy
 ```

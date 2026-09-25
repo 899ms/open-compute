@@ -43,6 +43,7 @@ fn service_declarations_follow_active_targets_and_protect_worker_identity() {
         binding_name: "FILES".to_owned(),
         target: crate::ServiceTarget::Extension {
             name: "local-files".to_owned(),
+            policy_revision: "a".repeat(64),
         },
         entrypoint: None,
         props_json: None,
@@ -100,7 +101,7 @@ fn service_declarations_follow_active_targets_and_protect_worker_identity() {
             .resolve(caller_version, "FILES", &[5; 32])
             .unwrap()
             .target,
-        crate::ResolvedServiceDestination::Extension { ref name } if name == "local-files"
+        crate::ResolvedServiceDestination::Extension { ref name, .. } if name == "local-files"
     ));
     assert_eq!(
         services.inbound_referrers(account, target.id, 10).unwrap(),

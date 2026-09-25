@@ -230,9 +230,20 @@ impl ServiceDescriptor {
         if name.len() > 64 {
             return Err(binding_invariant());
         }
-        if let ServiceTarget::Extension { name } = &target {
+        if let ServiceTarget::Extension {
+            name,
+            policy_revision,
+        } = &target
+        {
             open_compute_core::validate_local_extension_name(name)
                 .map_err(|_| binding_invariant())?;
+            if policy_revision.len() != 64
+                || policy_revision
+                    .bytes()
+                    .any(|byte| !byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+            {
+                return Err(binding_invariant());
+            }
         }
         if entrypoint.as_deref().is_some_and(|value| {
             value.is_empty()

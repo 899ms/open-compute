@@ -2,9 +2,7 @@
 
 use crate::install_receipt::{cmp_stable_semver, is_stable_semver};
 use crate::instance_registry::{InstanceRegistry, ServiceScope};
-use crate::release_upgrade::{
-    DEFAULT_GITHUB_API_BASE, DEFAULT_RELEASE_DOWNLOAD_BASE, ReleaseHttp, check_upgrade_available,
-};
+use crate::release_upgrade::{DEFAULT_RELEASE_DOWNLOAD_BASE, ReleaseHttp, check_upgrade_available};
 use open_compute_core::{ErrorCode, PlatformError};
 use open_compute_storage::atomic_write;
 use serde::{Deserialize, Serialize};
@@ -277,7 +275,6 @@ pub async fn run_update_check_helper(
     let now = SystemTime::now();
     match check_upgrade_available(
         http,
-        DEFAULT_GITHUB_API_BASE,
         DEFAULT_RELEASE_DOWNLOAD_BASE,
         current_version,
         receipt_path,
@@ -550,11 +547,14 @@ mod tests {
             "{digest}  {filename}\n{}  release.json\n",
             hex::encode(Sha256::digest(&manifest_bytes))
         );
-        http.insert(
-            format!("{DEFAULT_GITHUB_API_BASE}/repos/elliothux/open-compute/releases/latest"),
-            format!(r#"{{"tag_name":"{tag}","prerelease":false,"draft":false}}"#),
-        );
         let base = format!("{DEFAULT_RELEASE_DOWNLOAD_BASE}/{tag}");
+        let releases_base = DEFAULT_RELEASE_DOWNLOAD_BASE
+            .strip_suffix("/download")
+            .unwrap();
+        http.insert(
+            format!("{releases_base}/latest/download/release.json"),
+            manifest_bytes.clone(),
+        );
         http.insert(format!("{base}/release.json"), manifest_bytes);
         http.insert(format!("{base}/SHA256SUMS"), sums.into_bytes());
         let cache_path = temp.path().join("update-check.json");

@@ -2,7 +2,7 @@
 title: "Configuration"
 ---
 
-`wrangler@4.127.1/config-schema.json` is the project grammar authority. `ocd wrangler` does not parse the project. Use project-local Wrangler for config resolution and type generation.
+`wrangler@4.138.0/config-schema.json` is the project grammar authority. `ocd wrangler` does not parse the project. Use project-local Wrangler for config resolution and type generation.
 
 ```json
 {

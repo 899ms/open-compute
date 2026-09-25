@@ -1,5 +1,8 @@
 use super::*;
 
+mod debug;
+mod workflows;
+
 /// P0.2 version orchestrator over typed P0.1 capabilities.
 pub struct VersionController<'a> {
     pub(super) storage: &'a PlatformStorage,
@@ -9,15 +12,7 @@ pub struct VersionController<'a> {
     pub(super) max_queue_consumer_concurrency: u32,
     pub(super) product_promoter: Option<Arc<dyn ProductPromotionCoordinator>>,
     pub(super) durable_object_migration: Option<DurableObjectMigrationPlan>,
-}
-
-impl std::fmt::Debug for VersionController<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VersionController")
-            .field("artifacts", &self.artifacts)
-            .field("bundle_limits", &self.bundle_limits)
-            .finish_non_exhaustive()
-    }
+    pub(super) workflow_reservations: Vec<WorkflowDefinitionReservation>,
 }
 
 impl<'a> VersionController<'a> {
@@ -37,6 +32,7 @@ impl<'a> VersionController<'a> {
             max_queue_consumer_concurrency: DEFAULT_MAX_QUEUE_CONSUMER_CONCURRENCY,
             product_promoter: None,
             durable_object_migration: None,
+            workflow_reservations: Vec::new(),
         }
     }
 
@@ -58,6 +54,16 @@ impl<'a> VersionController<'a> {
     #[must_use]
     pub fn with_durable_object_migration(mut self, plan: DurableObjectMigrationPlan) -> Self {
         self.durable_object_migration = Some(plan);
+        self
+    }
+
+    /// Attach the fenced Workflow definitions published before the Worker becomes ready.
+    #[must_use]
+    pub fn with_workflow_reservations(
+        mut self,
+        reservations: Vec<WorkflowDefinitionReservation>,
+    ) -> Self {
+        self.workflow_reservations = reservations;
         self
     }
 
@@ -549,6 +555,10 @@ impl<'a> VersionController<'a> {
                     "real workerd validation rejected a named entrypoint",
                 ));
             }
+        }
+        if version.state == VersionState::Validating {
+            self.publish_reserved_workflows(request, &version, &repo)
+                .await?;
         }
         if version.state == VersionState::Validating {
             if let Some(plan) = &self.durable_object_migration {

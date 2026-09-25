@@ -130,8 +130,26 @@ path = "./extensions/local-files"
 
 The path is resolved relative to the loaded config file. The directory must contain strict `extension.toml` entries for one bundled facade module and one executable Provider. Extensions are trusted operator code, load only at `ocd` startup, receive no tenant secrets or platform credentials, and are not installed, downloaded, versioned, hot-reloaded, or sandboxed by `ocd`. Their names share the Worker service namespace and may not collide with a live Worker. See [Extensions](/docs/extension/).
 
+## `[private_services.<name>]`: fixed private HTTP Service targets
+
+An operator may expose one fixed private or loopback HTTP endpoint through the standard Service Binding `fetch()` interface without opening general tenant egress to private addresses:
+
+```toml
+[private_services.inventory]
+scheme = "http"
+host = "10.20.0.15"
+port = 8080
+path_prefixes = ["/v1/"]
+methods = ["GET", "POST"]
+credential_header = "x-api-key"
+credential = { file = "/run/secrets/inventory-key" }
+allow = [{ account_id = "<instance-id>", worker_id = "<worker-id>", entrypoint = "api" }]
+```
+
+The endpoint is resolved to a private address and pinned when `ocd` starts. Redirects are returned, never followed. The caller cannot choose the URL or credential; internal and tenant authentication headers are stripped, and the configured credential is injected only on the host-side request. Upload admission and every invocation recheck the exact instance, Worker, optional Version, entrypoint, and policy revision. A newly created Worker therefore needs its stable Worker ID before this binding can be added. Private targets support Service Binding HTTP `fetch()` only; RPC and `connect()` fail closed. Ordinary tenant `fetch()` remains public-address-only.
+
 ## Other sections
 
-The instance template also includes `[auth]`, `[runtime]`, `[cache]`, `[response_cache]`, `[images]`, `[ai]`, `[metrics]`, `[hardening]`, `[workers]`, `[kv]`, `[r2]`, `[d1]`, `[queues]`, `[durable_objects]`, `[scheduler]` (including pools), optional `[extensions.<name>]`, and `[workflows]`. Public listener settings belong only in `ocd.toml`, not `compute.toml`. These are local quotas and timeouts, not Cloudflare plan SKUs. Run `config check` before changing them, then `capabilities --json` for actual `limits`.
+The instance template also includes `[auth]`, `[runtime]`, `[cache]`, `[response_cache]`, `[images]`, `[ai]`, `[metrics]`, `[hardening]`, `[workers]`, `[kv]`, `[r2]`, `[d1]`, `[queues]`, `[durable_objects]`, `[scheduler]` (including pools), optional `[extensions.<name>]` and `[private_services.<name>]`, and `[workflows]`. Public listener settings belong only in `ocd.toml`, not `compute.toml`. These are local quotas and timeouts, not Cloudflare plan SKUs. Run `config check` before changing them, then `capabilities --json` for actual `limits`.
 
 `hardening.emergency_reserve_bytes` must be below the `[data]` hard reserve.

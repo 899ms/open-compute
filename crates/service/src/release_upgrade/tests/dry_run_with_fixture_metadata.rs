@@ -51,7 +51,6 @@ async fn dry_run_with_fixture_metadata() {
         receipt_path,
         staging_dir: bin_dir,
         download_base,
-        api_base,
         target: host_target().to_owned(),
         current_version: "0.1.0".to_owned(),
     };

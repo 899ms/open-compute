@@ -50,6 +50,14 @@ pub(crate) fn router() -> Router<HttpState> {
             get(get_version),
         )
         .route(
+            "/accounts/{account}/workers/workers/{worker}",
+            get(get_beta_worker),
+        )
+        .route(
+            "/accounts/{account}/workers/workers/{worker}/versions/{version}",
+            axum::routing::delete(delete_beta_version),
+        )
+        .route(
             "/accounts/{account}/workers/scripts/{script}/deployments",
             get(list_deployments).post(create_deployment),
         )
@@ -345,9 +353,11 @@ struct VersionList {
 
 mod deployments;
 mod scripts;
+mod versions;
 
 use deployments::*;
 use scripts::*;
+use versions::*;
 
 pub(super) fn authorize(
     request: &Request,

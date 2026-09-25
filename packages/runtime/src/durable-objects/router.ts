@@ -29,6 +29,7 @@ export { ImageTransport } from "../images/host.js";
 export { KVNamespace } from "../kv/transport.js";
 export {
   ExtensionCacheTransport,
+  PrivateHttpTransport,
   ServiceFetchCompletion,
   ServiceTransport,
 } from "../services/transport.js";

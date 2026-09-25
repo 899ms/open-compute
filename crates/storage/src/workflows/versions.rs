@@ -1,4 +1,5 @@
 use super::*;
+use open_compute_core::WorkerId;
 
 impl WorkflowRepository<'_> {
     /// List a bounded immutable version page, ordered by monotonic version number.
@@ -119,12 +120,23 @@ impl WorkflowRepository<'_> {
                     return Err(error(ErrorCode::WorkflowVersionNotReady));
                 }
             }
-            let version = tx.query_row("SELECT w.id,d.id,d.worker_code_sha256,d.loader_schema_version
+            let version: (WorkerId, VersionId, [u8; 32], i64) = tx.query_row("SELECT w.id,d.id,d.worker_code_sha256,d.loader_schema_version
                 FROM worker_versions d JOIN workers w ON w.id=d.worker_id
-                WHERE d.id=?1 AND (SELECT instance_id FROM instance_identity)=?2 AND d.state='ready' AND w.deleted_at_ms IS NULL",
-                params![version.to_string(),instance.to_string()], |row| {
+                WHERE d.id=?1 AND (SELECT instance_id FROM instance_identity)=?2
+                  AND (d.state='ready' OR (?3 IS NOT NULL AND d.state='validating')) AND w.deleted_at_ms IS NULL",
+                params![version.to_string(),instance.to_string(),reservation.map(|value| value.0)], |row| {
                     Ok((parse(row,0)?,parse(row,1)?,digest(row,2)?,row.get::<_,i64>(3)?))
                 }).optional().map_err(sql_error)?.ok_or_else(||error(ErrorCode::WorkflowVersionNotReady))?;
+            if let Some((owner, fence)) = reservation {
+                let existing = tx.query_row(&format!("{VERSION_SELECT} WHERE v.definition_id=?1 AND v.worker_version_id=?2
+                    AND v.class_name=?3 AND v.reservation_owner=?4 AND v.reservation_fence=?5"),
+                    params![definition.to_string(),version.1.to_string(),class_name,owner,fence],version_row)
+                    .optional().map_err(sql_error)?;
+                if let Some(existing) = existing {
+                    if version_digest(&existing.target)? != existing.target.descriptor_sha256 { return Err(invariant()); }
+                    return Ok(existing);
+                }
+            }
             let version_number: i64 = tx.query_row("SELECT coalesce(MAX(version_number),0)+1 FROM workflow_versions WHERE definition_id=?1",
                 [definition.to_string()],|row|row.get(0)).map_err(sql_error)?;
             if version_number > 10000 { return Err(error(ErrorCode::QuotaExceeded)); }

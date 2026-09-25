@@ -384,6 +384,44 @@ fn local_extensions_have_a_bounded_process_ceiling() {
 }
 
 #[test]
+fn private_service_targets_are_strict_and_resolve_credential_paths() {
+    let source = complete_config(
+        r#"
+[private_services.inventory]
+scheme = "http"
+host = "127.0.0.1"
+port = 8080
+path_prefixes = ["/v1/"]
+methods = ["GET", "POST"]
+credential_header = "x-api-key"
+credential = { file = "../secrets/inventory" }
+allow = [{ account_id = "018f47a23b4c7def8abc0123456789ab", worker_id = "018f47a2-3b4c-7def-8abc-0123456789ac", entrypoint = "api" }]
+"#,
+    );
+    let config =
+        PlatformConfig::from_toml_str_at(&source, Path::new("/srv/config/nested")).unwrap();
+    assert_eq!(
+        config.private_services["inventory"]
+            .credential
+            .as_ref()
+            .unwrap()
+            .file
+            .as_deref(),
+        Some(Path::new("/srv/config/secrets/inventory"))
+    );
+
+    for invalid in [
+        source.replace("methods = [\"GET\", \"POST\"]", "methods = [\"get\"]"),
+        source.replace("path_prefixes = [\"/v1/\"]", "path_prefixes = [\"../v1\"]"),
+        source.replace("credential_header = \"x-api-key\"\n", ""),
+    ] {
+        assert!(
+            PlatformConfig::from_toml_str_at(&invalid, Path::new("/srv/config/nested")).is_err()
+        );
+    }
+}
+
+#[test]
 fn bootstrap_config_path_accepts_exact_relative_or_absolute_input() {
     assert!(validate_bootstrap_config_path(Path::new("/etc/open-compute.toml")).is_ok());
     assert!(validate_bootstrap_config_path(Path::new("open-compute.toml")).is_ok());

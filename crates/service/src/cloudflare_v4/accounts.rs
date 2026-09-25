@@ -90,6 +90,11 @@ impl V4InstanceContext {
         stable_id("worker-tag", self.instance_id, Some(&id.to_string()))
     }
 
+    /// Compare a public Worker identifier without exposing the internal UUID.
+    pub(crate) fn matches_public_worker_tag(&self, id: WorkerId, public: &str) -> bool {
+        public.len() == 32 && self.public_worker_tag(id) == public
+    }
+
     /// Compare a public resource ID without exposing the internal UUID.
     pub(crate) fn matches_public_resource_id(
         &self,

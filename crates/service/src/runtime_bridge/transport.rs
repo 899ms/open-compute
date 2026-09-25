@@ -664,4 +664,11 @@ impl RuntimeValidator for WorkerdTransport {
             }
         })
     }
+
+    fn validate_workflow(
+        &self,
+        target: open_compute_storage::WorkflowTarget,
+    ) -> Pin<Box<dyn Future<Output = Result<(), PlatformError>> + Send + '_>> {
+        Box::pin(async move { self.probe_workflow(&target).await })
+    }
 }

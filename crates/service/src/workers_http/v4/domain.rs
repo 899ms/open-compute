@@ -10,9 +10,9 @@ use open_compute_core::{
     PlatformError, RequestId, ResourceId, ResourceState, SecretString, WorkerId,
 };
 use open_compute_storage::{
-    BuiltinBindingKind, CatalogDirection, CatalogSort, DeploymentSource, DurableObjectRepository,
-    QueueRepository, ResourceRepository, ServiceTarget, VersionSnapshot, WorkerRecord,
-    WorkerRepository, WorkflowDefinitionReservation, WorkflowRepository,
+    AiSearchCatalog, BuiltinBindingKind, CatalogDirection, CatalogSort, DeploymentSource,
+    DurableObjectRepository, QueueRepository, ResourceRepository, ServiceTarget, VersionSnapshot,
+    WorkerRecord, WorkerRepository, WorkflowDefinitionReservation, WorkflowRepository,
 };
 use open_compute_workers::{
     CreateVersionOutcome, CreateVersionRequest, ModuleBindingKind, RuntimeValidator,
@@ -160,6 +160,7 @@ async fn create_from_prepared_upload(
         controller = controller.with_durable_object_migration(migration.plan().clone());
     }
     let workflow_reservations = std::mem::take(&mut input.workflow_reservations);
+    controller = controller.with_workflow_reservations(workflow_reservations.clone());
     let outcome = controller
         .create_version(CreateVersionRequest {
             instance_id,

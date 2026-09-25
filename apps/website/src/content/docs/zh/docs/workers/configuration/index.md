@@ -2,7 +2,7 @@
 title: "配置"
 ---
 
-`wrangler@4.127.1/config-schema.json` 是项目语法 authority。`ocd wrangler` 不解析项目；config resolution 和类型生成使用项目内 Wrangler。
+`wrangler@4.138.0/config-schema.json` 是项目语法 authority。`ocd wrangler` 不解析项目；config resolution 和类型生成使用项目内 Wrangler。
 
 ```json
 {

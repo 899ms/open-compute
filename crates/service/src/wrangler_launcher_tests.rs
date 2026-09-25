@@ -84,7 +84,7 @@ fn remote_fixture(version: &str) -> (TempDir, TargetRegistry, FixtureHttp, PathB
     fs::create_dir_all(&project).unwrap();
     write_fake_wrangler(&workspace.join("node_modules/.bin/wrangler"), version);
     let http = FixtureHttp::default();
-    http.capabilities("https://compute.example/client/v4", "4.127.1");
+    http.capabilities("https://compute.example/client/v4", "4.138.0");
     (temp, registry, http, project, name)
 }
 
@@ -139,7 +139,7 @@ prefix = "system/"
 
 #[tokio::test]
 async fn remote_launch_preserves_opaque_args_and_uses_nearest_hoisted_binary() {
-    let (temp, registry, http, project, name) = remote_fixture("4.127.1");
+    let (temp, registry, http, project, name) = remote_fixture("4.138.0");
     let instances = InstanceRegistry::with_roots(
         temp.path().join("instances/system"),
         temp.path().join("instances/user"),
@@ -180,8 +180,8 @@ async fn remote_launch_preserves_opaque_args_and_uses_nearest_hoisted_binary() {
             .join("node_modules/.bin/wrangler")
     );
     assert_eq!(launch.target_kind, "target");
-    assert_eq!(launch.wrangler_version, "4.127.1");
-    assert_eq!(launch.certified_wrangler_version, "4.127.1");
+    assert_eq!(launch.wrangler_version, "4.138.0");
+    assert_eq!(launch.certified_wrangler_version, "4.138.0");
     assert!(diagnostic.is_empty());
 
     let command = launch.child_command();
@@ -245,7 +245,7 @@ async fn same_major_version_drift_launches_without_a_warning() {
     .await
     .unwrap();
     assert_eq!(launch.wrangler_version, "4.130.0");
-    assert_eq!(launch.certified_wrangler_version, "4.127.1");
+    assert_eq!(launch.certified_wrangler_version, "4.138.0");
     assert!(diagnostic.is_empty());
 }
 
@@ -274,17 +274,17 @@ async fn cross_major_version_drift_warns_but_still_launches() {
     .await
     .unwrap();
     assert_eq!(launch.wrangler_version, "5.0.0");
-    assert_eq!(launch.certified_wrangler_version, "4.127.1");
+    assert_eq!(launch.certified_wrangler_version, "4.138.0");
     let diagnostic = String::from_utf8(diagnostic).unwrap();
     assert!(diagnostic.contains("WRANGLER_MAJOR_VERSION_MISMATCH"));
     assert!(diagnostic.contains(&format!("path={}", launch.executable.display())));
-    assert!(diagnostic.contains("detected=5.0.0 certified=4.127.1"));
+    assert!(diagnostic.contains("detected=5.0.0 certified=4.138.0"));
     assert!(!diagnostic.contains("test-deployer-token"));
 }
 
 #[tokio::test]
 async fn failed_version_process_remains_a_hard_failure() {
-    let (temp, registry, http, project, name) = remote_fixture("4.127.1");
+    let (temp, registry, http, project, name) = remote_fixture("4.138.0");
     let executable = temp.path().join("workspace/node_modules/.bin/wrangler");
     fs::write(&executable, "#!/bin/sh\nexit 23\n").unwrap();
     fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
@@ -315,7 +315,7 @@ async fn failed_version_process_remains_a_hard_failure() {
 
 #[tokio::test]
 async fn unusable_binary_empty_arguments_and_selector_conflicts_fail_closed() {
-    let (temp, registry, http, project, name) = remote_fixture("4.127.1");
+    let (temp, registry, http, project, name) = remote_fixture("4.138.0");
     let executable = temp.path().join("workspace/node_modules/.bin/wrangler");
     fs::set_permissions(&executable, fs::Permissions::from_mode(0o600)).unwrap();
     let instances = InstanceRegistry::with_roots(
@@ -448,10 +448,10 @@ async fn unique_running_local_instance_supplies_config_token_listener_and_accoun
 
     let project = temp.path().join("project");
     fs::create_dir(&project).unwrap();
-    write_fake_wrangler(&project.join("node_modules/.bin/wrangler"), "4.127.1");
+    write_fake_wrangler(&project.join("node_modules/.bin/wrangler"), "4.138.0");
     let targets = TargetRegistry::at(temp.path().join("targets/targets.toml"));
     let http = FixtureHttp::default();
-    http.capabilities("http://127.0.0.1:8787/client/v4", "4.127.1");
+    http.capabilities("http://127.0.0.1:8787/client/v4", "4.138.0");
     let mut diagnostic = Vec::new();
     let launch = prepare_wrangler_launch(
         None,

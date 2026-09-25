@@ -53,12 +53,12 @@ async fn probe_requires_matching_account_and_valid_capabilities() {
     );
     http.insert(
         record.api_base_url.endpoint("/open-compute/capabilities"),
-        &serde_json::json!({"success": true, "result": {"wrangler_version": "4.127.1"}}),
+        &serde_json::json!({"success": true, "result": {"wrangler_version": "4.138.0"}}),
     );
     let result = probe_target(&http, &record, &SecretString::new("secret"))
         .await
         .unwrap();
-    assert_eq!(result.wrangler_version, "4.127.1");
+    assert_eq!(result.wrangler_version, "4.138.0");
 }
 
 #[tokio::test]

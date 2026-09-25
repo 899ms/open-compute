@@ -163,9 +163,17 @@ async fn git_cli_push_clone_v1_v2_and_token_fences_interoperate() {
             "",
             &["config", "user.email", "test@open-compute.dev"],
         );
-        std::fs::write(work.join("README.md"), b"hello artifacts\n").unwrap();
+        let first = vec![b'a'; 512 * 1024];
+        std::fs::write(work.join("README.md"), &first).unwrap();
         must_git(&work, "", &["add", "README.md"]);
         must_git(&work, "", &["commit", "-m", "first"]);
+        must_git(&work, &token, &["push", "origin", "main"]);
+        let mut second = first;
+        let middle = second.len() / 2;
+        second[middle] = b'b';
+        std::fs::write(work.join("README.md"), &second).unwrap();
+        must_git(&work, "", &["add", "README.md"]);
+        must_git(&work, "", &["commit", "-m", "thin delta"]);
         must_git(&work, &token, &["push", "origin", "main"]);
     })
     .await
@@ -210,10 +218,9 @@ async fn git_cli_push_clone_v1_v2_and_token_fences_interoperate() {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert_eq!(
-            std::fs::read(clone_v1.join("README.md")).unwrap(),
-            b"hello artifacts\n"
-        );
+        let cloned = std::fs::read(clone_v1.join("README.md")).unwrap();
+        assert_eq!(cloned.len(), 512 * 1024);
+        assert_eq!(cloned[cloned.len() / 2], b'b');
         must_git(&clone_v2, "", &["config", "user.name", "Open Compute Test"]);
         must_git(
             &clone_v2,

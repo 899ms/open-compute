@@ -30,6 +30,7 @@ interface NormalizedWranglerConfig {
   vectorize: { binding: string; index_name: string }[];
   ai_search_namespaces: { binding: string; namespace: string }[];
   ai_search: { binding: string; instance_name: string }[];
+  artifacts: { binding: string; namespace: string; remote?: boolean }[];
   services?: {
     binding: string;
     service: string;
@@ -100,7 +101,8 @@ export interface WorkerBinding {
     | "workflow"
     | "vectorize_index"
     | "ai_search_namespace"
-    | "ai_search_instance";
+    | "ai_search_instance"
+    | "artifacts";
   id: string;
   className?: string;
   schedules?: string[];
@@ -259,7 +261,6 @@ const UNSUPPORTED_WRANGLER_BINDING_KEYS = [
   "agent_memory",
   "pipelines",
   "secrets_store_secrets",
-  "artifacts",
   "unsafe_hello_world",
   "flagship",
   "ratelimits",
@@ -450,6 +451,12 @@ function normalizeBindings(
     addBinding(bindings, item.binding, {
       type: "ai_search_instance",
       id: item.instance_name,
+    });
+  }
+  for (const item of config.artifacts) {
+    addBinding(bindings, item.binding, {
+      type: "artifacts",
+      id: item.namespace,
     });
   }
   return bindings;

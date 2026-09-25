@@ -121,6 +121,7 @@ async fn open_storage(initial: InitialPlatform) -> Result<StoredPlatform, Platfo
     let observability = open_observability(&initial, &storage)?;
     let local_extensions = Arc::new(LocalExtensionRegistry::load(
         &initial.loaded.config.extensions,
+        &initial.loaded.config.private_services,
     )?);
     let workers = WorkerRepository::new(storage.db());
     for name in local_extensions.names() {

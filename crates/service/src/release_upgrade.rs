@@ -18,9 +18,15 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use uuid::Uuid;
 
+mod backups;
+use backups::UpgradeBackups;
+#[cfg(test)]
+use backups::backup_path;
+pub use backups::run_upgrade_restore;
+
 pub use crate::release_http::{
-    DEFAULT_GITHUB_API_BASE, DEFAULT_RELEASE_DOWNLOAD_BASE, FixtureReleaseHttp, LiveReleaseHttp,
-    MAX_BINARY_BYTES, MAX_METADATA_BYTES, RELEASE_HTTP_TIMEOUT, ReleaseHttp,
+    DEFAULT_RELEASE_DOWNLOAD_BASE, FixtureReleaseHttp, LiveReleaseHttp, MAX_BINARY_BYTES,
+    MAX_METADATA_BYTES, RELEASE_HTTP_TIMEOUT, ReleaseHttp,
 };
 
 /// Supported formal release targets.
@@ -85,8 +91,6 @@ pub struct UpgradeOptions {
     pub staging_dir: PathBuf,
     /// GitHub download base without a trailing slash.
     pub download_base: String,
-    /// GitHub API base without a trailing slash.
-    pub api_base: String,
     /// Host release target token.
     pub target: String,
     /// Currently running version string.
@@ -127,7 +131,6 @@ impl UpgradeOptions {
             receipt_path,
             staging_dir,
             download_base: DEFAULT_RELEASE_DOWNLOAD_BASE.to_owned(),
-            api_base: DEFAULT_GITHUB_API_BASE.to_owned(),
             target: host_release_target()?,
             current_version: env!("CARGO_PKG_VERSION").to_owned(),
         })
@@ -155,7 +158,6 @@ pub fn host_release_target() -> Result<String, PlatformError> {
 /// Resolve latest or exact stable release metadata (no binary download).
 pub async fn resolve_release(
     http: &dyn ReleaseHttp,
-    api_base: &str,
     download_base: &str,
     version: Option<&str>,
     target: &str,
@@ -166,7 +168,7 @@ pub async fn resolve_release(
             "requested release target is not published",
         ));
     }
-    let tag = match version {
+    let (tag, manifest_bytes) = match version {
         Some(value) => {
             if !is_stable_semver(value) {
                 return Err(PlatformError::new(
@@ -174,9 +176,37 @@ pub async fn resolve_release(
                     "upgrade version must be a stable SemVer X.Y.Z",
                 ));
             }
-            format!("v{value}")
+            let tag = format!("v{value}");
+            let bytes = http
+                .get(
+                    &format!("{download_base}/{tag}/release.json"),
+                    MAX_METADATA_BYTES,
+                )
+                .await?;
+            (tag, bytes)
         }
-        None => resolve_latest_stable_tag(http, api_base).await?,
+        None => {
+            let releases_base = download_base.strip_suffix("/download").ok_or_else(|| {
+                PlatformError::new(
+                    ErrorCode::ReleaseUnsupported,
+                    "release download base is invalid",
+                )
+            })?;
+            let bytes = http
+                .get(
+                    &format!("{releases_base}/latest/download/release.json"),
+                    MAX_METADATA_BYTES,
+                )
+                .await?;
+            let manifest = parse_manifest(&bytes)?;
+            if manifest.tag != format!("v{}", manifest.version) {
+                return Err(PlatformError::new(
+                    ErrorCode::ReleaseUnsupported,
+                    "latest release.json tag/version is inconsistent",
+                ));
+            }
+            (manifest.tag.clone(), bytes)
+        }
     };
     if !tag.starts_with('v') || !is_stable_semver(tag.trim_start_matches('v')) {
         return Err(PlatformError::new(
@@ -185,9 +215,6 @@ pub async fn resolve_release(
         ));
     }
     let base = format!("{download_base}/{tag}");
-    let manifest_bytes = http
-        .get(&format!("{base}/release.json"), MAX_METADATA_BYTES)
-        .await?;
     let sums_bytes = http
         .get(&format!("{base}/SHA256SUMS"), MAX_METADATA_BYTES)
         .await?;
@@ -235,9 +262,9 @@ pub async fn run_upgrade(
     out: &mut impl Write,
 ) -> Result<(), PlatformError> {
     let receipt = require_upgradeable_receipt(&options.receipt_path, &options.binary_path)?;
+    UpgradeBackups::new(options)?.ensure_absent()?;
     let (manifest, artifact, base) = resolve_release(
         http,
-        &options.api_base,
         &options.download_base,
         options.version.as_deref(),
         &options.target,
@@ -266,7 +293,8 @@ pub async fn run_upgrade(
     }
 
     let instances = registry.list_scope(options.scope)?;
-    let restart = !options.no_restart && manager.is_active(options.scope)?;
+    let daemon_active = manager.is_active(options.scope)?;
+    let restart = !options.no_restart && daemon_active;
     for record in &instances {
         if let Err(error) = registry.validate_registered_config(record) {
             writeln!(
@@ -303,11 +331,6 @@ pub async fn run_upgrade(
         )
         .map_err(|_| io_failed())?;
     }
-    if options.dry_run {
-        writeln!(out, "UPGRADE_DRY_RUN_OK {}", manifest.version).map_err(|_| io_failed())?;
-        return Ok(());
-    }
-
     let asset_url = format!("{base}/{}", artifact.filename);
     let bytes = http.get(&asset_url, MAX_BINARY_BYTES).await?;
     if bytes.len() as u64 != artifact.bytes {
@@ -335,8 +358,27 @@ pub async fn run_upgrade(
         .join(format!(".ocd-upgrade-{}", Uuid::now_v7().as_hyphenated()));
     write_staged_binary(&staged, &bytes)?;
     verify_staged_version(&staged, &manifest.version)?;
+    if daemon_active {
+        for record in &instances {
+            verify_staged_instance(&staged, record.config_path())?;
+        }
+    }
+    if options.dry_run {
+        fs::remove_file(&staged).map_err(|_| {
+            PlatformError::new(
+                ErrorCode::PathInvalid,
+                "failed to remove staged upgrade binary",
+            )
+        })?;
+        writeln!(out, "UPGRADE_DRY_RUN_OK {}", manifest.version).map_err(|_| io_failed())?;
+        return Ok(());
+    }
 
-    atomic_replace_binary(&staged, &options.binary_path)?;
+    let backups = UpgradeBackups::create(options)?;
+    if let Err(error) = atomic_replace_binary(&staged, &options.binary_path) {
+        let _ = backups.remove();
+        return Err(error);
+    }
     let updated = InstallReceipt {
         schema_version: install_receipt::RECEIPT_SCHEMA_VERSION,
         version: manifest.version.clone(),
@@ -347,7 +389,12 @@ pub async fn run_upgrade(
         source: asset_url,
         installed_at_ms: install_receipt::unix_ms_now(SystemTime::now())?,
     };
-    write_receipt(&options.receipt_path, &updated)?;
+    if let Err(error) = write_receipt(&options.receipt_path, &updated) {
+        if backups.restore(options).is_ok() {
+            let _ = backups.remove();
+        }
+        return Err(error);
+    }
 
     if options.no_restart {
         writeln!(
@@ -356,15 +403,39 @@ pub async fn run_upgrade(
             manifest.version
         )
         .map_err(|_| io_failed())?;
+        backups.remove()?;
         return Ok(());
     }
 
     if restart {
-        manager.restart(options.scope)?;
-        wait_scoped_daemon_state(registry, manager, options.scope, true)?;
+        if let Err(error) = manager
+            .restart(options.scope)
+            .and_then(|()| wait_scoped_daemon_state(registry, manager, options.scope, true))
+        {
+            let recovery = backups.restore(options).and_then(|()| {
+                manager
+                    .restart(options.scope)
+                    .and_then(|()| wait_scoped_daemon_state(registry, manager, options.scope, true))
+            });
+            if let Err(recovery) = recovery {
+                writeln!(
+                    out,
+                    "UPGRADE_ROLLBACK_FAILED primary={} recovery={} backup_binary={} backup_receipt={}",
+                    error.code().as_str(),
+                    recovery.code().as_str(),
+                    backups.binary.display(),
+                    backups.receipt.display(),
+                )
+                .map_err(|_| io_failed())?;
+            } else {
+                backups.remove()?;
+            }
+            return Err(error);
+        }
         writeln!(out, "UPGRADE_DAEMON_RESTARTED {}", options.scope.as_str())
             .map_err(|_| io_failed())?;
     }
+    backups.remove()?;
     writeln!(out, "UPGRADE_OK {}", manifest.version).map_err(|_| io_failed())?;
     Ok(())
 }
@@ -490,7 +561,6 @@ pub fn run_uninstall(
 /// Build a check result from cache / fresh metadata for Dashboard.
 pub async fn check_upgrade_available(
     http: &dyn ReleaseHttp,
-    api_base: &str,
     download_base: &str,
     current_version: &str,
     receipt_path: &Path,
@@ -501,7 +571,7 @@ pub async fn check_upgrade_available(
         Ok(_) => (true, None),
         Err(err) => (false, Some(err.message().to_owned())),
     };
-    let available = match resolve_release(http, api_base, download_base, None, target).await {
+    let available = match resolve_release(http, download_base, None, target).await {
         Ok((manifest, _, _)) => {
             if cmp_stable_semver(&manifest.version, current_version)
                 == Some(std::cmp::Ordering::Greater)
@@ -519,38 +589,6 @@ pub async fn check_upgrade_available(
         allowed,
         blocked.as_deref(),
     ))
-}
-
-async fn resolve_latest_stable_tag(
-    http: &dyn ReleaseHttp,
-    api_base: &str,
-) -> Result<String, PlatformError> {
-    let url = format!("{api_base}/repos/elliothux/open-compute/releases/latest");
-    let bytes = http.get(&url, MAX_METADATA_BYTES).await?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| {
-        PlatformError::new(
-            ErrorCode::ReleaseUnsupported,
-            "GitHub latest release JSON is invalid",
-        )
-    })?;
-    if value.get("prerelease").and_then(serde_json::Value::as_bool) == Some(true)
-        || value.get("draft").and_then(serde_json::Value::as_bool) == Some(true)
-    {
-        return Err(PlatformError::new(
-            ErrorCode::ReleaseUnsupported,
-            "latest GitHub release is a prerelease or draft",
-        ));
-    }
-    let tag = value
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            PlatformError::new(
-                ErrorCode::ReleaseUnsupported,
-                "GitHub latest release is missing tag_name",
-            )
-        })?;
-    Ok(tag.to_owned())
 }
 
 fn parse_manifest(bytes: &[u8]) -> Result<ReleaseManifest, PlatformError> {
@@ -699,6 +737,35 @@ fn verify_staged_version(path: &Path, expected: &str) -> Result<(), PlatformErro
     Ok(())
 }
 
+fn verify_staged_instance(path: &Path, config: &Path) -> Result<(), PlatformError> {
+    let status = std::process::Command::new(path)
+        .args(["--no-update-check", "--config"])
+        .arg(config)
+        .arg("__upgrade_preflight")
+        .status()
+        .map_err(|_| {
+            PlatformError::new(
+                ErrorCode::MigrationFailed,
+                "staged binary upgrade preflight failed to execute",
+            )
+        })?;
+    if !status.success() {
+        return Err(PlatformError::new(
+            ErrorCode::MigrationFailed,
+            "staged binary rejected an active instance during upgrade preflight",
+        ));
+    }
+    Ok(())
+}
+
+fn sync_parent(path: &Path) {
+    if let Some(parent) = path.parent()
+        && let Ok(dir) = File::open(parent)
+    {
+        let _ = dir.sync_all();
+    }
+}
+
 fn atomic_replace_binary(staged: &Path, destination: &Path) -> Result<(), PlatformError> {
     // Same-directory rename keeps the replace on one filesystem.
     if staged.parent() != destination.parent() {
@@ -713,11 +780,7 @@ fn atomic_replace_binary(staged: &Path, destination: &Path) -> Result<(), Platfo
             "failed to atomically replace the ocd binary",
         )
     })?;
-    if let Some(parent) = destination.parent()
-        && let Ok(dir) = File::open(parent)
-    {
-        let _ = dir.sync_all();
-    }
+    sync_parent(destination);
     Ok(())
 }
 

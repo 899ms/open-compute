@@ -344,7 +344,7 @@ export function buildCapability(
       source: "pinned-schema-absence",
       stage: "P8",
       constraint:
-        "wrangler@4.127.1 config-schema.json has no usage_model property",
+        "wrangler@4.138.0 config-schema.json has no usage_model property",
     },
     {
       id: "worker_loaders[].binding",
@@ -397,7 +397,7 @@ export function buildCapability(
     workersObservability: source.workersObservability,
     workerLoader: source.workerLoader,
     wrangler: {
-      version: "4.127.1",
+      version: "4.138.0",
       configSchemaSha256,
       fields,
       bindings,
@@ -635,7 +635,7 @@ function extensionSchemas() {
       ],
       {
         release: { type: "string", minLength: 1 },
-        wrangler_version: { type: "string", const: "4.127.1" },
+        wrangler_version: { type: "string", const: "4.138.0" },
         compatibility_date: objectSchema(["minimum", "maximum"], {
           minimum: { type: "string", format: "date" },
           maximum: { type: "string", format: "date" },

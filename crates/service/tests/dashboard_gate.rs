@@ -420,7 +420,7 @@ async fn dashboard_real_runtime_serves_spa_assets_and_cloudflare_v4_api() {
     let meta_body = to_bytes(meta.into_body(), 64 * 1024).await.unwrap();
     let meta_json: serde_json::Value = serde_json::from_slice(&meta_body).unwrap();
     assert_eq!(meta_json["success"], true);
-    assert_eq!(meta_json["result"]["wrangler_version"], "4.127.1");
+    assert_eq!(meta_json["result"]["wrangler_version"], "4.138.0");
     assert_dashboard_surface_excludes_admin_token(&meta_body, "dashboard-gate-admin");
 
     let unauthorized = router

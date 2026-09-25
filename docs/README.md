@@ -17,7 +17,7 @@
 
 | 文档                                                                               | 当前状态                                                                                                                                                                                                               |
 | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [R1 单 daemon、多 Instance 与单一身份重构](r1-single-daemon-instances.md) | in progress：已完成清单仅登记 config + autostart、compute.toml 必填 data.path、存储身份 InstanceId 和 OCD_DIR 数据目录边界；单 daemon、共享入口、账户层移除、独立 instance setup 与 cache/temp 清理仍待实施 |
+| [R1 单 daemon、多 Instance 与单一身份重构](r1-single-daemon-instances.md)          | in progress：已完成清单仅登记 config + autostart、compute.toml 必填 data.path、存储身份 InstanceId 和 OCD_DIR 数据目录边界；单 daemon、共享入口、账户层移除、独立 instance setup 与 cache/temp 清理仍待实施            |
 | [代码质量提升专项-2026-09-08](q0-code-quality-2026-09-08.md)                       | TODO：按 Day 1 收敛 Rust/TypeScript 领域与 package/crate 边界；Dashboard 改为 kebab-case 文件名、Jotai 状态和 date-fns 日期边界，并建立 Prettier/Oxlint/Knip/typecheck/build/test 硬门                                 |
 | [Q1 workspace 行覆盖长尾补齐](q1-coverage-long-tail.md)                            | TODO：从 90.02% 基线补齐既有覆盖长尾到 ≥91%；W2 新增代码已全覆盖，剩余缺口按 v4 产品后端/运行时进程/服务安装/存储引擎四组列出，结构性不可覆盖项（SIGKILL fixture、公网 clone）单列                                     |
 | [macOS 解析进程内存限制](p5-8-macos-document-parser.md)                            | TODO：RSS 硬限制待实现；0.1.0 接受此限制并保留完整格式支持                                                                                                                                                             |
@@ -29,7 +29,6 @@
 | [P21 macOS Developer ID 签名与 Apple 公证](p21-macos-code-signing-notarization.md) | Day 1 发行合同与 CI 方案完成；待配置受保护的 Apple/GitHub 凭据、签署最终 `ocd`、取得 Notary `Accepted` 并完成真实 tag 验收                                                                                             |
 | [I99–100 Worker 上传与 R2 同名重建](i99-100-sdk-upload-r2-recreate.md)             | implemented：SDK 首次上传 `worker_loader` 类型与 multipart 修复；上传解析只选择 live ready 资源，同名重建 R2 已通过产品回归                                                                                            |
 | [I102 Dynamic Worker Binding 转发](i102-dynamic-worker-binding-forwarding.md)      | implemented for first matrix：正式 fork/private env、KV/D1/R2/Queue 与 ordinary values 已通过真实产品 Gate；其余已装配 binding 根对象待各自 qualification                                                              |
-| [I87、I103–115 issue 实施方案](i87-115-cloudflare-uploads-queues-upstream.md)       | planned：覆盖当前全部 11 个开放 issue，含 Gitserver fork、上游刷新、上传/Workflow/AI Search/Queue、私有 Service target、升级恢复与 Artifacts 类型边界                                                   |
 
 设计完成并通过约定验收后移入 `implemented/`；只剩 qualification 时将剩余事项列入 `acceptance/`。
 未实现设计不按完成文档精简，也不通过改状态标签宣称完成。

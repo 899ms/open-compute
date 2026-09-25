@@ -393,7 +393,7 @@ pub(super) struct ConsumerResponse {
     created_on: String,
     dead_letter_queue: String,
     queue_name: String,
-    /// Wrangler 4.127.1 reads `script` while cloudflare 7.1.0 reads `script_name`.
+    /// Wrangler 4.138.0 reads `script` while cloudflare 7.1.0 reads `script_name`.
     script: String,
     script_name: String,
     settings: ConsumerSettings,

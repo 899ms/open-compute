@@ -166,6 +166,9 @@ pub enum Command {
         /// Replace the binary without restarting the scoped daemon.
         #[arg(long, default_value_t = false)]
         no_restart: bool,
+        /// Restore the retained pre-upgrade binary and receipt after an interrupted upgrade.
+        #[arg(long, default_value_t = false, conflicts_with_all = ["version", "dry_run", "no_restart"])]
+        restore: bool,
     },
     /// Remove the receipt-owned program while preserving instance data by default.
     Uninstall {
@@ -191,6 +194,9 @@ pub enum Command {
     /// Detached update-check helper (not for interactive use).
     #[command(name = "__update_check", hide = true)]
     UpdateCheck,
+    /// Read-only target-binary upgrade compatibility check.
+    #[command(name = "__upgrade_preflight", hide = true)]
+    UpgradePreflight,
 }
 
 /// `ocd caddy` subcommands.
