@@ -63,7 +63,7 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
   assert.equal(surface.schemaVersion, 1);
   assert.equal(surface.package, "@open-compute/sdk");
   assert.equal(surface.packageVersion, packageJson.version);
-  assert.equal(surface.operations.length, 144);
+  assert.equal(surface.operations.length, 145);
   assert.equal(surface.observedStandardOperations.length, 18);
   assert.equal(surface.excludedOperations.length, 1);
   const byNode = (list) =>
