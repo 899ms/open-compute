@@ -8,16 +8,19 @@ description: "Task-oriented guide to the open-compute daemon, developer launcher
 ## Install and run
 
 - `setup`, `run`
-- `start`, `stop`, `restart`, `status`, `logs`, `dashboard`
+- `start`, `stop`, `restart`, `status`, `logs`
 - `instances`, `instance setup|add|start|stop|restart|remove`, `purge`
+- `dashboard`
 
 `ocd run` starts the selected OCD scope: the current user's scope by default, or `ocd run --system`. It reads only that scope's `ocd.toml` and does not accept `--config` or `--instance`. `ocd start|stop|restart|status|logs|instances` operate on that one scoped daemon service and reject both instance selectors.
 
-`ocd caddy` also operates on the selected OCD scope and rejects `--config` and `--instance`; it manages the shared Gateway, not an instance Gateway.
+`ocd caddy version|list-modules|fmt|validate|reload|status` also operates on the selected OCD scope and rejects `--config` and `--instance`; it manages the shared Gateway, not an instance Gateway. `reload` atomically applies the complete Caddy configuration through the running scoped daemon.
 
 Managed registrations come only from `<OCD_DIR>/ocd.toml`. Each entry stores `config` and `autostart`; `instances/` is not scanned, and `[data].path` in that exact config is the sole data-root authority.
 
 Instance-scoped commands select a registered instance with `--instance` or read the exact file supplied by `--config`. Without either, they select the sole registered instance in the chosen OCD scope; zero or multiple registrations require an explicit choice. The CLI does not discover a config from the working directory, HOME/XDG, or `/etc/open-compute`.
+
+For example, `ocd restart` restarts the scoped daemon and all of its instances, while `ocd instance restart staging` restarts only that instance. Use `ocd --instance staging dashboard` to open its Dashboard. See [Instances](/docs/ocd/instances/), [Dashboard](/docs/ocd/dashboard/), and [Gateway](/docs/gateway/).
 
 ## Develop and deploy
 
@@ -33,6 +36,7 @@ The target registry is stored at `<OCD_DIR>/targets.toml` for the selected user 
 ## Inspect and diagnose
 
 - `config init|check`
+- `config gateway-dns-plan|gateway-challenge-probe|gateway-dns-verify|gateway-tls-probe`
 - `doctor`, `capabilities`, `support-bundle`
 - `docs`, `licenses`
 

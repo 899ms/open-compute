@@ -4,6 +4,31 @@ title: "配置"
 
 `--config` 指定唯一一份常规文件。相对值只按进程启动时的 cwd 解析一次，绝对值保持绝对语义；文件 leaf 以 no-follow 方式打开，不搜索 parent 或 `$HOME`。TOML 内的相对文件系统路径以实际打开配置文件的 canonical parent 为基准，`.`/`..` 会规范化，`~`、环境变量文本、glob 与 URI 不展开。解析阶段不读 `.env`、不解析密钥值，未知字段直接拒绝。
 
+## 配置归属
+
+关于 daemon、实例、数据目录、Gateway 与扩展如何协作，请先看[架构与职责边界](/zh/docs/ocd/architecture/)。
+
+配置分为两层：
+
+- `<OCD_DIR>/ocd.toml` 配置 daemon 作用域：共享 listener、admin 凭据、Gateway、全局限制和显式实例 registry。
+- 每份已登记的 `compute.toml` 配置一个隔离实例：数据与对象权威、凭据、产品、Dashboard、公网 base domain 和扩展。
+
+```toml title="ocd.toml"
+[server]
+public_bind = "127.0.0.1:8787"
+admin_auth = { file = "./keys/admin.token" }
+
+[artifacts]
+max_concurrent_requests = 16
+
+[metrics]
+max_series = 1024
+
+[[instances]]
+config = "instances/default/compute.toml"
+autostart = true
+```
+
 受管实例必须在 `<OCD_DIR>/ocd.toml` 中显式登记。其 `[server]` 配置共享的 `public_bind` 和可选 `admin_bind`；`[artifacts].max_concurrent_requests`（默认 16）限制所有实例的 Git 在途请求，`[metrics].max_series`（默认 1024）限制 daemon 对外暴露的 metric series。每个 `[[instances]]` 条目只包含 `config` 与 `autostart`；身份、数据路径、digest 与进程状态不会复制进清单。用户 OCD 目录由运行 UID 的系统账户 home 加 `.open-compute` 确定，不受覆盖的 `HOME` 影响；系统 OCD 目录是 `/var/lib/open-compute`。
 
 `<OCD_DIR>/instances/` 只是 setup 建议的默认位置。运行时不扫描该目录，不据此登记或启动实例，也不从目录名推导身份或数据位置；外置配置和数据目录仍然支持。
@@ -47,6 +72,26 @@ HTTPS_PROXY → https_proxy → ALL_PROXY → all_proxy → HTTP_PROXY → http_
 
 所有 admin listener（包括 loopback）都必须配置三类角色 token；解析后 token 值相同会拒绝启动，不按匹配顺序降权。
 
+## 实例身份与可选界面
+
+`[instance].name` 是 CLI 与 Dashboard 使用的可变显示名。持久 InstanceId 在实例数据权威中初始化，不能通过配置指定。
+
+在实例配置中启用 operator UI：
+
+```toml
+[dashboard]
+enabled = true
+```
+
+实例也可声明一个公网 Gateway domain：
+
+```toml
+[public_gateway]
+base_domain = "compute.example.com"
+```
+
+详见 [Dashboard](/zh/docs/ocd/dashboard/) 和 [Gateway](/zh/docs/gateway/)。共享 Gateway listener 与 Caddy 输入仍属于 `ocd.toml`。
+
 ## `[ai]`：provider backend 与 embedding profile
 
 一个 AI backend 表示一个 operation-specific 最终请求 URL。`ocd` 不会追加 `/embeddings` 或 `/chat/completions`，因此 `endpoint` 必须同时包含 provider 的路径前缀和操作路由：
@@ -83,15 +128,15 @@ Profile 让模型事实可复用而不变成隐式猜测。维度、最大输入
 
 `[data]` 必填，其中的 `path` 也必填。运行时不会根据配置文件名、配置父目录或 `instances/` 目录推断数据目录：
 
-| 字段                     | 作用                                                       |
-| ------------------------ | ---------------------------------------------------------- |
-| `path`                   | 数据根。SQLite、身份、master key、runtime 解压、缓存都在这 |
-| `master_key_file`        | master key 路径                                            |
-| `sqlite_busy_timeout_ms` | SQLite `busy_timeout`                                      |
-| `free_space_soft_bytes`  | 低于此值健康降级                                           |
-| `free_space_hard_bytes`  | 低于此值拒绝 mutation；必须 ≤ soft                         |
+| 字段                     | 作用                                                           |
+| ------------------------ | -------------------------------------------------------------- |
+| `path`                   | 数据根。保存 SQLite、身份、本地对象、实例级 runtime 状态与缓存 |
+| `master_key_file`        | master key 路径；相对配置文件解析，可位于数据根之外            |
+| `sqlite_busy_timeout_ms` | SQLite `busy_timeout`                                          |
+| `free_space_soft_bytes`  | 低于此值健康降级                                               |
+| `free_space_hard_bytes`  | 低于此值拒绝 mutation；必须 ≤ soft                             |
 
-相对 `data.path` 以 `compute.toml` 所在目录为基准解析。若解析后的数据根位于 OCD_DIR 内，它必须是 `<OCD_DIR>/instances/` 的严格子目录；OCD_DIR 本身、`instances/` 容器、`instances-old/` 及 OCD_DIR 的其他子树都拒绝。外置数据根允许使用，但不得反过来包含 OCD_DIR；已登记的数据根不得互相重叠。
+相对 `data.path` 以 `compute.toml` 所在目录为基准解析。共享且已校验的 runtime package 位于 `<OCD_DIR>/cache/packages/`；实例级 runtime config、lease 与 staging 状态才位于此数据根内。若解析后的数据根位于 OCD_DIR 内，它必须是 `<OCD_DIR>/instances/` 的严格子目录；OCD_DIR 本身、`instances/` 容器、`instances-old/` 及 OCD_DIR 的其他子树都拒绝。外置数据根允许使用，但不得反过来包含 OCD_DIR；已登记的数据根不得互相重叠。
 
 同一作用域的一个 `ocd` daemon 管理已登记的实例。每个实例独占 `<data.path>/platform.lock`，不要绕过；数据目录须可写且可执行。
 
@@ -133,7 +178,7 @@ macOS 与 Linux operator 可把本地扩展静态暴露为 Service Binding 目�
 path = "./extensions/local-files"
 ```
 
-路径相对实际加载的 config file 解析。目录必须包含严格的 `extension.toml`，指向一个已打包 facade module 与一个可执行 Provider。扩展是 operator 信任的代码，只在 `ocd` 启动时加载；`ocd` 不向它注入 tenant secret 或平台凭据，也不负责安装、下载、版本管理、热更新或 OS sandbox。扩展名与 Worker service name 共用 namespace，不得与 live Worker 冲突。完整说明见[扩展](/zh/docs/extension/)。
+路径相对实际加载的实例 config file 解析。目录必须包含严格的 `extension.toml`，指向一个已打包 facade module 与一个可执行 Provider。扩展是 operator 信任的代码，只在该实例启动时加载；`ocd` 不向它注入 tenant secret 或平台凭据，也不负责安装、下载、版本管理、热更新或 OS sandbox。扩展名与该实例的 Worker service name 共用 namespace，不得与 live Worker 冲突。完整说明见[扩展](/zh/docs/extension/)。
 
 ## `[private_services.<name>]`：固定私网 HTTP Service target
 
@@ -155,6 +200,6 @@ allow = [{ account_id = "<instance-id>", worker_id = "<worker-id>", entrypoint =
 
 ## 其它段
 
-实例模板还包含 `[auth]`、`[runtime]`、`[cache]`、`[response_cache]`、`[images]`、`[ai]`、`[metrics]`、`[hardening]`、`[workers]`、`[kv]`、`[r2]`、`[d1]`、`[queues]`、`[durable_objects]`、`[scheduler]`（含 pool）、可选 `[extensions.<name>]`、`[private_services.<name>]` 和 `[workflows]`。公共监听设置只属于 `ocd.toml`，不属于 `compute.toml`。这些是本机配额与超时，不是 Cloudflare 套餐。改之前用 `config check`，改完用 `capabilities --json` 看实际 `limits`。
+实例模板还包含 `[instance]`、`[auth]`、`[runtime]`、`[cache]`、`[response_cache]`、`[images]`、`[ai]`、`[document_parser]`、`[observability]`、`[metrics]`、`[hardening]`、`[workers]`、`[kv]`、`[r2]`、`[d1]`、`[queues]`、`[durable_objects]`、`[scheduler]`（含 pool）、`[workflows]`，以及可选的 `[dashboard]`、`[public_gateway]`、`[extensions.<name>]` 和 `[private_services.<name>]`。公共监听设置只属于 `ocd.toml`，不属于 `compute.toml`。这些是本机配额与超时，不是 Cloudflare 套餐。改之前用 `config check`，改完用 `capabilities --json` 看实际 `limits`。
 
 `hardening.emergency_reserve_bytes` 必须低于 `[data]` 的 hard reserve。

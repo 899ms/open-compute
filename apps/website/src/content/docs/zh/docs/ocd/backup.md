@@ -4,7 +4,7 @@ title: "备份与保留"
 
 触发信号：计划维护窗口、当前 release 恢复演练或 RPO 要求到期。影响面是本地 control / KV / D1 / DO / scheduler 数据。R2 与其他 immutable reference 仍绑定选定 object authority；snapshot 会认证这些引用，但不是所有对象正文的第二份 point-in-time copy。runtime 解压缓存不属于 snapshot authority。
 
-使用 Local 时，同一磁盘上的 platform snapshot 只是 consistency snapshot，不是 off-host backup。Local object root 固定在 `<data.path>/objects`；要覆盖磁盘或主机丢失，必须停机后独立备份**完整实例数据目录**（含 master key 与 `objects/format.json`）及实际 `compute.toml`。Local 的全新主机恢复是完整目录恢复；`backup restore` 只支持 S3 快照。不提供 Local↔S3 migration，也不接受部分目录恢复。
+使用 Local 时，同一磁盘上的 platform snapshot 只是 consistency snapshot，不是 off-host backup。Local object root 固定在 `<data.path>/objects`；要覆盖磁盘或主机丢失，必须停机后独立备份**完整实例数据目录**（含 `objects/format.json`）、实际 `compute.toml`，以及配置引用的 master key 文件（若它位于数据目录外）。Local 的全新主机恢复需还原完整目录和密钥；`backup restore` 只支持 S3 快照。不提供 Local↔S3 migration，也不接受部分目录恢复。
 
 备份对所选实例是离线操作：先停止该实例（或整个 daemon），再取得其实例数据锁。恢复则须停止所选作用域的整个 OCD daemon，CLI 在恢复期间持有作用域锁；目标只由所选 `compute.toml` 的 `[data].path` 决定，不能与其他已登记实例的数据根重叠。以下 `dev` 是已登记实例名示例；系统级安装还需加 `--system`。若 `compute.toml` 位于 `[data].path` 外，须另行备份；`OCD_DIR/ocd.toml`、全局密钥，以及完整的 `gateway/storage/` 和 `gateway/config-state/` 目录须作为同一份全局状态另行备份。重启时两处 storage 身份标记必须一致；丢失的 ACME storage 不会被静默重建。实例快照不包含这些文件或其他实例。
 

@@ -328,15 +328,13 @@ export function buildCapability(
     },
     {
       id: "limits.cpu_ms",
-      status: "unsupported",
+      status: "supported",
       source: "wrangler-config-schema",
-      stage: "P8",
     },
     {
       id: "limits.subrequests",
-      status: "unsupported",
+      status: "supported",
       source: "wrangler-config-schema",
-      stage: "P8",
     },
     {
       id: "usage_model",

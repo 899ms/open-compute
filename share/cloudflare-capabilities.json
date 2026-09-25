@@ -2508,9 +2508,8 @@
       },
       {
         "id": "limits",
-        "status": "unsupported",
-        "source": "wrangler-config-schema",
-        "stage": "P8"
+        "status": "supported",
+        "source": "wrangler-config-schema"
       },
       {
         "id": "rules",
@@ -2865,15 +2864,13 @@
       },
       {
         "id": "limits.cpu_ms",
-        "status": "unsupported",
-        "source": "wrangler-config-schema",
-        "stage": "P8"
+        "status": "supported",
+        "source": "wrangler-config-schema"
       },
       {
         "id": "limits.subrequests",
-        "status": "unsupported",
-        "source": "wrangler-config-schema",
-        "stage": "P8"
+        "status": "supported",
+        "source": "wrangler-config-schema"
       },
       {
         "id": "usage_model",
@@ -42779,8 +42776,9 @@
       "deviations": ["OC-WKR-LIMIT-001", "OC-WKR-TCP-001"]
     },
     "dynamic_workers": {
-      "status": "blocked",
+      "status": "supported_with_deviation",
       "kind": "target",
+      "capability_version": 1,
       "members": [
         {
           "id": "dynamic_workers::workerdResourceLimits::cpuMs:property#0",

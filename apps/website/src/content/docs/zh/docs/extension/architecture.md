@@ -11,11 +11,11 @@ description: "用户 Worker、facade、ocd、workerd 与 native Provider 如何�
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | 用户 Worker | 声明 `services` + `props`。调用 facade RPC，例如 `env.FILES.list()`。看不到 `HOST`。                                                           |
 | Facade      | 来自 `extension.toml` `[worker].main` 的 operator JavaScript。读取 `this.ctx.props`。调用 `env.HOST`。                                         |
-| workerd     | 唯一受监督的 pinned runtime。持有私有 `HostExtensionFactory`、broker fd 4 和 session Cap'n Proto client。                                      |
-| `ocd`       | 启动时加载扩展、签发 session identity、经纪一对 socketpair、等待 Provider ACK，然后离开数据路径。                                              |
+| workerd     | 目标实例受监督的 pinned runtime。持有私有 `HostExtensionFactory`、broker fd 4 和 session Cap'n Proto client。                                  |
+| `ocd`       | 实例启动时加载扩展、签发 session identity、经纪一对 socketpair、等待 Provider ACK，然后离开数据路径。                                          |
 | Provider    | operator 的原生进程。在标准输入（fd 0）上接受 `OCP2` + nonce + `SCM_RIGHTS`，在 ACK 中回显 nonce，并在 session socket 上提供 `HostExtension`。 |
 
-仍然只有一个 workerd。Provider 是 `ocd` 的宿主子进程，不是第二个 runtime，也不是 tenant isolate。
+该实例仍然只有一个 workerd。Provider 是实例拥有的宿主子进程，不是第二个 runtime，也不是 tenant isolate。
 
 ## 调用顺序
 
@@ -53,7 +53,7 @@ workerd  <--------- session Cap'n Proto ----------->  Provider
 
 registry 只为已验证的调用方 Worker、version 和 Binding 签发 session identity。不同 `props` 使用不同的 facade cache key 和 session。同一个扩展名字的多个 session 可以共享一个 Provider 进程。
 
-Broker EOF 或 workerd generation 更换会关闭该 generation 的 session。Provider 可供下一个 generation 复用。`ocd` shutdown 以有界 TERM/KILL 回收 Provider。Provider 崩溃会使进行中的调用失败；后续 acquire 使用 200 ms–5 s backoff，连续六次失败后在本次 `ocd` 生命周期内保持 unavailable。
+Broker EOF 或 workerd generation 更换会关闭该 generation 的 session。Provider 可供下一个 generation 复用。实例停止时以有界 TERM/KILL 回收 Provider。Provider 崩溃会使进行中的调用失败；后续 acquire 使用 200 ms–5 s backoff，连续六次失败后保持 unavailable，直到实例重启。
 
 ## 各层不该看到什么
 

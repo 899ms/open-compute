@@ -20,7 +20,7 @@ test.describe("operator dashboard", () => {
     await expect(background).toBeVisible();
     await expect(background).toHaveAttribute(
       "src",
-      /assets\/capabilities\/(deploy|worker-apis|bindings|operate)\.webp$/,
+      /assets\/capabilities\/(deploy|worker-apis|bindings|extensions|operate)\.webp$/,
     );
   });
 
@@ -320,6 +320,7 @@ test.describe("operator dashboard", () => {
       "brand/logo-text-white.svg",
       "assets/capabilities/bindings.webp",
       "assets/capabilities/deploy.webp",
+      "assets/capabilities/extensions.webp",
       "assets/capabilities/operate.webp",
       "assets/capabilities/worker-apis.webp",
     ]) {

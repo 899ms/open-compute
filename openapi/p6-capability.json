@@ -2509,9 +2509,8 @@
       },
       {
         "id": "limits",
-        "status": "unsupported",
-        "source": "wrangler-config-schema",
-        "stage": "P8"
+        "status": "supported",
+        "source": "wrangler-config-schema"
       },
       {
         "id": "rules",
@@ -2866,15 +2865,13 @@
       },
       {
         "id": "limits.cpu_ms",
-        "status": "unsupported",
-        "source": "wrangler-config-schema",
-        "stage": "P8"
+        "status": "supported",
+        "source": "wrangler-config-schema"
       },
       {
         "id": "limits.subrequests",
-        "status": "unsupported",
-        "source": "wrangler-config-schema",
-        "stage": "P8"
+        "status": "supported",
+        "source": "wrangler-config-schema"
       },
       {
         "id": "usage_model",

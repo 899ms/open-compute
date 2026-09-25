@@ -44,6 +44,8 @@ ocd dashboard
 
 `status` 必须显示 ready。`dashboard` 打开一次性登录 URL，不要求复制长期 admin token。
 
+这会创建一个作用域 daemon 及其第一个隔离实例。之后可用 `ocd instance setup --name staging --yes` 添加实例，再用 `--instance staging` 选择实例级命令的目标。详见[实例](/zh/docs/ocd/instances/)。
+
 user service 会在下次登录时启动，但注销后可能停止。需要登录前启动的整机 service 时，显式安装并初始化 system scope：
 
 ```sh

@@ -213,7 +213,7 @@ pub enum CaddyCommand {
     },
     /// Validate the complete platform and operator Caddy configuration.
     Validate,
-    /// Atomically apply the complete configuration to the running instance.
+    /// Atomically apply the managed Caddy config through the running scoped daemon.
     Reload,
     /// Print secret-free managed Caddy and TLS state.
     Status,

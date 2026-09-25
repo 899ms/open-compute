@@ -43,7 +43,7 @@ await client.openCompute.system.status();
 - KV、D1（含 time travel）、R2 objects、Queues（含 metrics 与 message push/bulk push）、Workflows、Vectorize、AI Search、memberships、user、accounts。
 - `client.openCompute` 下的 vendor 操作：capabilities、system status、scheduler pause/resume/repair、cache garbage collection、image capacity、upgrade check、worker endpoints、durable object inventory、KV 与 D1 backups。
 
-`ocd` 支持但固定版本官方 SDK 未实现的操作不会暴露；排除决策记录在 selection manifest 中。supported 操作的偏差见[行为差异](/docs/platform/deviations/)。
+`ocd` 支持但固定版本官方 SDK 未实现的操作不会暴露；排除决策记录在 selection manifest 中。supported 操作的偏差见[行为差异](/zh/docs/platform/deviations/)。
 
 ## 错误
 

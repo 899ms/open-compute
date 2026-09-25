@@ -41,6 +41,16 @@ Check the marketing copy in `apps/website/src/i18n/` and the maintained document
 
 Inspect root `docs/` only when the changed contract is represented there. Require English and Chinese documentation to describe the same behavior. Flag stale commands, configuration, defaults, supported-surface claims, operational procedures, links, and architecture explanations.
 
+Also enforce the documentation lifecycle defined by `docs/references/README.md` whenever root documentation changes or the reviewed implementation completes an active plan:
+
+- `docs/*.md` and `docs/workerd/*.md` contain only work that still requires implementation;
+- completed implementation summaries live in `docs/implemented/`;
+- completed implementations with only external, cross-platform, long-running, or release qualification remaining keep the implementation summary in `docs/implemented/` and the remaining work in `docs/acceptance/`;
+- genuinely externally blocked work lives in `docs/blocked/`;
+- maintained current contracts and runbooks live in `docs/references/`.
+
+Check that document moves update `docs/README.md`, the destination index, generators, and repository links without leaving redirects, stubs, duplicate copies, or completed plans in the active root. Flag broken relative links, stale worktree/branch language, obsolete TODOs, unnumbered lifecycle documents, and PASS/verified claims that are not backed by a recorded successful check. Do not ask to archive a maintained current contract merely because its original implementation is complete.
+
 ### Default configuration and deployment artifacts
 
 Check `share/default-config.toml`, `scripts/install.sh`, and the systemd, launchd, and container examples under `examples/` when configuration shape, defaults, paths, permissions, installation, service scope, process ownership, startup, shutdown, or upgrade behavior changed. These are shipped operator inputs, not illustrative snippets that may drift independently.
@@ -101,16 +111,16 @@ List actionable mismatches first, ordered by user impact. Each finding must incl
 
 Finish with exactly one row for each applicable surface using `update required`, `no update needed`, `not applicable`, or `unverified`:
 
-| Surface | Verdict | Evidence |
-| --- | --- | --- |
-| README + architecture diagram |  |  |
-| Product website + docs site |  |  |
-| Default config + deployment artifacts |  |  |
-| Public API + SDK contracts |  |  |
-| Dashboard |  |  |
-| `ocd capabilities` |  |  |
-| `ocd` CLI help |  |  |
-| Embedded runbooks + `llms.txt` |  |  |
-| Release-only surfaces |  |  |
+| Surface                               | Verdict | Evidence |
+| ------------------------------------- | ------- | -------- |
+| README + architecture diagram         |         |          |
+| Product website + docs site           |         |          |
+| Default config + deployment artifacts |         |          |
+| Public API + SDK contracts            |         |          |
+| Dashboard                             |         |          |
+| `ocd capabilities`                    |         |          |
+| `ocd` CLI help                        |         |          |
+| Embedded runbooks + `llms.txt`        |         |          |
+| Release-only surfaces                 |         |          |
 
 If no mismatch exists, say so directly. Do not turn a clean scoped review into a claim that all repository documentation or product behavior is correct.

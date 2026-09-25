@@ -44,6 +44,8 @@ ocd dashboard
 
 `status` must report ready. `dashboard` opens a one-time login URL; it does not ask you to copy a long-lived admin token.
 
+This creates one scoped daemon and its first isolated instance. Add more later with `ocd instance setup --name staging --yes`; then use `--instance staging` for instance-scoped commands. See [Instances](/docs/ocd/instances/).
+
 The user service starts again at login but may stop at logout. To run a host-wide service before login, explicitly install and set up system scope:
 
 ```sh

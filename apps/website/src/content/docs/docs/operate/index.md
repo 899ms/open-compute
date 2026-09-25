@@ -3,7 +3,7 @@ title: "Operate open-compute"
 description: "Configure, monitor, back up, upgrade, and recover one open-compute host."
 ---
 
-One scoped `ocd run` process can own multiple explicitly registered instances. Each instance keeps its own configured data directory, SQLite authority, object authority, and supervised pinned workerd child; data directories cannot overlap. The single OS-service installation workflow is still being migrated under R1.
+One scoped `ocd run` process can own multiple explicitly registered instances. Each instance keeps its own configured data directory, SQLite authority, object authority, and supervised pinned workerd child; data directories cannot overlap.
 
 ## Daily operation
 
@@ -11,13 +11,14 @@ One scoped `ocd run` process can own multiple explicitly registered instances. E
 ocd instances
 ocd status
 ocd logs --follow
-ocd dashboard
 ocd restart
 ```
 
 `ocd status` reports the selected user or system daemon's liveness. `ocd instances` reads live instance states from its control socket; when the daemon is offline, it lists explicit manifest entries as stopped. A held scope lock with an unavailable control socket is an error, not a stopped result.
 
 Use `ocd instance start|stop|restart <id-or-name>` to change one registered instance without changing its `autostart` intent. `status` and `instances` select only the current user or explicit `--system` scope; they do not accept `--instance` or `--config`.
+
+Instance-scoped commands require an explicit selector when more than one instance is registered. For example, open the Dashboard with `ocd --instance <id-or-name> dashboard`. See [Instances](/docs/ocd/instances/) and [Dashboard](/docs/ocd/dashboard/).
 
 `/health/live` reports process liveness. `/health/ready` reports admission readiness. Diagnose a failed ready check before restarting:
 
@@ -35,7 +36,7 @@ The default setup is user-owned at `~/.open-compute/instances/default/compute.to
 
 Secrets are references to environment variables or owner-only files, never inline values. Local object storage is the default; S3 is an explicit alternative authority and is not a runtime fallback.
 
-Read [platform configuration](/docs/ocd/configuration/) before exposing listeners or selecting S3. Local native extensions are registered in that config and documented under [Extensions](/docs/extension/).
+Read [platform configuration](/docs/ocd/configuration/) before exposing listeners or selecting S3. Public routing is owned by the shared [Gateway](/docs/gateway/). Local native extensions are registered per instance and documented under [Extensions](/docs/extension/).
 
 ## Backup, upgrade, and recovery
 

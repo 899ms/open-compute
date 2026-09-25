@@ -337,12 +337,11 @@
       "dev",
       "keep_vars",
       "observability",
+      "limits",
       "worker_loaders"
     ],
     "deferredFields": {},
-    "unsupportedDeferredFields": {
-      "limits": "P8"
-    },
+    "unsupportedDeferredFields": {},
     "supportedBindings": [
       "plain_text",
       "json",

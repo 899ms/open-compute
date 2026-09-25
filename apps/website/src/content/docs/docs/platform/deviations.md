@@ -49,7 +49,7 @@ Supported Worker API behavior is tracked against [Workers runtime APIs](https://
 
 | Topic                                                                           | Behavior                                                                                                  | Docs                                      |
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Durable Object placement                                                        | Placed on the single local workerd process                                                                | [Durable Objects](/docs/durable-objects/) |
+| Durable Object placement                                                        | Placed on the owning instance's local workerd process                                                     | [Durable Objects](/docs/durable-objects/) |
 | Location hints / jurisdiction / global migration                                | No geographic scheduling effect                                                                           |                                           |
 | Queues durability                                                               | Single-node `scheduler.sqlite`; at-least-once delivery                                                    | [Queues](/docs/queues/)                   |
 | Queues global FIFO                                                              | Not provided                                                                                              |                                           |

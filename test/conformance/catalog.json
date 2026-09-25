@@ -58,7 +58,7 @@
       "id": "workers.dynamic-loader.common",
       "product": "dynamic_workers",
       "surface": "native Worker Loader, modules, scoped capabilities, facets and invocation lifetime",
-      "status": "blocked",
+      "status": "supported_with_deviation",
       "sources": [
         {
           "kind": "workerd-test",

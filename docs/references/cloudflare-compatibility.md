@@ -332,6 +332,11 @@ API、KV、D1、R2、Durable Objects 和 Queues。公开 status/JSON 经合同�
 已经与 Cloudflare 托管管理面实测一致。后者仅由独立的
 [P6 远端差分验收](../acceptance/p6-cloudflare-v4-differential-acceptance.md)关闭。
 
+此外，产品专项验收已记录 Vectorize、AI Search 的真实 Cloudflare 高风险 differential，以及 Workers
+Observability 的 authenticated Dashboard network differential。README 因此按“存在真实 Cloudflare 直接对照证据”的
+产品 surface 口径列为十项；这不把专项 probe 外推成完整 hosted management qualification，也不改变上述 portable runner
+仍为七项的事实。
+
 Workflow portable fixture 已实现并通过 open-compute 本地真实进程路径，但当前 Wrangler OAuth 对
 Cloudflare Workflow inventory API 返回 `Authentication error [code: 10000]`，在 preflight 阶段即停止，
 没有创建 Workflow 或 Worker。源码冻结后的七项合并复查又在 D1 inventory preflight 收到同一错误；该次

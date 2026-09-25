@@ -4,6 +4,31 @@ title: "Configuration"
 
 `--config` names one exact regular file. A relative value is resolved once against the startup working directory; an absolute value keeps its absolute meaning. The file leaf is opened without following symlinks, and no parent or `$HOME` search occurs. Relative filesystem paths inside TOML are resolved against the canonical directory containing the opened config. `.` and `..` are normalized; `~`, environment references, globs, and URIs are not expanded. Parse time does not read `.env` or resolve secret values. Unknown fields are rejected.
 
+## Configuration ownership
+
+For a user-facing map of how the daemon, instances, data directories, Gateway, and extensions fit together, see [Architecture and boundaries](/docs/ocd/architecture/).
+
+There are two configuration layers:
+
+- `<OCD_DIR>/ocd.toml` configures the daemon scope: shared listeners, the admin credential, Gateway, global limits, and the explicit instance registry.
+- Each registered `compute.toml` configures one isolated instance: its data and object authority, credentials, products, Dashboard, public base domain, and extensions.
+
+```toml title="ocd.toml"
+[server]
+public_bind = "127.0.0.1:8787"
+admin_auth = { file = "./keys/admin.token" }
+
+[artifacts]
+max_concurrent_requests = 16
+
+[metrics]
+max_series = 1024
+
+[[instances]]
+config = "instances/default/compute.toml"
+autostart = true
+```
+
 Managed instances are listed explicitly in `<OCD_DIR>/ocd.toml`. Its `[server]` section owns the shared `public_bind` and optional `admin_bind`; `[artifacts].max_concurrent_requests` (default 16) bounds Git requests across all instances, and `[metrics].max_series` (default 1024) bounds the daemon's exposed metric series. Each `[[instances]]` entry contains only `config` and `autostart`; identity, data paths, digests, and process state are not copied into the manifest. The user OCD directory is the running UID's account home plus `.open-compute`, independent of an overridden `HOME`; the system OCD directory is `/var/lib/open-compute`.
 
 `<OCD_DIR>/instances/` is only the setup default location. It is never scanned, does not register or start an instance, and does not derive identity or data location. External configuration and data paths remain supported.
@@ -47,6 +72,26 @@ Secrets are references only. Do not put them in units, images, the repository, o
 
 Every admin listener, including loopback, requires all three role tokens. Startup rejects equal resolved token values instead of relying on match order.
 
+## Instance identity and optional surfaces
+
+`[instance].name` is the mutable CLI and Dashboard display name. The durable InstanceId is initialized in the instance data authority and is not configurable.
+
+Enable the operator UI in the instance configuration:
+
+```toml
+[dashboard]
+enabled = true
+```
+
+An instance may also claim one public Gateway domain:
+
+```toml
+[public_gateway]
+base_domain = "compute.example.com"
+```
+
+See [Dashboard](/docs/ocd/dashboard/) and [Gateway](/docs/gateway/). Shared Gateway listeners and Caddy inputs remain in `ocd.toml`.
+
 ## `[ai]`: provider backends and embedding profiles
 
 An AI backend is one operation-specific, final request URL. `ocd` never appends `/embeddings` or `/chat/completions`, so include any provider path prefix and the operation route in `endpoint`:
@@ -83,15 +128,15 @@ Profiles keep model facts reusable without making them implicit. Dimensions, max
 
 `[data]` is required, and `path` is required inside it. The runtime never infers a data directory from the config filename, its parent, or an `instances/` directory:
 
-| Field                    | Role                                                                             |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| `path`                   | Data root. SQLite, identity, master key, runtime extraction, and cache live here |
-| `master_key_file`        | Master key path                                                                  |
-| `sqlite_busy_timeout_ms` | SQLite `busy_timeout`                                                            |
-| `free_space_soft_bytes`  | Health degrades below this                                                       |
-| `free_space_hard_bytes`  | Mutations refused below this; must be ≤ soft                                     |
+| Field                    | Role                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| `path`                   | Data root. SQLite, identity, local objects, per-instance runtime state and cache live here |
+| `master_key_file`        | Master key path; resolved from this configuration and may be outside the data root         |
+| `sqlite_busy_timeout_ms` | SQLite `busy_timeout`                                                                      |
+| `free_space_soft_bytes`  | Health degrades below this                                                                 |
+| `free_space_hard_bytes`  | Mutations refused below this; must be ≤ soft                                               |
 
-Relative `data.path` values resolve against the directory containing `compute.toml`. If the resolved data root is inside OCD_DIR, it must be a strict descendant of `<OCD_DIR>/instances/`; OCD_DIR itself, the `instances/` container, `instances-old/`, and every other OCD subtree are rejected. An external data root is allowed, but it cannot contain OCD_DIR. Registered data roots cannot overlap.
+Relative `data.path` values resolve against the directory containing `compute.toml`. The shared verified runtime package lives under `<OCD_DIR>/cache/packages/`; only per-instance runtime config, lease, and staging state live under this data root. If the resolved data root is inside OCD_DIR, it must be a strict descendant of `<OCD_DIR>/instances/`; OCD_DIR itself, the `instances/` container, `instances-old/`, and every other OCD subtree are rejected. An external data root is allowed, but it cannot contain OCD_DIR. Registered data roots cannot overlap.
 
 One scoped `ocd` daemon owns the registered instances. Each instance has an exclusive `<data.path>/platform.lock`; do not bypass it. The data directory must be writable and executable.
 
@@ -133,7 +178,7 @@ On macOS and Linux, an operator may statically expose a local extension as a Ser
 path = "./extensions/local-files"
 ```
 
-The path is resolved relative to the loaded config file. The directory must contain strict `extension.toml` entries for one bundled facade module and one executable Provider. Extensions are trusted operator code, load only at `ocd` startup, receive no tenant secrets or platform credentials, and are not installed, downloaded, versioned, hot-reloaded, or sandboxed by `ocd`. Their names share the Worker service namespace and may not collide with a live Worker. See [Extensions](/docs/extension/).
+The path is resolved relative to the loaded instance config. The directory must contain strict `extension.toml` entries for one bundled facade module and one executable Provider. Extensions are trusted operator code, load only when that instance starts, receive no tenant secrets or platform credentials, and are not installed, downloaded, versioned, hot-reloaded, or sandboxed by `ocd`. Their names share the instance's Worker service namespace and may not collide with a live Worker. See [Extensions](/docs/extension/).
 
 ## `[private_services.<name>]`: fixed private HTTP Service targets
 
@@ -155,6 +200,6 @@ The endpoint is resolved to a private address and pinned when `ocd` starts. Redi
 
 ## Other sections
 
-The instance template also includes `[auth]`, `[runtime]`, `[cache]`, `[response_cache]`, `[images]`, `[ai]`, `[metrics]`, `[hardening]`, `[workers]`, `[kv]`, `[r2]`, `[d1]`, `[queues]`, `[durable_objects]`, `[scheduler]` (including pools), optional `[extensions.<name>]` and `[private_services.<name>]`, and `[workflows]`. Public listener settings belong only in `ocd.toml`, not `compute.toml`. These are local quotas and timeouts, not Cloudflare plan SKUs. Run `config check` before changing them, then `capabilities --json` for actual `limits`.
+The instance template also includes `[instance]`, `[auth]`, `[runtime]`, `[cache]`, `[response_cache]`, `[images]`, `[ai]`, `[document_parser]`, `[observability]`, `[metrics]`, `[hardening]`, `[workers]`, `[kv]`, `[r2]`, `[d1]`, `[queues]`, `[durable_objects]`, `[scheduler]` (including pools), `[workflows]`, optional `[dashboard]`, `[public_gateway]`, `[extensions.<name>]`, and `[private_services.<name>]`. Public listener settings belong only in `ocd.toml`, not `compute.toml`. These are local quotas and timeouts, not Cloudflare plan SKUs. Run `config check` before changing them, then `capabilities --json` for actual `limits`.
 
 `hardening.emergency_reserve_bytes` must be below the `[data]` hard reserve.

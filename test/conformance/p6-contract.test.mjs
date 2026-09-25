@@ -308,14 +308,14 @@ test("implemented P7 fields and later handoffs remain explicit", () => {
   );
   assert.deepEqual(
     [fields.get("limits.cpu_ms")?.status, fields.get("limits.cpu_ms")?.stage],
-    ["unsupported", "P8"],
+    ["supported", undefined],
   );
   assert.deepEqual(
     [
       fields.get("limits.subrequests")?.status,
       fields.get("limits.subrequests")?.stage,
     ],
-    ["unsupported", "P8"],
+    ["supported", undefined],
   );
   assert.equal(fields.get("worker_loaders[].binding")?.status, "supported");
   assert.equal(bindings.get("worker_loader")?.status, "supported");

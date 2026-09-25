@@ -8,16 +8,19 @@ description: "按任务查询 open-compute daemon、开发 launcher、诊断和�
 ## 安装与运行
 
 - `setup`、`run`
-- `start`、`stop`、`restart`、`status`、`logs`、`dashboard`
+- `start`、`stop`、`restart`、`status`、`logs`
 - `instances`、`instance setup|add|start|stop|restart|remove`、`purge`
+- `dashboard`
 
 `ocd run` 启动选定的 OCD 作用域：默认当前用户，或显式 `ocd run --system`。它只读取该作用域的 `ocd.toml`，不接受 `--config` 或 `--instance`。`ocd start|stop|restart|status|logs|instances` 操作该作用域唯一的 daemon 服务，并拒绝实例选择器。
 
-`ocd caddy` 也只操作选定的 OCD 作用域，拒绝 `--config` 和 `--instance`；它管理的是共享 Gateway，而非某个实例的 Gateway。
+`ocd caddy version|list-modules|fmt|validate|reload|status` 也只操作选定的 OCD 作用域，拒绝 `--config` 和 `--instance`；它管理的是共享 Gateway，而非某个实例的 Gateway。`reload` 通过运行中的作用域 daemon 原子应用完整 Caddy 配置。
 
 受管 registration 只来自 `<OCD_DIR>/ocd.toml`。每个 entry 只保存 `config` 与 `autostart`；运行时不扫描 `instances/`，精确配置中的 `[data].path` 是唯一数据根权威。
 
 实例范围命令用 `--instance` 选择已登记实例，或读取显式 `--config` 指定的精确文件；两者均未提供时，仅在所选 OCD 作用域恰好登记一个实例时自动选择。零个或多个实例须明确选择；CLI 不从 cwd、HOME/XDG 或 `/etc/open-compute` 发现配置。
+
+例如，`ocd restart` 会重启作用域 daemon 及其全部实例，`ocd instance restart staging` 只重启一个实例。用 `ocd --instance staging dashboard` 打开该实例的 Dashboard。详见[实例](/zh/docs/ocd/instances/)、[Dashboard](/zh/docs/ocd/dashboard/)和 [Gateway](/zh/docs/gateway/)。
 
 ## 开发与部署
 
@@ -33,6 +36,7 @@ target 清单位于所选 user／显式 system 作用域的 `<OCD_DIR>/targets.t
 ## 检查与诊断
 
 - `config init|check`
+- `config gateway-dns-plan|gateway-challenge-probe|gateway-dns-verify|gateway-tls-probe`
 - `doctor`、`capabilities`、`support-bundle`
 - `docs`、`licenses`
 

@@ -20,4 +20,4 @@ Supported fields include standard `name`, `account_id`, `main`, `compatibility_d
 
 Framework adapters keep the user `wrangler.jsonc` and emit the standard `.wrangler/deploy/config.json` redirect to a generated Wrangler config. Project-local Wrangler owns type generation and deployment.
 
-See [resource limits](/docs/platform/limits/), [Bindings](/docs/workers/configuration/bindings/), [compatibility dates](/docs/workers/configuration/compatibility-dates/), [compatibility flags](/docs/workers/configuration/compatibility-flags/), [Cron](/docs/workers/configuration/cron-triggers/), [variables](/docs/workers/configuration/environment-variables/), and [secrets](/docs/workers/configuration/secrets/).
+See [resource limits](/docs/platform/limits/), [routing](/docs/workers/configuration/routing/), [Bindings](/docs/workers/configuration/bindings/), [compatibility dates](/docs/workers/configuration/compatibility-dates/), [compatibility flags](/docs/workers/configuration/compatibility-flags/), [Cron](/docs/workers/configuration/cron-triggers/), [variables](/docs/workers/configuration/environment-variables/), and [secrets](/docs/workers/configuration/secrets/).

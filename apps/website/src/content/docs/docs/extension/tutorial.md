@@ -71,7 +71,7 @@ The facade has `globalOutbound` set to `null`. It cannot fetch the public intern
 
 `ocd` starts one Provider process per extension name, on first session, with:
 
-- the opened executable (identity pinned at `ocd` startup);
+- the opened executable (identity pinned when the instance starts);
 - a cleared environment and empty argv;
 - working directory `<data.path>/runtime/extensions/<name>` (not the source directory);
 - control socket inherited as standard input (file descriptor 0).
@@ -118,10 +118,10 @@ Check, then restart. Extensions do not hot-reload.
 
 ```sh
 ocd --config /var/lib/open-compute/instances/default/compute.toml config check
-ocd restart
+ocd instance restart default
 ```
 
-`config check` validates the TOML. Startup is what opens `extension.toml`, the facade, and the executable. If those files are wrong, `ocd` refuses to start.
+`config check` validates the TOML. Instance startup is what opens `extension.toml`, the facade, and the executable. If those files are wrong, the target instance refuses to start.
 
 ## 5. Bind from a user Worker
 
@@ -142,7 +142,7 @@ In the application `wrangler.jsonc`, declare a Service Binding whose `service` i
 }
 ```
 
-Two Bindings to the same extension with different `props` get different facade cache keys and sessions. They may share one Provider process. Deploy pins the name, entrypoint, and canonical props; replacing extension files and restarting `ocd` makes existing deployments use the new implementation.
+Two Bindings to the same extension with different `props` get different facade cache keys and sessions. They may share one Provider process. Deploy pins the name, entrypoint, and canonical props; replacing extension files and restarting the instance makes existing deployments use the new implementation.
 
 Call it like any other Service Binding RPC:
 

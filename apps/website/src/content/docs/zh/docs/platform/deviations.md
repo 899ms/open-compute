@@ -49,7 +49,7 @@ title: "行为差异"
 
 | 主题                                    | 行为                                                  | 文档                                         |
 | --------------------------------------- | ----------------------------------------------------- | -------------------------------------------- |
-| Durable Objects 位置                    | 本机单个 workerd 进程                                 | [Durable Objects](/zh/docs/durable-objects/) |
+| Durable Objects 位置                    | 所属实例的本机 workerd 进程                           | [Durable Objects](/zh/docs/durable-objects/) |
 | location hint / jurisdiction / 全球迁移 | 不产生地理调度效果                                    |                                              |
 | Queues 存储                             | 本机 `scheduler.sqlite`；投递语义为 at-least-once     | [Queues](/zh/docs/queues/)                   |
 | Queues 全局 FIFO                        | 不提供                                                |                                              |

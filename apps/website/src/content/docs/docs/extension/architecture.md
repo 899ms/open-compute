@@ -11,11 +11,11 @@ An extension call has four participants and two transports. `ocd` authenticates 
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | User Worker | Declares `services` + `props`. Calls facade RPC such as `env.FILES.list()`. Never sees `HOST`.                                                                     |
 | Facade      | Operator JavaScript loaded from `extension.toml` `[worker].main`. Reads `this.ctx.props`. Calls `env.HOST`.                                                        |
-| workerd     | The single supervised pinned runtime. Holds the private `HostExtensionFactory`, broker fd 4, and the session Cap'n Proto client.                                   |
-| `ocd`       | Loads the extension at startup, issues session identity, brokers one socketpair, waits for Provider ACK, then leaves the data path.                                |
+| workerd     | The target instance's supervised pinned runtime. Holds the private `HostExtensionFactory`, broker fd 4, and the session Cap'n Proto client.                        |
+| `ocd`       | Loads the extension when the instance starts, issues session identity, brokers one socketpair, waits for Provider ACK, then leaves the data path.                  |
 | Provider    | Operator native process. Accepts `OCP2` + nonce + `SCM_RIGHTS` on its stdin (fd 0), echoes the nonce in its ACK, and serves `HostExtension` on the session socket. |
 
-There is still one workerd. The Provider is a host child of `ocd`, not a second runtime and not a tenant isolate.
+There is still one workerd for this instance. The Provider is an instance-owned host child, not a second runtime and not a tenant isolate.
 
 ## Call sequence
 
@@ -53,7 +53,7 @@ Both transfers use `SCM_RIGHTS` with exactly one FD. Extra FDs, wrong magic, tru
 
 The registry issues a session identity only for a verified caller Worker, version, and Binding. Different `props` produce different facade cache keys and sessions. One Provider process may serve many sessions for the same extension name.
 
-Broker EOF or a workerd generation change closes the sessions of that generation. The Provider can be reused by the next generation. `ocd` shutdown reaps Providers with a bounded TERM/KILL. Crash of the Provider fails in-flight calls; later acquire uses 200 ms–5 s backoff and, after six consecutive failures, stays unavailable for the rest of this `ocd` life.
+Broker EOF or a workerd generation change closes the sessions of that generation. The Provider can be reused by the next generation. Instance shutdown reaps Providers with a bounded TERM/KILL. Crash of the Provider fails in-flight calls; later acquire uses 200 ms–5 s backoff and, after six consecutive failures, stays unavailable until the instance restarts.
 
 ## What each layer must not see
 

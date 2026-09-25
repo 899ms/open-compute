@@ -26,6 +26,7 @@ const capabilityScenes = [
   "deploy",
   "worker-apis",
   "bindings",
+  "extensions",
   "operate",
 ] as const;
 
