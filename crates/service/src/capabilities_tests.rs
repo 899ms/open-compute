@@ -69,8 +69,8 @@ fn workflow_capabilities_report_current_model_and_operator_limits() {
         }
         if name == "dynamic_workers" {
             assert_eq!(product.kind, ProductKind::Target);
-            assert_eq!(product.status, CapabilityStatus::Blocked);
-            assert_eq!(product.capability_version, None);
+            assert_eq!(product.status, CapabilityStatus::SupportedWithDeviation);
+            assert_eq!(product.capability_version, Some(1));
             assert_eq!(product.members.len(), 25);
             assert!(product.members.iter().any(|member| {
                 member.symbol == "workerdResourceLimits"

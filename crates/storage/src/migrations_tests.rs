@@ -902,7 +902,7 @@ fn untagged_version_metadata_migration_preserves_rows_and_guards() {
 
     let db = ControlDb::open(&path, 100).unwrap();
     apply(&db, &DeterministicClock::new(UNIX_EPOCH)).unwrap();
-    assert_eq!(inspect_schema(&db).unwrap(), 11);
+    assert_eq!(inspect_schema(&db).unwrap(), current_schema_version());
     db.with_immediate(|tx| {
         let preserved: String = tx
             .query_row(

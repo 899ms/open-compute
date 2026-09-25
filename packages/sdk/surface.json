@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": "@open-compute/sdk",
-  "packageVersion": "0.2.1",
+  "packageVersion": "0.2.2",
   "surfaceDigest": "2b8be73f6791c2c16b438c2d97cd1cf8f085cfab87182fccc9c0999970fc9b7c",
   "authority": {
     "openapiRevision": "425ceea95cdaa4c43dd462279e42d74fbc00441e",

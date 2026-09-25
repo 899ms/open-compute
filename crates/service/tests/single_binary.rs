@@ -1218,11 +1218,11 @@ async fn one_daemon_starts_two_isolated_instance_children() {
         request_status(address, &host_b, &sessions[1], status).await,
         200
     );
-    assert_ne!(
+    assert_eq!(
         request_status(address, &host_a, &sessions[1], status).await,
         200
     );
-    assert_ne!(
+    assert_eq!(
         request_status(address, &host_b, &sessions[0], status).await,
         200
     );

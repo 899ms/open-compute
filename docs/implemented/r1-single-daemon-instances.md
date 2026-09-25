@@ -11,7 +11,7 @@
 
 ## Authority 与生命周期
 
-`<OCD_DIR>/ocd.toml` 保存 daemon 作用域的共享配置，并显式登记每个 instance 的 config 路径和 autostart intent；registry entry 不复制 identity 或 data path。配置中的 `[data].path` 是该 instance 唯一数据根 authority；数据根不能重叠或落入共享 cache/run 目录。共享控制 socket 位于受限的 `<OCD_DIR>/run/`，在线 mutation 通过 owner-only socket 串行化，外部修改 manifest 后拒绝覆盖。当前职责总览见[平台作用域与数据边界](../references/platform-boundaries.md)。
+`<OCD_DIR>/ocd.toml` 保存 daemon 作用域的共享配置，并显式登记每个 instance 的 config 路径和 autostart intent；registry entry 不复制 identity 或 data path。配置中的 `[data].path` 是该 instance 唯一数据根 authority；数据根不能重叠或落入共享 cache/run 目录。共享控制 socket 位于受限的 `<OCD_DIR>/run/`，在线 mutation 通过 owner-only socket 串行化，外部修改 manifest 后拒绝覆盖。面向用户的职责总览见[架构与职责边界](https://open-compute.dev/docs/ocd/architecture/)。
 
 daemon 可以同时启动多个 instance。Host、凭据和可信 InstanceId 路由共同隔离管理请求、Worker ingress、资源、调度、observability 和运行时 transport。停止或崩溃一个 instance 不影响其他 instance；daemon 恢复时只启动 autostart instance，并核验、回收各自旧子进程。
 

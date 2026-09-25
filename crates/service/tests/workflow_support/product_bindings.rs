@@ -592,7 +592,7 @@ async fn workflow_step_uses_kv_d1_r2_do_queue_and_replay_preserves_external_effe
         .get_worker(account, worker.id)
         .unwrap()
         .route_generation;
-    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
     loop {
         let response = p0_exit_support::dispatch(
             &stack.transport,

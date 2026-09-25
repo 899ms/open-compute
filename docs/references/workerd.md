@@ -41,7 +41,7 @@ fork 保留 upstream Worker runtime、module validation、RPC、Durable Objects 
 
 ## 单独下载 workerd
 
-以下是 open-compute `v0.2.1` 固定并验证的**未压缩可执行文件**。链接指向 release tag 下的 Git LFS 对象，而不是
+以下是 open-compute `v0.2.2` 固定并验证的**未压缩可执行文件**。链接指向 release tag 下的 Git LFS 对象，而不是
 Cloudflare release；SHA-256 必须与 formal lock 一致。
 
 二进制沿用 workerd 的 Apache 2.0 license，并包含 upstream source tree 记录的第三方组件；它们由 open-compute
@@ -49,15 +49,15 @@ Cloudflare release；SHA-256 必须与 formal lock 一致。
 
 | Target           | 下载                                                                                               | Binary SHA-256                                                     | 发行范围                             |
 | ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
-| macOS ARM64      | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.1/share/workerd/darwin-arm64/workerd) | `f9adf7bd167f5ddedb1d952e0729219763ac11d59034e5c37bca1f707f7cf33d` | 正式输入                             |
-| Linux GNU ARM64  | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.1/share/workerd/linux-arm64/workerd)  | `289e5ce01435333e7aed351f2094b8adb6ff3fdf2d84fe2443166f0654b18a2b` | 正式输入                             |
-| Linux GNU x86-64 | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.1/share/workerd/linux-x64/workerd)    | `7b8a7e2a6cdd77ec3a2996c0f1ac494af42927b595df2e4344604185e5553f3d` | 正式输入                             |
-| macOS x86-64     | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.1/share/workerd/darwin-x64/workerd)   | `80d741fb70a0df2c3effc4045cc9934f3fe72fdad559dc8321dd15965c171619` | 仅手动构建，不属于正式 `ocd` release |
+| macOS ARM64      | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.2/share/workerd/darwin-arm64/workerd) | `f9adf7bd167f5ddedb1d952e0729219763ac11d59034e5c37bca1f707f7cf33d` | 正式输入                             |
+| Linux GNU ARM64  | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.2/share/workerd/linux-arm64/workerd)  | `289e5ce01435333e7aed351f2094b8adb6ff3fdf2d84fe2443166f0654b18a2b` | 正式输入                             |
+| Linux GNU x86-64 | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.2/share/workerd/linux-x64/workerd)    | `7b8a7e2a6cdd77ec3a2996c0f1ac494af42927b595df2e4344604185e5553f3d` | 正式输入                             |
+| macOS x86-64     | [workerd](https://github.com/elliothux/open-compute/raw/v0.2.2/share/workerd/darwin-x64/workerd)   | `80d741fb70a0df2c3effc4045cc9934f3fe72fdad559dc8321dd15965c171619` | 仅手动构建，不属于正式 `ocd` release |
 
 例如下载 Linux x86-64 版本：
 
 ```sh
-curl -fL https://github.com/elliothux/open-compute/raw/v0.2.1/share/workerd/linux-x64/workerd -o workerd
+curl -fL https://github.com/elliothux/open-compute/raw/v0.2.2/share/workerd/linux-x64/workerd -o workerd
 echo '7b8a7e2a6cdd77ec3a2996c0f1ac494af42927b595df2e4344604185e5553f3d  workerd' | sha256sum -c -
 chmod +x workerd
 ./workerd --version

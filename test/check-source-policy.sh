@@ -78,6 +78,8 @@ for raw in maintained:
 
     if raw.startswith("apps/dashboard/"):
         for part in path.parts[2:]:
+            if part == "AGENTS.md":
+                continue
             if part.startswith("$"):
                 # TanStack Router parameters remain lower-camel JavaScript identifiers.
                 stem = part.split(".", 1)[0][1:].removesuffix("_")

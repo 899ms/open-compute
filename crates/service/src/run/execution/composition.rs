@@ -83,6 +83,15 @@ fn recover_force_delete_intents(
     Ok(())
 }
 
+fn worker_bundle_limits(max_artifact_bytes: u64) -> Result<BundleLimits, PlatformError> {
+    Ok(BundleLimits {
+        max_artifact_bytes: usize::try_from(max_artifact_bytes).map_err(|_| {
+            PlatformError::new(ErrorCode::LimitInvalid, "Worker bundle limit is invalid")
+        })?,
+        ..BundleLimits::default()
+    })
+}
+
 pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatform, PlatformError> {
     open_compute_core::OperatorProxyPolicy::from_process_env()?;
     let PreparedPlatform {
@@ -168,12 +177,7 @@ pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatfo
     );
     scheduler_service.repair_products(1_000)?;
     scheduler_service.repair_workflows(32)?;
-    let bundle_limits = BundleLimits {
-        max_artifact_bytes: usize::try_from(loaded.config.workers.max_bundle_bytes).map_err(
-            |_| PlatformError::new(ErrorCode::LimitInvalid, "Worker bundle limit is invalid"),
-        )?,
-        ..BundleLimits::default()
-    };
+    let bundle_limits = worker_bundle_limits(loaded.config.workers.max_bundle_bytes)?;
     let resource_pins = ResourcePins::new();
     let r2_backend = Arc::new(
         R2BindingService::new(

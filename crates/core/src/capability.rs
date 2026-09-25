@@ -490,7 +490,12 @@ impl ProductCapabilityV1 {
                                 member.status,
                                 CapabilityStatus::Supported
                                     | CapabilityStatus::SupportedWithDeviation
-                            )
+                            ) || (member.status == CapabilityStatus::Blocked
+                                && member.product == "dynamic_workers"
+                                && matches!(
+                                    member.member.as_str(),
+                                    "allowExperimental" | "streamingTails"
+                                ))
                         })
                 }
                 _ => false,
