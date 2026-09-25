@@ -505,8 +505,18 @@ fn private_staging_path(lease_path: &Path, path: &Path) -> bool {
     let Some(dir) = path.parent() else {
         return false;
     };
-    path.file_name().is_some_and(|name| name == "workerd")
-        && crate::process::private_staging_dir(lease_path, dir)
+    if !path.file_name().is_some_and(|name| name == "workerd") {
+        return false;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        crate::process::private_staging_dir(lease_path, dir)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (lease_path, dir);
+        false
+    }
 }
 
 fn cleanup_dead_staging(
