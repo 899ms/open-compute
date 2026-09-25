@@ -1,6 +1,7 @@
 //! One HTTP listener dispatching only to explicitly running instances.
 
 use super::{HttpState, Router};
+use crate::cloudflare_v4::V4Role;
 use crate::metrics::MetricSeriesBudget;
 use axum::body::{Body, to_bytes};
 use axum::extract::Request;
@@ -17,6 +18,7 @@ use tower::ServiceExt;
 pub(crate) struct SharedRoutes {
     inner: Arc<RwLock<HashMap<InstanceId, InstanceRoutes>>>,
     daemon: Option<crate::run::daemon_control::DaemonApi>,
+    dashboard_auth: Arc<crate::dashboard_auth::DashboardAuth>,
     metrics: Arc<MetricSeriesBudget>,
 }
 
@@ -45,8 +47,15 @@ impl SharedRoutes {
         Self {
             inner: Arc::new(RwLock::new(HashMap::new())),
             daemon,
+            dashboard_auth: Arc::new(crate::dashboard_auth::DashboardAuth::new(
+                StartupId::generate(),
+            )),
             metrics: Arc::new(MetricSeriesBudget::new(max_series)),
         }
+    }
+
+    pub(crate) fn dashboard_auth(&self) -> Arc<crate::dashboard_auth::DashboardAuth> {
+        self.dashboard_auth.clone()
     }
 
     pub(crate) fn insert(
@@ -219,7 +228,15 @@ impl SharedRoutes {
                 .headers()
                 .get(header::AUTHORIZATION)
                 .and_then(|value| value.to_str().ok());
-            let Ok(visible) = daemon.visible_for_bearer(bearer) else {
+            let visible = if crate::auth::bearer_token(bearer).is_some_and(|token| {
+                self.dashboard_auth
+                    .session_valid(token, std::time::SystemTime::now())
+            }) {
+                daemon.list().map(|views| Some((views, V4Role::Admin)))
+            } else {
+                daemon.visible_for_bearer(bearer)
+            };
+            let Ok(visible) = visible else {
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             };
             let Some((views, role)) = visible else {
@@ -240,7 +257,20 @@ impl SharedRoutes {
             .unwrap_or_else(|| StatusCode::NOT_FOUND.into_response());
         }
         let local = host.ends_with(".localhost");
-        let target = if local {
+        let shared_session = matches!(
+            request.uri().path(),
+            "/operator/session" | "/operator/session/exchange"
+        );
+        let target = if shared_session {
+            let Ok(entries) = self.inner.read() else {
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            };
+            entries
+                .keys()
+                .min_by(|left, right| left.as_str().cmp(right.as_str()))
+                .copied()
+                .map(|id| (id, false))
+        } else if local {
             let Some(target) = local_origin_instance(&host) else {
                 return StatusCode::NOT_FOUND.into_response();
             };
@@ -375,7 +405,11 @@ impl SharedRoutes {
             .headers()
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok());
-        if !daemon.authorized(bearer) {
+        let session_authorized = crate::auth::bearer_token(bearer).is_some_and(|token| {
+            self.dashboard_auth
+                .session_valid(token, std::time::SystemTime::now())
+        });
+        if !daemon.authorized(bearer) && !session_authorized {
             return StatusCode::UNAUTHORIZED.into_response();
         }
         let path = request.uri().path();

@@ -283,6 +283,11 @@ impl UploadInput {
                 || self.runtime_features.module_bindings.contains_key(name)
                 || self
                     .runtime_features
+                    .worker_loaders
+                    .iter()
+                    .any(|binding| binding == name)
+                || self
+                    .runtime_features
                     .ai
                     .as_ref()
                     .is_some_and(|value| value.binding == name)
@@ -351,13 +356,13 @@ impl UploadInput {
                     BindingKind::R2Bucket,
                     bucket_name.as_str(),
                 )?,
-                WorkerUploadBinding::D1 { id, .. } => self.resource(
+                WorkerUploadBinding::D1 { database_id, .. } => self.resource(
                     api,
                     account_authority,
                     account,
                     name,
                     BindingKind::D1Database,
-                    id.as_str(),
+                    database_id.as_str(),
                 )?,
                 WorkerUploadBinding::Vectorize { index_name, .. } => self.resource(
                     api,
@@ -633,10 +638,25 @@ impl UploadInput {
         kind: BindingKind,
         external: &str,
     ) -> Result<(), PlatformError> {
-        let resource = ResourceRepository::new(api.storage.db())
-            .list(account, Some(kind))?
-            .into_iter()
-            .find(|resource| {
+        let candidates = ResourceRepository::new(api.storage.db()).list(account, Some(kind))?;
+        let resource = if kind == BindingKind::AiSearchInstance {
+            let catalog = AiSearchCatalog::new(api.storage.db());
+            let mut matches = Vec::new();
+            for candidate in candidates {
+                if candidate.state == ResourceState::Ready
+                    && catalog.get_instance(account, candidate.id)?.instance_key == external
+                {
+                    matches.push(candidate);
+                }
+            }
+            if matches.len() > 1 {
+                return Err(invalid(
+                    "AI Search instance name is ambiguous across namespaces",
+                ));
+            }
+            matches.pop()
+        } else {
+            candidates.into_iter().find(|resource| {
                 resource.state == ResourceState::Ready
                     && match kind {
                         BindingKind::KvNamespace => account_authority.matches_public_resource_id(
@@ -652,7 +672,8 @@ impl UploadInput {
                         _ => resource.name == external,
                     }
             })
-            .ok_or_else(|| invalid("binding resource was not found"))?;
+        }
+        .ok_or_else(|| invalid("binding resource was not found"))?;
         self.bindings.insert(
             name,
             VersionBindingInput {

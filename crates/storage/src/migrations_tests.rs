@@ -1,6 +1,6 @@
 use super::*;
-use open_compute_core::DeterministicClock;
-use rusqlite::Connection;
+use open_compute_core::{DeterministicClock, InstanceId, ResourceId};
+use rusqlite::{Connection, params};
 use std::time::UNIX_EPOCH;
 
 #[test]
@@ -55,7 +55,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
         let path = directory.path().join("control.sqlite");
         let mut connection = Connection::open(&path).unwrap();
         schema_migrations::migrate_to_for_test(&mut connection, DatabaseKind::Control, 8);
-        let id = open_compute_core::InstanceId::generate().to_string();
+        let id = InstanceId::generate().to_string();
         connection
             .execute(
                 "INSERT INTO accounts(id, name, created_at_ms, deleted_at_ms)
@@ -100,7 +100,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
                         'active', 1, 7, 7, NULL)",
                 rusqlite::params![
                     if route_mismatch {
-                        open_compute_core::InstanceId::generate().to_string()
+                        InstanceId::generate().to_string()
                     } else {
                         id.clone()
                     },
@@ -124,7 +124,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             )
             .unwrap();
         let audit_id = if audit_mismatch {
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -137,7 +137,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             )
             .unwrap();
         let idempotency_id = if idempotency_mismatch {
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -158,12 +158,12 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
                 rusqlite::params![id, worker],
             )
             .unwrap();
-        let bucket = open_compute_core::ResourceId::generate().to_string();
+        let bucket = ResourceId::generate().to_string();
         let resource_owner = if resource_mismatch {
             connection
                 .pragma_update(None, "foreign_keys", "OFF")
                 .unwrap();
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -190,7 +190,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             )
             .unwrap();
         let object_owner = if r2_mismatch {
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -211,7 +211,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             )
             .unwrap();
         let multipart_owner = if multipart_mismatch {
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -236,12 +236,12 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
                 rusqlite::params![version, worker],
             )
             .unwrap();
-        let artifact_namespace = open_compute_core::ResourceId::generate().to_string();
+        let artifact_namespace = ResourceId::generate().to_string();
         let artifact_owner = if artifact_mismatch {
             connection
                 .pragma_update(None, "foreign_keys", "OFF")
                 .unwrap();
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -304,7 +304,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             connection
                 .pragma_update(None, "foreign_keys", "OFF")
                 .unwrap();
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -332,7 +332,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             connection
                 .pragma_update(None, "foreign_keys", "OFF")
                 .unwrap();
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -432,7 +432,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             )
             .unwrap();
         let stored_id = if identity_mismatch {
-            open_compute_core::InstanceId::generate().to_string()
+            InstanceId::generate().to_string()
         } else {
             id.clone()
         };
@@ -470,7 +470,7 @@ fn published_account_rows_become_one_instance_or_fail_atomically() {
             assert_eq!(
                 crate::CronRepository::new(&db)
                     .stage_activations(
-                        open_compute_core::InstanceId::generate(),
+                        InstanceId::generate(),
                         open_compute_core::WorkerId::generate(),
                         open_compute_core::VersionId::generate(),
                         1,
@@ -760,6 +760,191 @@ fn fresh_control_uses_only_complete_refinery_history() {
     assert!(!db.table_exists("schema_migrations").unwrap());
     assert!(db.table_exists("refinery_schema_history").unwrap());
     assert_eq!(db.user_version().unwrap(), 0);
+}
+
+#[test]
+fn r2_size_migration_preserves_existing_objects_as_unknown() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("control.sqlite");
+    let mut connection = Connection::open(&path).unwrap();
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .unwrap();
+    schema_migrations::migrate_to_for_test(&mut connection, DatabaseKind::Control, 11);
+    let instance = InstanceId::generate();
+    let bucket = ResourceId::generate();
+    connection
+        .execute(
+            "INSERT INTO instance_identity(instance_id, created_at_ms) VALUES (?1, 1)",
+            [instance.to_string()],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO resources(id, kind, name, state,
+                                   driver_schema_version, created_at_ms, updated_at_ms)
+             VALUES (?1, 'r2_bucket', 'bucket-one', 'creating', 1, 1, 1)",
+            [bucket.to_string()],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO r2_buckets(resource_id, physical_prefix, schema_version,
+                                    max_object_bytes, object_authority_sha256, created_at_ms)
+             VALUES (?1, ?2, 1, 1024, ?3, 1)",
+            params![
+                bucket.to_string(),
+                format!("tenant/r2/v1/{bucket}/"),
+                vec![1_u8; 32]
+            ],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE resources SET state='ready' WHERE id=?1",
+            [bucket.to_string()],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO r2_objects(resource_id, object_key, object_version, updated_at_ms)
+             VALUES (?1, 'old.txt', 'version-1', 1)",
+            [bucket.to_string()],
+        )
+        .unwrap();
+    drop(connection);
+
+    let db = ControlDb::open(&path, 100).unwrap();
+    apply(&db, &DeterministicClock::new(UNIX_EPOCH)).unwrap();
+    assert_eq!(inspect_schema(&db).unwrap(), current_schema_version());
+    let usage = crate::R2ObjectRepository::new(&db)
+        .bucket_usage(instance, bucket)
+        .unwrap();
+    assert_eq!(usage.object_count, 1);
+    assert_eq!(usage.size_bytes, None);
+    db.with_immediate(|tx| {
+        assert!(
+            tx.execute(
+                "UPDATE r2_objects SET size_bytes=-1 WHERE resource_id=?1",
+                [bucket.to_string()],
+            )
+            .is_err()
+        );
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn untagged_version_metadata_migration_preserves_rows_and_guards() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("control.sqlite");
+    let mut connection = Connection::open(&path).unwrap();
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .unwrap();
+    schema_migrations::migrate_to_for_test(&mut connection, DatabaseKind::Control, 12);
+    connection
+        .execute_batch(
+            "INSERT INTO instance_identity(instance_id, created_at_ms)
+             VALUES('00000000-0000-7000-8000-000000000001', 1);
+             INSERT INTO workers(
+               id, name, active_deployment_id, do_storage_id,
+               route_generation, created_at_ms, updated_at_ms, deleted_at_ms, ownership
+             ) VALUES(
+               '00000000-0000-7000-8000-000000000002',
+               'worker', NULL,
+               '00000000-0000-7000-8000-000000000003', 0, 1, 1, NULL, 'system'
+             );
+             INSERT INTO worker_versions(
+               id, worker_id, version_number, content_kind, state,
+               artifact_sha256, artifact_size, artifact_schema_version, main_module,
+               worker_code_sha256, loader_schema_version, compatibility_date,
+               compatibility_flags_json, created_at_ms
+             ) VALUES(
+               '00000000-0000-7000-8000-000000000004',
+               '00000000-0000-7000-8000-000000000002', 1, 'worker', 'staging',
+               zeroblob(32), 1, 1, 'index.js', zeroblob(32), 1, '2026-09-08', X'5B5D', 1
+             );
+             INSERT INTO version_builtin_bindings(
+               version_id, binding_name, kind, tag, descriptor_sha256
+             ) VALUES(
+               '00000000-0000-7000-8000-000000000004', 'VERSION',
+               'version_metadata', 'release', zeroblob(32)
+             );
+             UPDATE worker_versions SET state='validating'
+             WHERE id='00000000-0000-7000-8000-000000000004';
+             UPDATE worker_versions SET state='ready', ready_at_ms=2
+             WHERE id='00000000-0000-7000-8000-000000000004';
+             INSERT INTO worker_versions(
+               id, worker_id, version_number, content_kind, state,
+               artifact_sha256, artifact_size, artifact_schema_version, main_module,
+               worker_code_sha256, loader_schema_version, compatibility_date,
+               compatibility_flags_json, created_at_ms
+             ) VALUES(
+               '00000000-0000-7000-8000-000000000005',
+               '00000000-0000-7000-8000-000000000002', 2, 'worker', 'staging',
+               zeroblob(32), 1, 1, 'index.js', zeroblob(32), 1, '2026-09-08', X'5B5D', 2
+             );",
+        )
+        .unwrap();
+    assert!(
+        connection
+            .execute(
+                "INSERT INTO version_builtin_bindings
+             (version_id, binding_name, kind, tag, descriptor_sha256)
+             VALUES (?1, 'UNTAGGED', 'version_metadata', NULL, zeroblob(32))",
+                ["00000000-0000-7000-8000-000000000005"],
+            )
+            .is_err()
+    );
+    drop(connection);
+
+    let db = ControlDb::open(&path, 100).unwrap();
+    apply(&db, &DeterministicClock::new(UNIX_EPOCH)).unwrap();
+    assert_eq!(inspect_schema(&db).unwrap(), 11);
+    db.with_immediate(|tx| {
+        let preserved: String = tx
+            .query_row(
+                "SELECT tag FROM version_builtin_bindings WHERE binding_name='VERSION'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| migration_failed())?;
+        assert_eq!(preserved, "release");
+        assert!(
+            tx.execute(
+                "DELETE FROM version_builtin_bindings WHERE binding_name='VERSION'",
+                [],
+            )
+            .is_err()
+        );
+        tx.execute(
+            "INSERT INTO version_builtin_bindings
+             (version_id, binding_name, kind, tag, descriptor_sha256)
+             VALUES (?1, 'UNTAGGED', 'version_metadata', NULL, zeroblob(32))",
+            ["00000000-0000-7000-8000-000000000005"],
+        )
+        .map_err(|_| migration_failed())?;
+        assert!(
+            tx.execute(
+                "INSERT INTO version_builtin_bindings
+                 (version_id, binding_name, kind, tag, descriptor_sha256)
+                 VALUES (?1, 'MODULE', 'wasm_module', NULL, zeroblob(32))",
+                ["00000000-0000-7000-8000-000000000005"],
+            )
+            .is_err()
+        );
+        assert!(
+            tx.execute(
+                "UPDATE version_builtin_bindings SET tag='changed' WHERE binding_name='UNTAGGED'",
+                [],
+            )
+            .is_err()
+        );
+        Ok(())
+    })
+    .unwrap();
 }
 
 #[test]

@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "package": "@open-compute/sdk",
   "packageVersion": "0.2.1",
-  "surfaceDigest": "d282286be0027927cf13fb6fee1af2aad239dee31d3eee0a53255695b8f30273",
+  "surfaceDigest": "2b8be73f6791c2c16b438c2d97cd1cf8f085cfab87182fccc9c0999970fc9b7c",
   "authority": {
     "openapiRevision": "425ceea95cdaa4c43dd462279e42d74fbc00441e",
     "openapiSha256": "9f89b89c428968dcb37c5df51c249a24018128b52259567ff9cda11d103b3a92",
     "cloudflareSdkVersion": "7.1.0",
     "cloudflareSdkNpmIntegrity": "sha512-eb6WtiAbhuqdWmBdVo6fuXQgEBkYjhOeujRDYLEUWEZIECuABvDLz2DUYTwpN/4KyFecM4JtMHgZn5prlFUjLg==",
     "subsetSha256": "91d5ce408bf61816f2f3f02cc66fb9cdee7e679ce580e51570e8777ce5a72a66",
-    "extensionSha256": "49530db0254c8ea35e355b8a10d60c01c5f6fcf79ab6b9bb1e58b0830f5d4fb0",
+    "extensionSha256": "29f703d73c20324f7a80a74730c712d4cda30c19afbc10620e54aa7944d6af74",
     "observedStandardSha256": "c21f2711a57c6a8d39f6b58f591b9c1ddf4cf8486e3cd4d0cbe214248036f40c"
   },
   "operations": [
@@ -2121,15 +2121,33 @@
     },
     {
       "source": "open_compute_extension",
+      "node": "openCompute.cache.collectGarbageForAccount",
+      "method": "POST",
+      "path": "/accounts/{account_id}/open-compute/cache/garbage-collection"
+    },
+    {
+      "source": "open_compute_extension",
       "node": "openCompute.cache.get",
       "method": "GET",
       "path": "/open-compute/cache"
     },
     {
       "source": "open_compute_extension",
+      "node": "openCompute.cache.getForAccount",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/cache"
+    },
+    {
+      "source": "open_compute_extension",
       "node": "openCompute.capabilities.get",
       "method": "GET",
       "path": "/open-compute/capabilities"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.capabilities.getForAccount",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/capabilities"
     },
     {
       "source": "open_compute_extension",
@@ -2142,6 +2160,18 @@
       "node": "openCompute.d1.migrations.list",
       "method": "GET",
       "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/migrations"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.d1.rename",
+      "method": "PATCH",
+      "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/name"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.d1.timeTravel.checkpoints",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/time-travel/checkpoints"
     },
     {
       "source": "open_compute_extension",
@@ -2163,9 +2193,57 @@
     },
     {
       "source": "open_compute_extension",
+      "node": "openCompute.images.capacityForAccount",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/images/capacity"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.queues.consumerRuntime",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/queues/{queue_id}/consumers/{consumer_id}/runtime"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.r2.multipart.abort",
+      "method": "DELETE",
+      "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/abort/{object_key}"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.r2.multipart.complete",
+      "method": "POST",
+      "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/complete/{object_key}"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.r2.multipart.create",
+      "method": "POST",
+      "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.r2.multipart.uploadPart",
+      "method": "PUT",
+      "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/parts/{part_number}/{object_key}"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.r2.usage.get",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/usage"
+    },
+    {
+      "source": "open_compute_extension",
       "node": "openCompute.scheduler.get",
       "method": "GET",
       "path": "/open-compute/scheduler"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.scheduler.getForAccount",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/scheduler"
     },
     {
       "source": "open_compute_extension",
@@ -2175,9 +2253,21 @@
     },
     {
       "source": "open_compute_extension",
+      "node": "openCompute.scheduler.pauseForAccount",
+      "method": "POST",
+      "path": "/accounts/{account_id}/open-compute/scheduler/pause"
+    },
+    {
+      "source": "open_compute_extension",
       "node": "openCompute.scheduler.repair",
       "method": "POST",
       "path": "/open-compute/scheduler/repair"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.scheduler.repairForAccount",
+      "method": "POST",
+      "path": "/accounts/{account_id}/open-compute/scheduler/repair"
     },
     {
       "source": "open_compute_extension",
@@ -2187,9 +2277,21 @@
     },
     {
       "source": "open_compute_extension",
+      "node": "openCompute.scheduler.resumeForAccount",
+      "method": "POST",
+      "path": "/accounts/{account_id}/open-compute/scheduler/resume"
+    },
+    {
+      "source": "open_compute_extension",
       "node": "openCompute.system.status",
       "method": "GET",
       "path": "/open-compute/system/status"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.system.statusForAccount",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/system/status"
     },
     {
       "source": "open_compute_extension",
@@ -2199,9 +2301,21 @@
     },
     {
       "source": "open_compute_extension",
+      "node": "openCompute.upgrade.checkForAccount",
+      "method": "GET",
+      "path": "/accounts/{account_id}/open-compute/upgrade/check"
+    },
+    {
+      "source": "open_compute_extension",
       "node": "openCompute.workers.endpoints",
       "method": "GET",
       "path": "/accounts/{account_id}/open-compute/workers/{script_name}/endpoints"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.workers.observability.usage",
+      "method": "GET",
+      "path": "/accounts/{account_id}/workers/observability/usage"
     },
     {
       "source": "open_compute_extension",
@@ -2220,6 +2334,24 @@
       "node": "openCompute.workers.publicOrigin.set",
       "method": "PUT",
       "path": "/accounts/{account_id}/open-compute/workers/{script_name}/public-origin"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.workers.queueConsumers",
+      "method": "GET",
+      "path": "/accounts/{account_id}/workers/scripts/{script_name}/queue-consumers"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.workers.serviceMetadata",
+      "method": "GET",
+      "path": "/accounts/{account_id}/workers/services/{script_name}"
+    },
+    {
+      "source": "open_compute_extension",
+      "node": "openCompute.workflows.settings",
+      "method": "GET",
+      "path": "/accounts/{account_id}/workflows/settings"
     }
   ],
   "observedStandardOperations": [

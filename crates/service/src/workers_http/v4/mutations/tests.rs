@@ -11,6 +11,93 @@ use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
 use tower::ServiceExt as _;
 
+#[tokio::test]
+async fn settings_patch_accepts_the_pinned_sdk_multipart_shape() {
+    let fields = [
+        ("settings[bindings][][type]", "inherit"),
+        ("settings[bindings][][name]", "EXISTING"),
+        ("settings[bindings][][type]", "plain_text"),
+        ("settings[bindings][][name]", "NEW"),
+        ("settings[bindings][][text]", "value"),
+        ("settings[limits][cpu_ms]", "1234"),
+    ];
+    let mut body = String::new();
+    for (name, value) in fields {
+        body.push_str(&format!(
+            "--ocd-test\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
+        ));
+    }
+    body.push_str("--ocd-test--\r\n");
+    let request = Request::builder()
+        .header(
+            header::CONTENT_TYPE,
+            "multipart/form-data; boundary=ocd-test",
+        )
+        .body(Body::from(body))
+        .unwrap();
+    let multipart = Multipart::from_request(request, &()).await.unwrap();
+    let patch = read_settings_part(multipart).await.unwrap();
+    assert_eq!(patch.bindings.as_ref().map(Vec::len), Some(2));
+    assert_eq!(patch.bindings.unwrap()[1].name(), "NEW");
+    assert_eq!(patch.limits.unwrap().cpu_ms, Some(1234));
+
+    let json_part = Request::builder()
+        .header(
+            header::CONTENT_TYPE,
+            "multipart/form-data; boundary=ocd-test",
+        )
+        .body(Body::from(
+            "--ocd-test\r\nContent-Disposition: form-data; name=\"settings\"; filename=\"settings.json\"\r\nContent-Type: application/json;charset=utf-8\r\n\r\n{\"bindings\":[]}\r\n--ocd-test--\r\n",
+        ))
+        .unwrap();
+    let multipart = Multipart::from_request(json_part, &()).await.unwrap();
+    assert_eq!(
+        read_settings_part(multipart)
+            .await
+            .unwrap()
+            .bindings
+            .as_ref()
+            .map(Vec::len),
+        Some(0)
+    );
+
+    let empty = Request::builder()
+        .header(
+            header::CONTENT_TYPE,
+            "multipart/form-data; boundary=ocd-test",
+        )
+        .body(Body::from("--ocd-test--\r\n"))
+        .unwrap();
+    let multipart = Multipart::from_request(empty, &()).await.unwrap();
+    assert!(matches!(
+        read_settings_part(multipart).await,
+        Err(V4Error::InvalidRequest)
+    ));
+}
+
+#[test]
+fn settings_annotations_accept_official_keys_and_byte_limits() {
+    let annotations = normalize_patch_annotations(BTreeMap::from([
+        ("workers/message".to_owned(), "é".repeat(501)),
+        ("workers/tag".to_owned(), "release".to_owned()),
+    ]))
+    .unwrap();
+    assert_eq!(annotations["workers/message"].len(), 1_000);
+    assert!(annotations["workers/message"].ends_with('é'));
+    assert_eq!(annotations["workers/tag"], "release");
+
+    for invalid in [
+        BTreeMap::from([("workers/triggered_by".to_owned(), "api".to_owned())]),
+        BTreeMap::from([("workers/tag".to_owned(), "x".repeat(101))]),
+        BTreeMap::from([("workers/message".to_owned(), "line\nbreak".to_owned())]),
+    ] {
+        assert!(matches!(
+            normalize_patch_annotations(invalid),
+            Err(V4Error::InvalidRequest)
+        ));
+    }
+}
+
 fn observability() -> WorkerObservabilitySettings {
     WorkerObservabilitySettings {
         generation: 1,
@@ -202,6 +289,29 @@ async fn active_script_management_routes_project_and_mutate_day1_state() {
             .len(),
         2
     );
+    for (page, expected_count) in [(1, 1), (2, 1), (3, 0)] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "{prefix}/versions?deployable=true&per_page=1&page={page}"
+                    ))
+                    .header(header::AUTHORIZATION, "Bearer read-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["result"]["items"].as_array().unwrap().len(),
+            expected_count
+        );
+        assert_eq!(body["result_info"]["page"], page);
+        assert_eq!(body["result_info"]["total_pages"], 2);
+    }
 
     for (query, body) in [
         (
@@ -306,7 +416,7 @@ async fn active_script_management_routes_project_and_mutate_day1_state() {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(path)
+                    .uri(&path)
                     .header(header::AUTHORIZATION, "Bearer read-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -344,7 +454,7 @@ async fn active_script_management_routes_project_and_mutate_day1_state() {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(path)
+                    .uri(&path)
                     .header(header::AUTHORIZATION, "Bearer read-token")
                     .body(Body::empty())
                     .unwrap(),
@@ -352,7 +462,12 @@ async fn active_script_management_routes_project_and_mutate_day1_state() {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        assert!(response_json(response).await["result"].is_array());
+        let result = response_json(response).await["result"].clone();
+        if path.ends_with("/durable-objects") {
+            assert!(result["items"].is_array());
+        } else {
+            assert!(result.is_array());
+        }
     }
     let missing_namespace = app
         .clone()

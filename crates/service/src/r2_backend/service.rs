@@ -1,5 +1,7 @@
 use super::*;
 
+mod management_multipart;
+
 /// Fully composed R2 binding executor and its bounded host resources.
 #[derive(Clone)]
 pub struct R2BindingService {

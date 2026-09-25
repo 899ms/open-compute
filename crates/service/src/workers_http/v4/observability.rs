@@ -15,6 +15,7 @@ use axum::routing::{get, post};
 use open_compute_core::{InstanceId, VersionId};
 use serde::Deserialize;
 use serde_json::json;
+use std::collections::BTreeSet;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr as _;
 use std::sync::Arc;
@@ -54,6 +55,66 @@ pub(super) fn router() -> Router<HttpState> {
             "/accounts/{account}/workers/observability/telemetry/live-tail/heartbeat",
             post(live_tail_heartbeat),
         )
+        .route(
+            "/accounts/{account}/workers/observability/usage",
+            get(observability_usage),
+        )
+}
+
+async fn observability_usage(
+    State(state): State<HttpState>,
+    Path(account): Path<String>,
+    request: Request,
+) -> Response {
+    let context = match handlers::authorize(&request, V4Permission::Read) {
+        Ok(value) => value,
+        Err(response) => return response.into_response(),
+    };
+    let timeframe = match UsageQuery::parse(request.uri().query()) {
+        Ok(value) => value,
+        Err(error) => return error_response(error, context.request_id()),
+    };
+    let result = (|| {
+        let account = domain::resolve_instance(&state, &account)?;
+        let service = handlers::worker_api(&state)?
+            .observability()
+            .map_err(|error| V4Error::from(&error))?;
+        query::validate_timeframe(service, timeframe.from, timeframe.to)?;
+        service
+            .store()
+            .ok_or(V4Error::Unavailable)?
+            .usage(account, timeframe.from, timeframe.to)
+            .map_err(|error| V4Error::from(&error))
+    })();
+    handlers::respond(context, result)
+}
+
+struct UsageQuery {
+    from: i64,
+    to: i64,
+}
+
+impl UsageQuery {
+    fn parse(query: Option<&str>) -> Result<Self, V4Error> {
+        let mut from = None;
+        let mut to = None;
+        let mut seen = BTreeSet::new();
+        for (key, value) in url::form_urlencoded::parse(query.unwrap_or_default().as_bytes()) {
+            if !seen.insert(key.clone()) {
+                return Err(V4Error::InvalidRequest);
+            }
+            let parsed = value.parse().map_err(|_| V4Error::InvalidRequest)?;
+            match key.as_ref() {
+                "from" => from = Some(parsed),
+                "to" => to = Some(parsed),
+                _ => return Err(V4Error::InvalidRequest),
+            }
+        }
+        Ok(Self {
+            from: from.ok_or(V4Error::InvalidRequest)?,
+            to: to.ok_or(V4Error::InvalidRequest)?,
+        })
+    }
 }
 
 pub(crate) fn signed_router() -> Router<HttpState> {

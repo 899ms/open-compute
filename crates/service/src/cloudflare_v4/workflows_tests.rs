@@ -412,6 +412,17 @@ async fn definitions_versions_and_strict_permissions_use_v4_contracts() {
             .0,
         StatusCode::BAD_REQUEST
     );
+    let settings = f
+        .request("GET", &f.path("/settings"), Some("read-token"), None)
+        .await;
+    assert_eq!(settings.0, StatusCode::OK);
+    assert_eq!(
+        settings.1["result"]["default_retention"],
+        serde_json::json!({
+            "success_retention": 7 * 86_400_000_u64,
+            "error_retention": 30 * 86_400_000_u64
+        })
+    );
 }
 
 #[tokio::test]

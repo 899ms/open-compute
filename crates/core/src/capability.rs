@@ -70,6 +70,8 @@ pub enum ManagementApiRequestMediaType {
     Multipart,
     /// An uninterpreted byte request body.
     Raw,
+    /// A structured binary request body.
+    Binary,
     /// No request body.
     None,
 }

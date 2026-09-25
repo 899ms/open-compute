@@ -243,9 +243,63 @@ async fn consumer_routes_cover_create_read_update_delete_and_validation() {
         .await
         .unwrap();
     assert_eq!(edited_queue.status(), StatusCode::OK);
+    let edited_queue = json(edited_queue).await;
+    assert_eq!(edited_queue["result"]["settings"]["delivery_delay"], 4);
     assert_eq!(
-        json(edited_queue).await["result"]["settings"]["delivery_delay"],
-        4
+        edited_queue["result"]["settings"]["message_retention_period"],
+        3600
+    );
+    assert_eq!(edited_queue["result"]["settings"]["delivery_paused"], true);
+
+    let replaced_queue = app
+        .clone()
+        .oneshot(json_request(
+            Method::PUT,
+            &format!("{catalog}/{public_queue}"),
+            &serde_json::json!({"settings":{"delivery_delay":5}}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(replaced_queue.status(), StatusCode::OK);
+    let replaced_queue = json(replaced_queue).await;
+    assert_eq!(replaced_queue["result"]["queue_name"], "source-renamed");
+    assert_eq!(replaced_queue["result"]["settings"]["delivery_delay"], 5);
+    assert_eq!(
+        replaced_queue["result"]["settings"]["message_retention_period"],
+        QueueConfig::default().retention_seconds
+    );
+    assert_eq!(
+        replaced_queue["result"]["settings"]["delivery_paused"],
+        false
+    );
+
+    let invalid_update = app
+        .clone()
+        .oneshot(json_request(
+            Method::PUT,
+            &format!("{catalog}/{public_queue}"),
+            &serde_json::json!({
+                "queue_name":"should-not-rename",
+                "settings":{"delivery_delay":86_401}
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid_update.status(), StatusCode::BAD_REQUEST);
+    let unchanged = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("{catalog}/{public_queue}"))
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        json(unchanged).await["result"]["queue_name"],
+        "source-renamed"
     );
 
     let created_queue = app
@@ -383,6 +437,39 @@ async fn consumer_routes_cover_create_read_update_delete_and_validation() {
         .live_for_queue(queue)
         .unwrap()
         .unwrap();
+    let runtime = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/client/v4/accounts/{public_account}/open-compute/queues/{public_queue}/consumers/{consumer_id}/runtime"
+                ))
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(runtime.status(), StatusCode::OK);
+    assert_eq!(json(runtime).await["result"]["projection_exists"], true);
+
+    let worker_consumers = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/client/v4/accounts/{public_account}/workers/scripts/consumer-worker/queue-consumers?page=1&perPage=10"
+                ))
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(worker_consumers.status(), StatusCode::OK);
+    let worker_consumers = json(worker_consumers).await;
+    assert_eq!(worker_consumers["result"].as_array().unwrap().len(), 1);
+    assert_eq!(worker_consumers["result_info"]["total_count"], 1);
     assert_eq!(
         api.delete_consumer(
             InstanceId::generate(),

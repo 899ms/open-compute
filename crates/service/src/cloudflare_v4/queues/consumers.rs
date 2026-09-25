@@ -30,6 +30,59 @@ pub(super) fn router() -> Router<HttpState> {
                 .put(update_consumer)
                 .delete(delete_consumer),
         )
+        .route(
+            "/accounts/{account_id}/open-compute/queues/{queue_id}/consumers/{consumer_id}/runtime",
+            get(runtime_inspection),
+        )
+}
+
+async fn runtime_inspection(
+    State(state): State<HttpState>,
+    Path((account_public, queue_public, consumer_public)): Path<(String, String, String)>,
+    request: Request,
+) -> Response {
+    let context = match context(&request, V4Permission::Read) {
+        Ok(value) => value,
+        Err(response) => return response.into_response(),
+    };
+    if request.uri().query().is_some() {
+        return error_response(V4Error::InvalidRequest, context.request_id());
+    }
+    if let Err(response) = bodyless(request, context).await {
+        return response.into_response();
+    }
+    let (api, account, account_id) = match authority(&state, &account_public) {
+        Ok(value) => value,
+        Err(error) => return error_response(error, context.request_id()),
+    };
+    let result = (|| {
+        let queue = resolve_queue(account, api.storage(), account_id, &queue_public)?;
+        let consumer = resolve_consumer(
+            account,
+            api.storage(),
+            account_id,
+            queue.id,
+            &consumer_public,
+        )?;
+        let runtime = api.scheduler().inspect_queue_consumer_runtime(
+            queue.id,
+            consumer.id,
+            consumer.consumer_generation,
+        )?;
+        Ok::<_, PlatformError>(ConsumerRuntimeResponse {
+            projection_exists: runtime.projection_exists,
+            backlog_messages: runtime.backlog_messages,
+            backlog_bytes: runtime.backlog_bytes,
+            ready_messages: runtime.ready_messages,
+            claimed_batches: runtime.claimed_batches,
+            claimed_messages: runtime.claimed_messages,
+            dlq_pending: runtime.dlq_pending,
+        })
+    })();
+    match result {
+        Ok(value) => success_response(context, value),
+        Err(error) => platform_error(&error, context),
+    }
 }
 
 #[derive(Deserialize)]
@@ -321,7 +374,7 @@ fn resolve_consumer(
         .ok_or_else(|| PlatformError::new(ErrorCode::ResourceNotFound, "consumer not found"))
 }
 
-pub(super) fn consumer_response(
+pub(crate) fn consumer_response(
     authority: &crate::cloudflare_v4::accounts::V4InstanceContext,
     storage: &PlatformStorage,
     queue: &QueueRecord,
@@ -388,7 +441,7 @@ fn respond_consumer(
 }
 
 #[derive(Serialize)]
-pub(super) struct ConsumerResponse {
+pub(crate) struct ConsumerResponse {
     consumer_id: String,
     created_on: String,
     dead_letter_queue: String,
@@ -408,6 +461,17 @@ struct ConsumerSettings {
     max_retries: u32,
     max_wait_time_ms: u32,
     retry_delay: u32,
+}
+
+#[derive(Serialize)]
+struct ConsumerRuntimeResponse {
+    projection_exists: bool,
+    backlog_messages: u64,
+    backlog_bytes: u64,
+    ready_messages: u64,
+    claimed_batches: u64,
+    claimed_messages: u64,
+    dlq_pending: u64,
 }
 
 #[derive(Serialize)]

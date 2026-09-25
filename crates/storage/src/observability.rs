@@ -13,6 +13,11 @@ use std::time::Duration;
 
 mod schema;
 use schema::{bind_instance, migrate, quick_check};
+mod types;
+
+pub use types::{
+    ObservabilityFieldKey, ObservabilityFieldValue, ObservabilityUsage, ObservabilityUsageBreakdown,
+};
 
 const DATA_FORMAT: &str = "open-compute-observability-v1";
 const QUERY_READ_MAX_BYTES: usize = 32 * 1024 * 1024;
@@ -116,30 +121,6 @@ pub struct StoredObservabilityEvent {
     pub source: Value,
     /// Public metadata object.
     pub metadata: Value,
-}
-
-/// One discovered telemetry field.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ObservabilityFieldKey {
-    /// Canonical dotted key.
-    pub key: String,
-    /// Scalar value type.
-    #[serde(rename = "type")]
-    pub value_type: String,
-    /// Most recent event timestamp containing this key.
-    pub last_seen_at: i64,
-}
-
-/// One bounded distinct value for a telemetry field.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ObservabilityFieldValue {
-    /// Scalar value type.
-    #[serde(rename = "type")]
-    pub value_type: String,
-    /// Scalar value.
-    pub value: Value,
 }
 
 /// Single-process owner of `observability.sqlite`.
@@ -428,6 +409,54 @@ impl ObservabilityStore {
             output.push(row.map_err(|_| unavailable())?);
         }
         Ok(output)
+    }
+
+    /// Aggregate Cloudflare-compatible Workers Logs usage for one account.
+    pub fn usage(
+        &self,
+        instance_id: InstanceId,
+        from_ms: i64,
+        to_ms: i64,
+    ) -> Result<ObservabilityUsage, PlatformError> {
+        if instance_id != self.instance_id {
+            return Err(unavailable());
+        }
+        if from_ms >= to_ms {
+            return Err(invalid());
+        }
+        let connection = self.connection.lock().map_err(|_| unavailable())?;
+        let mut statement = connection
+            .prepare(
+                "SELECT strftime('%Y-%m-%d 00:00:00', timestamp_ms / 1000, 'unixepoch'),
+                        script_name, COUNT(*)
+                 FROM observability_events
+                 WHERE timestamp_ms>=?1 AND timestamp_ms<?2
+                 GROUP BY 1, script_name ORDER BY 1, script_name",
+            )
+            .map_err(|_| unavailable())?;
+        let rows = statement
+            .query_map(params![from_ms, to_ms], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|_| unavailable())?;
+        let mut events = 0_u64;
+        let mut breakdown = Vec::new();
+        for row in rows {
+            let (bin, service, count) = row.map_err(|_| unavailable())?;
+            let count = u64::try_from(count).map_err(|_| unavailable())?;
+            events = events.checked_add(count).ok_or_else(unavailable)?;
+            breakdown.push(ObservabilityUsageBreakdown {
+                bin,
+                dataset: "cloudflare-workers",
+                service,
+                count,
+            });
+        }
+        Ok(ObservabilityUsage { events, breakdown })
     }
 
     /// Delete expired rows in one bounded maintenance transaction.

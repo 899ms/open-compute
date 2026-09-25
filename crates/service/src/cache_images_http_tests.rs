@@ -245,9 +245,11 @@ request_timeout_ms = 1000
             assert!(value["result"][0].get("path").is_none());
         }
         if path == durable_objects {
-            assert_eq!(value["result"].as_array().unwrap().len(), 1);
-            assert_eq!(value["result"][0]["class_name"], "CacheObject");
-            public_namespace = value["result"][0]["id"].as_str().map(str::to_owned);
+            assert_eq!(value["result"]["items"].as_array().unwrap().len(), 1);
+            assert_eq!(value["result"]["items"][0]["class_name"], "CacheObject");
+            public_namespace = value["result"]["items"][0]["id"]
+                .as_str()
+                .map(str::to_owned);
         }
     }
     let public_namespace = public_namespace.unwrap();
@@ -268,8 +270,11 @@ request_timeout_ms = 1000
     assert_eq!(response.status(), StatusCode::OK);
     let value: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap()).unwrap();
-    assert_eq!(value["result"].as_array().unwrap().len(), 1);
-    assert_eq!(value["result"][0]["namespace_id"], public_namespace);
+    assert_eq!(value["result"]["items"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        value["result"]["items"][0]["namespace_id"],
+        public_namespace
+    );
     let collected = app
         .oneshot(
             Request::builder()

@@ -4,7 +4,7 @@
 | ------------------------ | ------------------------------------------------------------------------------------------- |
 | 已实现架构与产品维护     | [完成索引](implemented/README.md)                                                           |
 | 正式版本说明             | [Release notes](releases/README.md)                                                         |
-| 当前 API 支持与偏差      | [兼容矩阵](references/cloudflare-compatibility.md)、[偏差清单](references/p1-deviations.md) |
+| 当前 API 支持与偏差      | [兼容矩阵](references/cloudflare-compatibility.md)、[偏差清单](references/p1-deviations.md)、[Dashboard API/SDK 缺口](references/dashboard-management-api-gaps.md) |
 | 开发测试、部署与运维     | [参考文档](references/README.md)                                                            |
 | 尚未取得的 qualification | [验收计划](acceptance/README.md)                                                            |
 | 原生运行时实施与后续工作 | [workerd 路线](workerd/README.md)；源码基于 `third_party/workerd/` submodule                |

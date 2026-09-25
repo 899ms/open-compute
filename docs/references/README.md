@@ -64,6 +64,7 @@
 | --- | --- |
 | [Host authority](host-authority.md) | 本机与公网 ingress 共用的 hostname ownership、解析和 endpoint projection |
 | [Cloudflare 兼容矩阵](cloudflare-compatibility.md) | 当前支持面和 deviation |
+| [Dashboard 管理 API 与 SDK 缺口](dashboard-management-api-gaps.md) | 已支持产品的底层、OCD API、OpenAPI/SDK 分层缺口及非 API 缺口 |
 | [Cloudflare 上游刷新](cloudflare-upstream-refresh.md) | OpenAPI、官方 SDK 与 Wrangler 的定期发现和协调升级 |
 | [能力偏差](p1-deviations.md) | 当前 deviation ID 与边界 |
 | [测试节奏](testing.md) | Gate、case discovery、覆盖率和验收 |

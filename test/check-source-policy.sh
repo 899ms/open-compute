@@ -80,11 +80,11 @@ for raw in maintained:
         for part in path.parts[2:]:
             if part.startswith("$"):
                 # TanStack Router parameters remain lower-camel JavaScript identifiers.
-                stem = part.split(".", 1)[0][1:]
+                stem = part.split(".", 1)[0][1:].removesuffix("_")
                 if not re.fullmatch(r"[a-z][A-Za-z0-9]*", stem):
                     errors.append(f"{raw}: invalid TanStack Router parameter filename")
                 continue
-            stem = part.split(".", 1)[0].lstrip("_")
+            stem = part.split(".", 1)[0].lstrip("-_")
             if stem and not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", stem):
                 errors.append(f"{raw}: maintained Dashboard paths must use lowercase kebab-case")
 

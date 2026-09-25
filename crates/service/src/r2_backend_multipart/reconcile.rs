@@ -240,6 +240,7 @@ fn finish_reconciled_complete(
             record.resource_id,
             &record.object_key,
             &record.object_version,
+            metadata.size,
             i64::try_from(unix_ms()?).map_err(|_| protocol_error())?,
         )?
     } else {

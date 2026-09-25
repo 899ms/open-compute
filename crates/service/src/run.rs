@@ -142,6 +142,7 @@ struct RunInner {
     scope: Option<ServiceScope>,
     shutdown: Option<watch::Receiver<bool>>,
     daemon_api: Option<daemon_control::DaemonApi>,
+    dashboard_auth: Option<Arc<crate::dashboard_auth::DashboardAuth>>,
     shared_routes: Option<http::SharedRoutes>,
     shared_public_addr: Option<SocketAddr>,
     shared_admin_addr: Option<SocketAddr>,
@@ -354,6 +355,7 @@ async fn run_until_signal(
         .map(|plan| daemon_control::DaemonSocket::bind(&plan.root))
         .transpose()?;
     let routes = http::SharedRoutes::new(daemon_api.clone(), opts.daemon_metrics.max_series);
+    opts.dashboard_auth = Some(routes.dashboard_auth());
     opts.shared_public_addr = Some(public_bound);
     opts.shared_admin_addr = admin_bound;
     opts.daemon_api = daemon_api.clone();

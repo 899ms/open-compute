@@ -15,6 +15,7 @@ pub struct HttpState {
     pub(super) read_only_secret: Option<Arc<SecretString>>,
     pub(super) v4_instance_context: Option<Arc<V4InstanceContext>>,
     pub(super) platform_storage: Option<Arc<PlatformStorage>>,
+    pub(super) capability_limits: Arc<BTreeMap<String, u64>>,
     #[cfg(any(test, feature = "test-support"))]
     pub(super) test_runtime_restart: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     pub(super) worker_api: Option<Arc<WorkerApiState>>,
@@ -42,6 +43,7 @@ impl std::fmt::Debug for HttpState {
             .field("read_only_auth", &self.read_only_secret.is_some())
             .field("v4_instance_context", &self.v4_instance_context.is_some())
             .field("platform_storage", &self.platform_storage.is_some())
+            .field("capability_limits", &self.capability_limits.len())
             .field(
                 "test_runtime_restart",
                 &cfg!(any(test, feature = "test-support")),
@@ -96,6 +98,7 @@ impl HttpState {
             read_only_secret: Some(read_only_secret),
             v4_instance_context: None,
             platform_storage: None,
+            capability_limits: Arc::new(BTreeMap::new()),
             #[cfg(any(test, feature = "test-support"))]
             test_runtime_restart: None,
             worker_api: None,
@@ -156,6 +159,7 @@ impl HttpState {
             read_only_secret: None,
             v4_instance_context: None,
             platform_storage: None,
+            capability_limits: Arc::new(BTreeMap::new()),
             test_runtime_restart: None,
             worker_api: None,
             kv_api: None,
@@ -178,6 +182,19 @@ impl HttpState {
     pub fn with_dashboard_enabled(mut self, enabled: bool) -> Self {
         self.dashboard_enabled = enabled;
         self
+    }
+
+    /// Publish the validated installation-local product limit registry.
+    #[must_use]
+    pub fn with_capability_limits(mut self, limits: BTreeMap<String, u64>) -> Self {
+        self.capability_limits = Arc::new(limits);
+        self
+    }
+
+    /// Borrow the validated installation-local product limit registry.
+    #[must_use]
+    pub(crate) fn capability_limits(&self) -> &BTreeMap<String, u64> {
+        &self.capability_limits
     }
 
     /// Attach the P0.2 control/data plane to this listener state.

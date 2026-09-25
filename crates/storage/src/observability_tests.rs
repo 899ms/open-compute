@@ -84,6 +84,52 @@ fn inserts_idempotently_and_queries_bounded_public_rows() {
 }
 
 #[test]
+fn aggregates_usage_by_utc_day_and_service() {
+    let dir = TempDir::new().unwrap();
+    let store = ObservabilityStore::open(
+        &dir.path().join("observability.sqlite"),
+        instance(),
+        100,
+        200_000_000,
+        1_000_000,
+    )
+    .unwrap();
+    let mut first = invocation("usage-a", 1_000);
+    first.script_name = "alpha".to_owned();
+    let mut second = invocation("usage-b", 2_000);
+    second.script_name = "beta".to_owned();
+    second.events.push(NewObservabilityEvent {
+        event_id: "usage-b:1".to_owned(),
+        sequence: 1,
+        timestamp_ms: 2_001,
+        metadata_type: "cf-worker-log".to_owned(),
+        level: Some("log".to_owned()),
+        source: serde_json::json!("second"),
+        metadata: serde_json::json!({}),
+        fields: Vec::new(),
+    });
+    let mut third = invocation("usage-c", 86_401_000);
+    third.script_name = "alpha".to_owned();
+    assert_eq!(store.insert_batch(&[first, second, third]).unwrap(), 3);
+
+    let usage = store.usage(instance(), 0, 172_800_000).unwrap();
+    assert_eq!(usage.events, 4);
+    assert_eq!(
+        usage
+            .breakdown
+            .iter()
+            .map(|bucket| (bucket.bin.as_str(), bucket.service.as_str(), bucket.count))
+            .collect::<Vec<_>>(),
+        vec![
+            ("1970-01-01 00:00:00", "alpha", 1),
+            ("1970-01-01 00:00:00", "beta", 2),
+            ("1970-01-02 00:00:00", "alpha", 1),
+        ]
+    );
+    assert!(store.usage(other_instance(), 0, 172_800_000).is_err());
+}
+
+#[test]
 fn discovers_typed_keys_values_and_prunes_retention() {
     let dir = TempDir::new().unwrap();
     let store = ObservabilityStore::open(

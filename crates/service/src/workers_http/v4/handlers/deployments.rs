@@ -23,20 +23,11 @@ pub(super) async fn list_versions(
             records.retain(|version| version.state == open_compute_storage::VersionState::Ready);
         }
         let total = records.len();
-        let start = if query.deployable {
-            0
-        } else {
-            query.page.saturating_sub(1).saturating_mul(query.per_page)
-        };
-        let take = if query.deployable {
-            total
-        } else {
-            query.per_page
-        };
+        let start = query.page.saturating_sub(1).saturating_mul(query.per_page);
         let items = records
             .iter()
             .skip(start)
-            .take(take)
+            .take(query.per_page)
             .map(|version| {
                 let annotations = repo
                     .version_annotations(account, worker.id, version.id)
@@ -48,15 +39,11 @@ pub(super) async fn list_versions(
         Ok((
             VersionList { items },
             V4ResultInfo {
-                page: if query.deployable { 1 } else { query.page },
-                per_page: take,
+                page: query.page,
+                per_page: query.per_page,
                 count,
                 total_count: total,
-                total_pages: if query.deployable {
-                    usize::from(total > 0)
-                } else {
-                    total.div_ceil(query.per_page)
-                },
+                total_pages: total.div_ceil(query.per_page),
             },
         ))
     })();

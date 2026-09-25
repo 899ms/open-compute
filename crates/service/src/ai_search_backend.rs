@@ -116,6 +116,10 @@ impl std::fmt::Debug for AiSearchBindingService {
 }
 
 impl AiSearchBindingService {
+    pub(crate) fn is_configured(&self) -> bool {
+        self.ai.default_embedding_model.is_some()
+    }
+
     /// Compose the private plane from platform authority and fixed providers.
     pub(crate) fn new(
         storage: Arc<PlatformStorage>,

@@ -33,7 +33,10 @@ import { BaseTelemetry } from "cloudflare/resources/workers/observability/teleme
 import { BaseUpload as BaseUpload2 } from "cloudflare/resources/workers/scripts/assets/upload";
 import { BaseDeployments } from "cloudflare/resources/workers/scripts/deployments";
 import { BaseSchedules } from "cloudflare/resources/workers/scripts/schedules";
-import { BaseScriptAndVersionSettings } from "cloudflare/resources/workers/scripts/script-and-version-settings";
+import {
+  BaseScriptAndVersionSettings,
+  type ScriptAndVersionSettingEditParams,
+} from "cloudflare/resources/workers/scripts/script-and-version-settings";
 import {
   BaseScripts,
   type ScriptUpdateParams,
@@ -54,10 +57,23 @@ import { BaseInstances as BaseInstances2 } from "cloudflare/resources/workflows/
 import { BaseStatus } from "cloudflare/resources/workflows/instances/status";
 import { BaseVersions as BaseVersions3 } from "cloudflare/resources/workflows/versions";
 import { BaseWorkflows } from "cloudflare/resources/workflows/workflows";
+import { uploadAiSearchItem } from "./ai-search-upload.ts";
 import { Artifacts } from "./artifacts.ts";
+import { editWorkerSettings } from "./worker-settings-edit.ts";
 
 /** Official transport request options reused by vendor operations. */
 export type OpenComputeRequestOptions = Cloudflare.RequestOptions;
+
+/** Portable binary request body; browser Blob/File values satisfy the structural arm. */
+export type OpenComputeBinaryBody =
+  | string
+  | Uint8Array
+  | ArrayBuffer
+  | {
+      readonly size: number;
+      readonly type: string;
+      arrayBuffer(): Promise<ArrayBuffer>;
+    };
 
 /** Native Dynamic Worker Loader binding accepted by open-compute and Wrangler. */
 export type OpenComputeWorkerLoaderBinding = {
@@ -104,6 +120,33 @@ type OpenComputeWorkerScriptBinding =
     })
   | OpenComputeArtifactsBinding
   | OpenComputeWorkerLoaderBinding;
+
+type OfficialWorkerSettings = NonNullable<
+  ScriptAndVersionSettingEditParams["settings"]
+>;
+type OfficialWorkerSettingsBinding = NonNullable<
+  OfficialWorkerSettings["bindings"]
+>[number];
+
+/** Native Service props accepted by open-compute's Settings PATCH. */
+export type OpenComputeWorkerServiceBinding = Extract<
+  OfficialWorkerSettingsBinding,
+  { type: "service" }
+> & { readonly props?: { readonly [key: string]: OpenComputeJsonValue } };
+
+/** Settings PATCH parameters with open-compute's native binding fields. */
+export type OpenComputeWorkerSettingsEditParams = Omit<
+  ScriptAndVersionSettingEditParams,
+  "settings"
+> & {
+  readonly settings?: Omit<OfficialWorkerSettings, "bindings"> & {
+    readonly bindings?: readonly (
+      | Exclude<OfficialWorkerSettingsBinding, { type: "service" }>
+      | OpenComputeWorkerLoaderBinding
+      | OpenComputeWorkerServiceBinding
+    )[];
+  };
+};
 
 /** Official script upload parameters plus the runtime-supported Worker Loader binding. */
 export type OpenComputeWorkerScriptUpdateParams = Omit<
@@ -225,6 +268,14 @@ export type Capabilities = {
     "supported" | "supported_with_deviation" | "unsupported"
   >;
   readonly deviations: readonly string[];
+  readonly configuration: {
+    readonly ai_search: boolean;
+  };
+  readonly limits: Record<string, number>;
+};
+
+export type D1CheckpointTimes = {
+  readonly checkpoints_ms: readonly number[];
 };
 
 export type D1Migration = {
@@ -243,16 +294,47 @@ export type D1MigrationInput = {
 
 export type D1MigrationRequest = readonly D1MigrationInput[];
 
+export type D1RenameRequest = {
+  readonly name: string;
+};
+
+export type D1RenameResult = {
+  readonly id: string;
+  readonly name: string;
+};
+
 export type DurableObjectNamespace = {
   readonly id: string;
+  readonly name: string;
   readonly script_name: string;
   readonly class_name: string;
+  readonly state: "creating" | "ready" | "deleting" | "tombstoned";
+  readonly availability: "healthy" | "degraded" | "unavailable";
+  readonly availability_code?: string;
+  readonly spec_generation: number;
+  readonly schema_version: number;
+  readonly created_on: string;
+  readonly modified_on: string;
+};
+
+export type DurableObjectNamespacePage = {
+  readonly items: readonly DurableObjectNamespace[];
+  readonly next_cursor?: string;
 };
 
 export type DurableObjectRecord = {
   readonly id: string;
   readonly namespace_id: string;
+  readonly generation: number;
+  readonly state: string;
   readonly created_on: string;
+  readonly modified_on: string;
+  readonly deleted_on?: string;
+};
+
+export type DurableObjectRecordPage = {
+  readonly items: readonly DurableObjectRecord[];
+  readonly next_cursor?: string;
 };
 
 export type ImageCapacity = {
@@ -261,8 +343,90 @@ export type ImageCapacity = {
   readonly capacity: number;
 };
 
+export type ObservabilityUsage = {
+  readonly events: number;
+  readonly breakdown: readonly {
+    readonly bin: string;
+    readonly dataset: "cloudflare-workers";
+    readonly service: string;
+    readonly count: number;
+  }[];
+};
+
 export type PublicOriginRequest = {
   readonly name: string;
+};
+
+export type QueueConsumer = {
+  readonly consumer_id: string;
+  readonly created_on: string;
+  readonly dead_letter_queue: string;
+  readonly queue_name: string;
+  readonly script: string;
+  readonly script_name: string;
+  readonly settings: {
+    readonly batch_size: number;
+    readonly max_concurrency: number;
+    readonly max_retries: number;
+    readonly max_wait_time_ms: number;
+    readonly retry_delay: number;
+  };
+  readonly type: "worker";
+};
+
+export type QueueConsumerRuntime = {
+  readonly projection_exists: boolean;
+  readonly backlog_messages: number;
+  readonly backlog_bytes: number;
+  readonly ready_messages: number;
+  readonly claimed_batches: number;
+  readonly claimed_messages: number;
+  readonly dlq_pending: number;
+};
+
+export type R2BucketUsage = {
+  readonly object_count: number;
+  readonly size_bytes: number | null;
+};
+
+export type R2MultipartCompleteRequest = {
+  readonly parts: readonly R2MultipartPart[];
+};
+
+export type R2MultipartCompletedObject = {
+  readonly key: string;
+  readonly version: string;
+  readonly size: number;
+  readonly etag: string;
+  readonly httpEtag: string;
+  readonly uploaded: number;
+  readonly storageClass: string;
+};
+
+export type R2MultipartCreate = {
+  readonly key: string;
+  readonly uploadId: string;
+};
+
+export type R2MultipartCreateRequest = {
+  readonly key: string;
+  readonly options?: {
+    readonly httpMetadata?: {
+      readonly contentType?: string;
+      readonly contentLanguage?: string;
+      readonly contentDisposition?: string;
+      readonly contentEncoding?: string;
+      readonly cacheControl?: string;
+      readonly cacheExpiry?: number;
+    };
+    readonly customMetadata?: Record<string, string>;
+    readonly storageClass?: "Standard" | "InfrequentAccess";
+  };
+};
+
+export type R2MultipartPart = {
+  readonly partNumber: number;
+  readonly etag: string;
 };
 
 export type RestoreRequest = {
@@ -328,6 +492,29 @@ export type WorkerEndpoint = {
   readonly url: string;
   readonly scope: "local_machine" | "public_network";
   readonly created_on: string;
+};
+
+export type WorkerServiceMetadata = {
+  readonly default_environment: {
+    readonly environment: string;
+    readonly script: {
+      readonly tag: string;
+      readonly tags: readonly string[];
+      readonly last_deployed_from: string;
+      readonly migration_tag?: string;
+      readonly limits?: {
+        readonly cpu_ms: number;
+        readonly subrequests: number;
+      };
+    };
+  };
+};
+
+export type WorkflowSettings = {
+  readonly default_retention: {
+    readonly success_retention: number;
+    readonly error_retention: number;
+  };
 };
 
 function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
@@ -416,15 +603,45 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
             options,
           )
           ._thenUnwrap((envelope) => envelope.result),
+      collectGarbageForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<CacheStatus> =>
+        transport
+          .post<V4Envelope<CacheStatus>>(
+            `/accounts/${segment(accountId)}/open-compute/cache/garbage-collection`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
       get: (options?: OpenComputeRequestOptions): APIPromise<CacheStatus> =>
         transport
           .get<V4Envelope<CacheStatus>>(`/open-compute/cache`, options)
+          ._thenUnwrap((envelope) => envelope.result),
+      getForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<CacheStatus> =>
+        transport
+          .get<V4Envelope<CacheStatus>>(
+            `/accounts/${segment(accountId)}/open-compute/cache`,
+            options,
+          )
           ._thenUnwrap((envelope) => envelope.result),
     },
     capabilities: {
       get: (options?: OpenComputeRequestOptions): APIPromise<Capabilities> =>
         transport
           .get<V4Envelope<Capabilities>>(`/open-compute/capabilities`, options)
+          ._thenUnwrap((envelope) => envelope.result),
+      getForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<Capabilities> =>
+        transport
+          .get<V4Envelope<Capabilities>>(
+            `/accounts/${segment(accountId)}/open-compute/capabilities`,
+            options,
+          )
           ._thenUnwrap((envelope) => envelope.result),
     },
     d1: {
@@ -453,14 +670,39 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
             )
             ._thenUnwrap((envelope) => envelope.result),
       },
+      rename: (
+        accountId: string,
+        databaseId: string,
+        body: D1RenameRequest,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<D1RenameResult> =>
+        transport
+          .patch<V4Envelope<D1RenameResult>>(
+            `/accounts/${segment(accountId)}/open-compute/d1/databases/${segment(databaseId)}/name`,
+            { ...options, body },
+          )
+          ._thenUnwrap((envelope) => envelope.result),
+      timeTravel: {
+        checkpoints: (
+          accountId: string,
+          databaseId: string,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<D1CheckpointTimes> =>
+          transport
+            .get<V4Envelope<D1CheckpointTimes>>(
+              `/accounts/${segment(accountId)}/open-compute/d1/databases/${segment(databaseId)}/time-travel/checkpoints`,
+              options,
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+      },
     },
     durableObjects: {
       list: (
         accountId: string,
         options?: OpenComputeRequestOptions,
-      ): APIPromise<readonly DurableObjectNamespace[]> =>
+      ): APIPromise<DurableObjectNamespacePage> =>
         transport
-          .get<V4Envelope<readonly DurableObjectNamespace[]>>(
+          .get<V4Envelope<DurableObjectNamespacePage>>(
             `/accounts/${segment(accountId)}/open-compute/durable-objects`,
             options,
           )
@@ -469,9 +711,9 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
         accountId: string,
         namespaceId: string,
         options?: OpenComputeRequestOptions,
-      ): APIPromise<readonly DurableObjectRecord[]> =>
+      ): APIPromise<DurableObjectRecordPage> =>
         transport
-          .get<V4Envelope<readonly DurableObjectRecord[]>>(
+          .get<V4Envelope<DurableObjectRecordPage>>(
             `/accounts/${segment(accountId)}/open-compute/durable-objects/${segment(namespaceId)}/objects`,
             options,
           )
@@ -487,11 +729,116 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
             options,
           )
           ._thenUnwrap((envelope) => envelope.result),
+      capacityForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<ImageCapacity> =>
+        transport
+          .get<V4Envelope<ImageCapacity>>(
+            `/accounts/${segment(accountId)}/open-compute/images/capacity`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
+    },
+    queues: {
+      consumerRuntime: (
+        accountId: string,
+        queueId: string,
+        consumerId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<QueueConsumerRuntime> =>
+        transport
+          .get<V4Envelope<QueueConsumerRuntime>>(
+            `/accounts/${segment(accountId)}/open-compute/queues/${segment(queueId)}/consumers/${segment(consumerId)}/runtime`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
+    },
+    r2: {
+      multipart: {
+        abort: (
+          accountId: string,
+          bucketName: string,
+          uploadId: string,
+          objectKey: string,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<null> =>
+          transport
+            .delete<V4Envelope<null>>(
+              `/accounts/${segment(accountId)}/open-compute/r2/buckets/${segment(bucketName)}/multipart-uploads/${segment(uploadId)}/abort/${segment(objectKey)}`,
+              options,
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+        complete: (
+          accountId: string,
+          bucketName: string,
+          uploadId: string,
+          objectKey: string,
+          body: R2MultipartCompleteRequest,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<R2MultipartCompletedObject> =>
+          transport
+            .post<V4Envelope<R2MultipartCompletedObject>>(
+              `/accounts/${segment(accountId)}/open-compute/r2/buckets/${segment(bucketName)}/multipart-uploads/${segment(uploadId)}/complete/${segment(objectKey)}`,
+              { ...options, body },
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+        create: (
+          accountId: string,
+          bucketName: string,
+          body: R2MultipartCreateRequest,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<R2MultipartCreate> =>
+          transport
+            .post<V4Envelope<R2MultipartCreate>>(
+              `/accounts/${segment(accountId)}/open-compute/r2/buckets/${segment(bucketName)}/multipart-uploads`,
+              { ...options, body },
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+        uploadPart: (
+          accountId: string,
+          bucketName: string,
+          uploadId: string,
+          partNumber: string,
+          objectKey: string,
+          body: OpenComputeBinaryBody,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<R2MultipartPart> =>
+          transport
+            .put<V4Envelope<R2MultipartPart>>(
+              `/accounts/${segment(accountId)}/open-compute/r2/buckets/${segment(bucketName)}/multipart-uploads/${segment(uploadId)}/parts/${segment(partNumber)}/${segment(objectKey)}`,
+              { ...options, body },
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+      },
+      usage: {
+        get: (
+          accountId: string,
+          bucketName: string,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<R2BucketUsage> =>
+          transport
+            .get<V4Envelope<R2BucketUsage>>(
+              `/accounts/${segment(accountId)}/open-compute/r2/buckets/${segment(bucketName)}/usage`,
+              options,
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+      },
     },
     scheduler: {
       get: (options?: OpenComputeRequestOptions): APIPromise<SchedulerStatus> =>
         transport
           .get<V4Envelope<SchedulerStatus>>(`/open-compute/scheduler`, options)
+          ._thenUnwrap((envelope) => envelope.result),
+      getForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<SchedulerStatus> =>
+        transport
+          .get<V4Envelope<SchedulerStatus>>(
+            `/accounts/${segment(accountId)}/open-compute/scheduler`,
+            options,
+          )
           ._thenUnwrap((envelope) => envelope.result),
       pause: (
         options?: OpenComputeRequestOptions,
@@ -499,6 +846,16 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
         transport
           .post<V4Envelope<SchedulerStatus>>(
             `/open-compute/scheduler/pause`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
+      pauseForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<SchedulerStatus> =>
+        transport
+          .post<V4Envelope<SchedulerStatus>>(
+            `/accounts/${segment(accountId)}/open-compute/scheduler/pause`,
             options,
           )
           ._thenUnwrap((envelope) => envelope.result),
@@ -511,6 +868,16 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
             options,
           )
           ._thenUnwrap((envelope) => envelope.result),
+      repairForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<SchedulerStatus> =>
+        transport
+          .post<V4Envelope<SchedulerStatus>>(
+            `/accounts/${segment(accountId)}/open-compute/scheduler/repair`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
       resume: (
         options?: OpenComputeRequestOptions,
       ): APIPromise<SchedulerStatus> =>
@@ -520,17 +887,47 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
             options,
           )
           ._thenUnwrap((envelope) => envelope.result),
+      resumeForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<SchedulerStatus> =>
+        transport
+          .post<V4Envelope<SchedulerStatus>>(
+            `/accounts/${segment(accountId)}/open-compute/scheduler/resume`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
     },
     system: {
       status: (options?: OpenComputeRequestOptions): APIPromise<SystemStatus> =>
         transport
           .get<V4Envelope<SystemStatus>>(`/open-compute/system/status`, options)
           ._thenUnwrap((envelope) => envelope.result),
+      statusForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<SystemStatus> =>
+        transport
+          .get<V4Envelope<SystemStatus>>(
+            `/accounts/${segment(accountId)}/open-compute/system/status`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
     },
     upgrade: {
       check: (options?: OpenComputeRequestOptions): APIPromise<UpgradeCheck> =>
         transport
           .get<V4Envelope<UpgradeCheck>>(`/open-compute/upgrade/check`, options)
+          ._thenUnwrap((envelope) => envelope.result),
+      checkForAccount: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<UpgradeCheck> =>
+        transport
+          .get<V4Envelope<UpgradeCheck>>(
+            `/accounts/${segment(accountId)}/open-compute/upgrade/check`,
+            options,
+          )
           ._thenUnwrap((envelope) => envelope.result),
     },
     workers: {
@@ -545,6 +942,18 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
             options,
           )
           ._thenUnwrap((envelope) => envelope.result),
+      observability: {
+        usage: (
+          accountId: string,
+          options?: OpenComputeRequestOptions,
+        ): APIPromise<ObservabilityUsage> =>
+          transport
+            .get<V4Envelope<ObservabilityUsage>>(
+              `/accounts/${segment(accountId)}/workers/observability/usage`,
+              options,
+            )
+            ._thenUnwrap((envelope) => envelope.result),
+      },
       publicOrigin: {
         delete: (
           accountId: string,
@@ -589,6 +998,40 @@ function buildOpenCompute(transport: BaseCloudflare): OpenComputeVendorNode {
             )
             ._thenUnwrap((envelope) => envelope.result),
       },
+      queueConsumers: (
+        accountId: string,
+        scriptName: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<readonly QueueConsumer[]> =>
+        transport
+          .get<V4Envelope<readonly QueueConsumer[]>>(
+            `/accounts/${segment(accountId)}/workers/scripts/${segment(scriptName)}/queue-consumers`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
+      serviceMetadata: (
+        accountId: string,
+        scriptName: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<WorkerServiceMetadata> =>
+        transport
+          .get<V4Envelope<WorkerServiceMetadata>>(
+            `/accounts/${segment(accountId)}/workers/services/${segment(scriptName)}`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
+    },
+    workflows: {
+      settings: (
+        accountId: string,
+        options?: OpenComputeRequestOptions,
+      ): APIPromise<WorkflowSettings> =>
+        transport
+          .get<V4Envelope<WorkflowSettings>>(
+            `/accounts/${segment(accountId)}/workflows/settings`,
+            options,
+          )
+          ._thenUnwrap((envelope) => envelope.result),
     },
   };
 }
@@ -886,7 +1329,11 @@ export interface OpenComputeWorkersScriptsSchedulesNode {
 }
 
 export interface OpenComputeWorkersScriptsScriptAndVersionSettingsNode {
-  readonly edit: BaseScriptAndVersionSettings["edit"];
+  readonly edit: (
+    scriptName: string,
+    params: OpenComputeWorkerSettingsEditParams,
+    options?: OpenComputeRequestOptions,
+  ) => ReturnType<BaseScriptAndVersionSettings["edit"]>;
   readonly get: BaseScriptAndVersionSettings["get"];
 }
 
@@ -1007,13 +1454,25 @@ export interface OpenComputeVendorCacheNode {
   readonly collectGarbage: (
     options?: OpenComputeRequestOptions,
   ) => APIPromise<CacheStatus>;
+  readonly collectGarbageForAccount: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<CacheStatus>;
   readonly get: (
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<CacheStatus>;
+  readonly getForAccount: (
+    accountId: string,
     options?: OpenComputeRequestOptions,
   ) => APIPromise<CacheStatus>;
 }
 
 export interface OpenComputeVendorCapabilitiesNode {
   readonly get: (
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<Capabilities>;
+  readonly getForAccount: (
+    accountId: string,
     options?: OpenComputeRequestOptions,
   ) => APIPromise<Capabilities>;
 }
@@ -1032,39 +1491,129 @@ export interface OpenComputeVendorD1MigrationsNode {
   ) => APIPromise<readonly D1Migration[]>;
 }
 
+export interface OpenComputeVendorD1TimeTravelNode {
+  readonly checkpoints: (
+    accountId: string,
+    databaseId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<D1CheckpointTimes>;
+}
+
 export interface OpenComputeVendorD1Node {
   readonly migrations: OpenComputeVendorD1MigrationsNode;
+  readonly rename: (
+    accountId: string,
+    databaseId: string,
+    body: D1RenameRequest,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<D1RenameResult>;
+  readonly timeTravel: OpenComputeVendorD1TimeTravelNode;
 }
 
 export interface OpenComputeVendorDurableObjectsNode {
   readonly list: (
     accountId: string,
     options?: OpenComputeRequestOptions,
-  ) => APIPromise<readonly DurableObjectNamespace[]>;
+  ) => APIPromise<DurableObjectNamespacePage>;
   readonly objects: (
     accountId: string,
     namespaceId: string,
     options?: OpenComputeRequestOptions,
-  ) => APIPromise<readonly DurableObjectRecord[]>;
+  ) => APIPromise<DurableObjectRecordPage>;
 }
 
 export interface OpenComputeVendorImagesNode {
   readonly capacity: (
     options?: OpenComputeRequestOptions,
   ) => APIPromise<ImageCapacity>;
+  readonly capacityForAccount: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<ImageCapacity>;
+}
+
+export interface OpenComputeVendorQueuesNode {
+  readonly consumerRuntime: (
+    accountId: string,
+    queueId: string,
+    consumerId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<QueueConsumerRuntime>;
+}
+
+export interface OpenComputeVendorR2MultipartNode {
+  readonly abort: (
+    accountId: string,
+    bucketName: string,
+    uploadId: string,
+    objectKey: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<null>;
+  readonly complete: (
+    accountId: string,
+    bucketName: string,
+    uploadId: string,
+    objectKey: string,
+    body: R2MultipartCompleteRequest,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<R2MultipartCompletedObject>;
+  readonly create: (
+    accountId: string,
+    bucketName: string,
+    body: R2MultipartCreateRequest,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<R2MultipartCreate>;
+  readonly uploadPart: (
+    accountId: string,
+    bucketName: string,
+    uploadId: string,
+    partNumber: string,
+    objectKey: string,
+    body: OpenComputeBinaryBody,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<R2MultipartPart>;
+}
+
+export interface OpenComputeVendorR2UsageNode {
+  readonly get: (
+    accountId: string,
+    bucketName: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<R2BucketUsage>;
+}
+
+export interface OpenComputeVendorR2Node {
+  readonly multipart: OpenComputeVendorR2MultipartNode;
+  readonly usage: OpenComputeVendorR2UsageNode;
 }
 
 export interface OpenComputeVendorSchedulerNode {
   readonly get: (
     options?: OpenComputeRequestOptions,
   ) => APIPromise<SchedulerStatus>;
+  readonly getForAccount: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<SchedulerStatus>;
   readonly pause: (
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<SchedulerStatus>;
+  readonly pauseForAccount: (
+    accountId: string,
     options?: OpenComputeRequestOptions,
   ) => APIPromise<SchedulerStatus>;
   readonly repair: (
     options?: OpenComputeRequestOptions,
   ) => APIPromise<SchedulerStatus>;
+  readonly repairForAccount: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<SchedulerStatus>;
   readonly resume: (
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<SchedulerStatus>;
+  readonly resumeForAccount: (
+    accountId: string,
     options?: OpenComputeRequestOptions,
   ) => APIPromise<SchedulerStatus>;
 }
@@ -1073,12 +1622,27 @@ export interface OpenComputeVendorSystemNode {
   readonly status: (
     options?: OpenComputeRequestOptions,
   ) => APIPromise<SystemStatus>;
+  readonly statusForAccount: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<SystemStatus>;
 }
 
 export interface OpenComputeVendorUpgradeNode {
   readonly check: (
     options?: OpenComputeRequestOptions,
   ) => APIPromise<UpgradeCheck>;
+  readonly checkForAccount: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<UpgradeCheck>;
+}
+
+export interface OpenComputeVendorWorkersObservabilityNode {
+  readonly usage: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<ObservabilityUsage>;
 }
 
 export interface OpenComputeVendorWorkersPublicOriginNode {
@@ -1109,7 +1673,25 @@ export interface OpenComputeVendorWorkersNode {
     scriptName: string,
     options?: OpenComputeRequestOptions,
   ) => APIPromise<readonly WorkerEndpoint[]>;
+  readonly observability: OpenComputeVendorWorkersObservabilityNode;
   readonly publicOrigin: OpenComputeVendorWorkersPublicOriginNode;
+  readonly queueConsumers: (
+    accountId: string,
+    scriptName: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<readonly QueueConsumer[]>;
+  readonly serviceMetadata: (
+    accountId: string,
+    scriptName: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<WorkerServiceMetadata>;
+}
+
+export interface OpenComputeVendorWorkflowsNode {
+  readonly settings: (
+    accountId: string,
+    options?: OpenComputeRequestOptions,
+  ) => APIPromise<WorkflowSettings>;
 }
 
 export interface OpenComputeVendorNode {
@@ -1119,10 +1701,13 @@ export interface OpenComputeVendorNode {
   readonly d1: OpenComputeVendorD1Node;
   readonly durableObjects: OpenComputeVendorDurableObjectsNode;
   readonly images: OpenComputeVendorImagesNode;
+  readonly queues: OpenComputeVendorQueuesNode;
+  readonly r2: OpenComputeVendorR2Node;
   readonly scheduler: OpenComputeVendorSchedulerNode;
   readonly system: OpenComputeVendorSystemNode;
   readonly upgrade: OpenComputeVendorUpgradeNode;
   readonly workers: OpenComputeVendorWorkersNode;
+  readonly workflows: OpenComputeVendorWorkflowsNode;
 }
 
 /**
@@ -1148,7 +1733,7 @@ export interface OpenComputeSurface {
 /**
  * Build the closed capability-scoped surface over one hidden official
  * transport. The returned object exposes exactly the selected operations and
- * nothing else; every method delegates to the official SDK implementation.
+ * nothing else; AI Search browser folder uploads preserve the original path.
  */
 export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
   const accounts = new BaseAccounts(transport);
@@ -1228,9 +1813,14 @@ export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
             sync: aiSearchnamespacesinstancesitems.sync.bind(
               aiSearchnamespacesinstancesitems,
             ),
-            upload: aiSearchnamespacesinstancesitems.upload.bind(
-              aiSearchnamespacesinstancesitems,
-            ),
+            upload: (id, params, options) =>
+              uploadAiSearchItem(
+                transport,
+                aiSearchnamespacesinstancesitems,
+                id,
+                params,
+                options,
+              ),
           },
           jobs: {
             create: aiSearchnamespacesinstancesjobs.create.bind(
@@ -1457,9 +2047,8 @@ export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
           update: workersscriptsschedules.update.bind(workersscriptsschedules),
         },
         scriptAndVersionSettings: {
-          edit: workersscriptsscriptAndVersionSettings.edit.bind(
-            workersscriptsscriptAndVersionSettings,
-          ),
+          edit: (scriptName, params, options) =>
+            editWorkerSettings(transport, scriptName, params, options),
           get: workersscriptsscriptAndVersionSettings.get.bind(
             workersscriptsscriptAndVersionSettings,
           ),

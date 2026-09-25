@@ -1769,6 +1769,96 @@
         "requestMediaType": "none"
       },
       {
+        "id": "GET /accounts/{account_id}/open-compute/capabilities",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/capabilities",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-capabilities",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/system/status",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/system/status",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-system-status",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/scheduler",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/scheduler",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-scheduler",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "POST /accounts/{account_id}/open-compute/scheduler/pause",
+        "method": "POST",
+        "path": "/accounts/{account_id}/open-compute/scheduler/pause",
+        "operationId": "open-compute-post-accounts-account-id-open-compute-scheduler-pause",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "POST /accounts/{account_id}/open-compute/scheduler/resume",
+        "method": "POST",
+        "path": "/accounts/{account_id}/open-compute/scheduler/resume",
+        "operationId": "open-compute-post-accounts-account-id-open-compute-scheduler-resume",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "POST /accounts/{account_id}/open-compute/scheduler/repair",
+        "method": "POST",
+        "path": "/accounts/{account_id}/open-compute/scheduler/repair",
+        "operationId": "open-compute-post-accounts-account-id-open-compute-scheduler-repair",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/cache",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/cache",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-cache",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "POST /accounts/{account_id}/open-compute/cache/garbage-collection",
+        "method": "POST",
+        "path": "/accounts/{account_id}/open-compute/cache/garbage-collection",
+        "operationId": "open-compute-post-accounts-account-id-open-compute-cache-garbage-collection",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/images/capacity",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/images/capacity",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-images-capacity",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/upgrade/check",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/upgrade/check",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-upgrade-check",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
         "id": "GET /accounts/{account_id}/open-compute/workers/{script_name}/endpoints",
         "method": "GET",
         "path": "/accounts/{account_id}/open-compute/workers/{script_name}/endpoints",
@@ -1893,6 +1983,114 @@
         "status": "supported",
         "source": "open-compute-extension",
         "requestMediaType": "json"
+      },
+      {
+        "id": "PATCH /accounts/{account_id}/open-compute/d1/databases/{database_id}/name",
+        "method": "PATCH",
+        "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/name",
+        "operationId": "open-compute-patch-accounts-account-id-open-compute-d1-databases-database-id-name",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "json"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/d1/databases/{database_id}/time-travel/checkpoints",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/d1/databases/{database_id}/time-travel/checkpoints",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-d1-databases-database-id-time-travel-checkpoints",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/workers/services/{script_name}",
+        "method": "GET",
+        "path": "/accounts/{account_id}/workers/services/{script_name}",
+        "operationId": "open-compute-get-accounts-account-id-workers-services-script-name",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/workers/scripts/{script_name}/queue-consumers",
+        "method": "GET",
+        "path": "/accounts/{account_id}/workers/scripts/{script_name}/queue-consumers",
+        "operationId": "open-compute-get-accounts-account-id-workers-scripts-script-name-queue-consumers",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/workers/observability/usage",
+        "method": "GET",
+        "path": "/accounts/{account_id}/workers/observability/usage",
+        "operationId": "open-compute-get-accounts-account-id-workers-observability-usage",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/workflows/settings",
+        "method": "GET",
+        "path": "/accounts/{account_id}/workflows/settings",
+        "operationId": "open-compute-get-accounts-account-id-workflows-settings",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/queues/{queue_id}/consumers/{consumer_id}/runtime",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/queues/{queue_id}/consumers/{consumer_id}/runtime",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-queues-queue-id-consumers-consumer-id-runtime",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "GET /accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/usage",
+        "method": "GET",
+        "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/usage",
+        "operationId": "open-compute-get-accounts-account-id-open-compute-r2-buckets-bucket-name-usage",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
+      },
+      {
+        "id": "POST /accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads",
+        "method": "POST",
+        "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads",
+        "operationId": "open-compute-post-accounts-account-id-open-compute-r2-buckets-bucket-name-multipart-uploads",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "json"
+      },
+      {
+        "id": "PUT /accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/parts/{part_number}/{object_key}",
+        "method": "PUT",
+        "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/parts/{part_number}/{object_key}",
+        "operationId": "open-compute-put-accounts-account-id-open-compute-r2-buckets-bucket-name-multipart-uploads-upload-id-parts-part-number-object-key",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "binary"
+      },
+      {
+        "id": "POST /accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/complete/{object_key}",
+        "method": "POST",
+        "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/complete/{object_key}",
+        "operationId": "open-compute-post-accounts-account-id-open-compute-r2-buckets-bucket-name-multipart-uploads-upload-id-complete-object-key",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "json"
+      },
+      {
+        "id": "DELETE /accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/abort/{object_key}",
+        "method": "DELETE",
+        "path": "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/multipart-uploads/{upload_id}/abort/{object_key}",
+        "operationId": "open-compute-delete-accounts-account-id-open-compute-r2-buckets-bucket-name-multipart-uploads-upload-id-abort-object-key",
+        "status": "supported",
+        "source": "open-compute-extension",
+        "requestMediaType": "none"
       }
     ],
     "deviations": [

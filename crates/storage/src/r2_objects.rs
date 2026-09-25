@@ -23,6 +23,15 @@ pub struct R2ObjectRecord {
     pub ssec_envelope: Option<String>,
 }
 
+/// Current committed object count and known total bytes for one bucket.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct R2BucketUsage {
+    /// Number of committed objects.
+    pub object_count: u64,
+    /// Total bytes, absent while pre-migration object sizes remain unknown.
+    pub size_bytes: Option<u64>,
+}
+
 impl std::fmt::Debug for R2ObjectRecord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("R2ObjectRecord")
@@ -130,6 +139,39 @@ impl<'a> R2ObjectRepository<'a> {
     #[must_use]
     pub const fn new(db: &'a ControlDb) -> Self {
         Self { db }
+    }
+
+    /// Aggregate committed object identities without counting in-flight mutations.
+    pub fn bucket_usage(
+        &self,
+        instance_id: InstanceId,
+        resource_id: ResourceId,
+    ) -> Result<R2BucketUsage, PlatformError> {
+        self.db.with_read(|conn| {
+            require_instance(conn, instance_id)?;
+            conn.query_row(
+                "SELECT COUNT(*),
+                        CASE WHEN COUNT(*) = COUNT(size_bytes)
+                             THEN COALESCE(SUM(size_bytes), 0)
+                             ELSE NULL END
+                 FROM r2_objects WHERE resource_id = ?1",
+                [resource_id.to_string()],
+                |row| {
+                    let count: i64 = row.get(0)?;
+                    let size: Option<i64> = row.get(1)?;
+                    Ok((count, size))
+                },
+            )
+            .map_err(|_| db_error())
+            .and_then(|(count, size)| {
+                Ok(R2BucketUsage {
+                    object_count: u64::try_from(count).map_err(|_| invariant())?,
+                    size_bytes: size
+                        .map(|value| u64::try_from(value).map_err(|_| invariant()))
+                        .transpose()?,
+                })
+            })
+        })
     }
 
     /// Load one committed object identity.
@@ -326,8 +368,10 @@ impl<'a> R2ObjectRepository<'a> {
         resource_id: ResourceId,
         object_key: &str,
         object_version: &str,
+        size_bytes: u64,
         now_ms: i64,
     ) -> Result<R2ObjectRecord, PlatformError> {
+        let size_bytes = i64::try_from(size_bytes).map_err(|_| invariant())?;
         self.db.with_immediate(|tx| {
             let mutation =
                 read_mutation(tx, instance_id, resource_id, object_key)?.ok_or_else(invariant)?;
@@ -339,12 +383,13 @@ impl<'a> R2ObjectRepository<'a> {
             tx.execute(
                 "INSERT INTO r2_objects
                  (resource_id, object_key, object_version, ssec_key_md5,
-                  ssec_envelope, updated_at_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                  ssec_envelope, updated_at_ms, size_bytes)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                  ON CONFLICT(resource_id, object_key) DO UPDATE SET
                    object_version = excluded.object_version,
                    ssec_key_md5 = excluded.ssec_key_md5,
                    ssec_envelope = excluded.ssec_envelope,
+                   size_bytes = excluded.size_bytes,
                    updated_at_ms = excluded.updated_at_ms",
                 params![
                     resource_id.to_string(),
@@ -353,6 +398,7 @@ impl<'a> R2ObjectRepository<'a> {
                     mutation.pending_ssec_key_md5,
                     mutation.pending_ssec_envelope,
                     now_ms,
+                    size_bytes,
                 ],
             )
             .map_err(|_| db_error())?;

@@ -144,6 +144,28 @@ async fn telemetry_keys_values_events_and_invocations_query_persisted_events() {
     let from = now - 1_000;
     let to = now + 1_000;
 
+    let usage = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/client/v4/accounts/{public_account}/workers/observability/usage?from={from}&to={to}"
+                ))
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(usage.status(), StatusCode::OK);
+    let usage = json(usage).await;
+    assert_eq!(usage["result"]["events"], 1);
+    assert_eq!(
+        usage["result"]["breakdown"][0]["dataset"],
+        "cloudflare-workers"
+    );
+    assert_eq!(usage["result"]["breakdown"][0]["service"], "query-worker");
+
     let keys = app
         .clone()
         .oneshot(request(

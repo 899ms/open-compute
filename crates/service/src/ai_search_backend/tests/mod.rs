@@ -322,7 +322,14 @@ impl SearchBehaviorFixture {
             .unwrap()
             .unwrap();
         R2ObjectRepository::new(self.storage().db())
-            .finish_put(self._runtime.account, bucket.id, key, &uploaded.version, 23)
+            .finish_put(
+                self._runtime.account,
+                bucket.id,
+                key,
+                &uploaded.version,
+                uploaded.size,
+                23,
+            )
             .unwrap();
     }
 

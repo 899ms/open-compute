@@ -334,6 +334,28 @@ impl<'a> D1SnapshotRepository<'a> {
         })
     }
 
+    /// List retained completed checkpoint times for one account-scoped database.
+    pub fn checkpoint_times(
+        &self,
+        instance_id: InstanceId,
+        resource_id: ResourceId,
+    ) -> Result<Vec<i64>, PlatformError> {
+        self.db.with_read(|conn| {
+            ensure_instance_database(conn, instance_id, resource_id)?;
+            let mut statement = conn
+                .prepare(
+                    "SELECT DISTINCT created_at_ms FROM d1_snapshots WHERE resource_id = ?1
+                     ORDER BY created_at_ms",
+                )
+                .map_err(|_| invariant())?;
+            statement
+                .query_map([resource_id.to_string()], |row| row.get(0))
+                .map_err(|_| invariant())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| invariant())
+        })
+    }
+
     /// Resolve the nearest completed snapshot at or before a timestamp.
     pub fn snapshot_at_or_before(
         &self,

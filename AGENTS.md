@@ -29,7 +29,7 @@
 
 ## Repository Scope
 
-- This file applies to the entire repository. Do not add nested `AGENTS.md` files.
+- This file applies to the entire repository. App-specific rules live in nested `AGENTS.md` files and supplement this file within their directory.
 - Treat this repository as the source of truth for `open-compute`; do not edit the parent Lynx OS project unless the user explicitly includes it in scope.
 - The authoritative project and documentation origin is `https://open-compute.dev`; reverse-DNS service identifiers use the `dev.open-compute` prefix.
 - `apps/**`, `crates/**`, `packages/**`, and `share/**` own production sources, tooling, and assets; `test/**` owns repository-level test/Gate scripts, fixtures, and fuzz tooling; `scripts/**` and `examples/**` are operator/release surfaces. Keep app-local, crate-local, and package-local tests beside their owning code. The TypeScript runtime lives in `packages/runtime/`; its generated `dist/` is not tracked. See [Runtime and test layout](docs/implemented/p2-7-runtime-and-test-layout.md) for scope and acceptance evidence.

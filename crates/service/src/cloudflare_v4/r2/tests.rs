@@ -433,6 +433,28 @@ async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
         .unwrap();
     assert_eq!(put.status(), StatusCode::OK);
 
+    let usage_url =
+        format!("/client/v4/accounts/{public_account}/open-compute/r2/buckets/bucket-one/usage");
+    let usage = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&usage_url)
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(usage.status(), StatusCode::OK);
+    assert_eq!(
+        json(usage).await["result"],
+        serde_json::json!({
+            "object_count": 0,
+            "size_bytes": 0
+        })
+    );
+
     let first = app
         .clone()
         .oneshot(
@@ -548,6 +570,24 @@ async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
         .as_str()
         .unwrap()
         .to_owned();
+    let usage = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&usage_url)
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        json(usage).await["result"],
+        serde_json::json!({
+            "object_count": 1,
+            "size_bytes": 11
+        })
+    );
 
     let get_object = app
         .clone()
@@ -665,6 +705,24 @@ async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
         .await
         .unwrap();
     assert_eq!(deleted_object.status(), StatusCode::OK);
+    let usage = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&usage_url)
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        json(usage).await["result"],
+        serde_json::json!({
+            "object_count": 0,
+            "size_bytes": 0
+        })
+    );
     let missing_object = app
         .clone()
         .oneshot(
@@ -677,6 +735,122 @@ async fn bucket_routes_cover_create_cursor_filter_headers_and_delete() {
         .await
         .unwrap();
     assert_eq!(missing_object.status(), StatusCode::NOT_FOUND);
+
+    let multipart = format!(
+        "/client/v4/accounts/{public_account}/open-compute/r2/buckets/bucket-one/multipart-uploads"
+    );
+    let created = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(&multipart)
+                .header(header::AUTHORIZATION, "Bearer deployer-token")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"key":"multipart.txt"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::OK);
+    let upload_id = json(created).await["result"]["uploadId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("{multipart}/{upload_id}/parts/1/multipart.txt"))
+                .header(header::AUTHORIZATION, "Bearer deployer-token")
+                .header(header::CONTENT_TYPE, "application/octet-stream")
+                .body(Body::from("part"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::OK);
+    let part = json(uploaded).await["result"].clone();
+    let completed = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("{multipart}/{upload_id}/complete/multipart.txt"))
+                .header(header::AUTHORIZATION, "Bearer deployer-token")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({"parts":[part]}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(completed.status(), StatusCode::OK);
+    assert_eq!(json(completed).await["result"]["key"], "multipart.txt");
+    let usage = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&usage_url)
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        json(usage).await["result"],
+        serde_json::json!({"object_count": 1, "size_bytes": 4})
+    );
+
+    let abort_id = {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(&multipart)
+                    .header(header::AUTHORIZATION, "Bearer deployer-token")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"key":"aborted.txt"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        json(response).await["result"]["uploadId"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let aborted = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("{multipart}/{abort_id}/abort/aborted.txt"))
+                .header(header::AUTHORIZATION, "Bearer deployer-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(aborted.status(), StatusCode::OK);
+
+    let multipart_object = format!("{collection}/bucket-one/objects/multipart.txt");
+    let deleted_multipart = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(multipart_object)
+                .header(header::AUTHORIZATION, "Bearer deployer-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(deleted_multipart.status(), StatusCode::OK);
 
     let deleted = app
         .clone()

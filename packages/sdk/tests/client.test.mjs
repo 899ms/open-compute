@@ -63,7 +63,7 @@ test("surface report, combined OpenAPI, and extension authority agree", async ()
   assert.equal(surface.schemaVersion, 1);
   assert.equal(surface.package, "@open-compute/sdk");
   assert.equal(surface.packageVersion, packageJson.version);
-  assert.equal(surface.operations.length, 144);
+  assert.equal(surface.operations.length, 145);
   assert.equal(surface.observedStandardOperations.length, 18);
   assert.equal(surface.excludedOperations.length, 1);
   const byNode = (list) =>
@@ -125,6 +125,66 @@ test("runtime surface walk equals the generated surface graph", async () => {
     ...surface.openComputeOperations.map((operation) => `.${operation.node}`),
   ].sort();
   assert.deepEqual(runtime.sort(), expected);
+});
+
+test("Worker settings edit preserves empty and nested bindings as one JSON multipart part", async () => {
+  const { client, requests } = await mockClient();
+  for (const bindings of [
+    [],
+    [{ type: "json", name: "CONFIG", json: { nested: [1, 2] } }],
+    [{ type: "worker_loader", name: "LOADER" }],
+    [
+      {
+        type: "service",
+        name: "TARGET",
+        service: "worker-b",
+        entrypoint: "NamedEntrypoint",
+        props: { tenant: "example" },
+      },
+    ],
+  ]) {
+    await client.workers.scripts.scriptAndVersionSettings.edit("test-worker", {
+      account_id: "test-account",
+      settings: {
+        bindings,
+        annotations: { "workers/message": "saved settings" },
+      },
+    });
+  }
+  assert.equal(requests.length, 4);
+  for (const [index, request] of requests.entries()) {
+    assert.equal(request.request.method, "PATCH");
+    assert.equal(
+      request.url,
+      "https://compute.example/client/v4/accounts/test-account/workers/scripts/test-worker/settings",
+    );
+    const form = await request.request.formData();
+    assert.deepEqual([...form.keys()], ["settings"]);
+    const part = form.get("settings");
+    assert.match(part.type, /^application\/json(?:;|$)/);
+    assert.deepEqual(
+      JSON.parse(await part.text()).bindings,
+      index === 0
+        ? []
+        : index === 1
+          ? [{ type: "json", name: "CONFIG", json: { nested: [1, 2] } }]
+          : index === 2
+            ? [{ type: "worker_loader", name: "LOADER" }]
+            : [
+                {
+                  type: "service",
+                  name: "TARGET",
+                  service: "worker-b",
+                  entrypoint: "NamedEntrypoint",
+                  props: { tenant: "example" },
+                },
+              ],
+    );
+    assert.equal(
+      JSON.parse(await part.text()).annotations["workers/message"],
+      "saved settings",
+    );
+  }
 });
 
 test("Artifacts delegate paginates, streams binary responses, and preserves raw path segments", async () => {
@@ -329,6 +389,147 @@ test("vendor methods encode path segments and unwrap the v4 envelope", async () 
     "https://compute.example/client/v4/accounts/acc%2F1/open-compute/workers/app/public-origin",
   );
   assert.deepEqual(await requests[2].request.json(), { name: "app" });
+});
+
+test("R2 usage unwraps current values and encodes the bucket name", async () => {
+  const { client, requests } = await mockClient({
+    responses: [
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: { object_count: 2, size_bytes: null },
+          errors: [],
+          messages: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    ],
+  });
+  const usage = await client.openCompute.r2.usage.get("acc/1", "bucket name");
+  assert.deepEqual(usage, { object_count: 2, size_bytes: null });
+  assert.equal(
+    requests[0].url,
+    "https://compute.example/client/v4/accounts/acc%2F1/open-compute/r2/buckets/bucket%20name/usage",
+  );
+  assert.equal(requests[0].request.method, "GET");
+});
+
+test("R2 multipart vendor upload sends the binary part unchanged", async () => {
+  const { client, requests } = await mockClient({
+    responses: [
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: { partNumber: 1, etag: "etag" },
+          errors: [],
+          messages: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    ],
+  });
+  const result = await client.openCompute.r2.multipart.uploadPart(
+    "acc/1",
+    "bucket",
+    "upload",
+    "1",
+    "dir/file.txt",
+    new Uint8Array([1, 2, 3]),
+  );
+  assert.deepEqual(result, { partNumber: 1, etag: "etag" });
+  assert.equal(requests[0].request.method, "PUT");
+  assert.equal(
+    requests[0].url,
+    "https://compute.example/client/v4/accounts/acc%2F1/open-compute/r2/buckets/bucket/multipart-uploads/upload/parts/1/dir%2Ffile.txt",
+  );
+  assert.deepEqual(
+    [...new Uint8Array(await requests[0].request.arrayBuffer())],
+    [1, 2, 3],
+  );
+});
+
+test("AI Search upload keeps browser File folder paths in multipart filenames", async () => {
+  const { client, requests } = await mockClient();
+  for (const folder of ["docs", "other"]) {
+    await client.aiSearch.namespaces.instances.items.upload("instance", {
+      account_id: "account",
+      name: "default",
+      file: {
+        file: new File([folder], `${folder}/same.txt`, {
+          type: "text/plain",
+        }),
+        metadata: JSON.stringify({ folder }),
+        wait_for_completion: false,
+      },
+    });
+  }
+  assert.equal(requests.length, 2);
+  for (const [index, folder] of ["docs", "other"].entries()) {
+    const request = requests[index].request;
+    assert.equal(request.method, "POST");
+    assert.equal(request.headers.get("authorization"), "Bearer test-token");
+    assert.equal(
+      request.url,
+      "https://compute.example/client/v4/accounts/account/ai-search/namespaces/default/instances/instance/items",
+    );
+    const body = await request.text();
+    assert.ok(body.includes(`filename="${folder}/same.txt"`));
+    assert.ok(body.includes(`name="metadata"`));
+    assert.ok(body.includes(`{\"folder\":\"${folder}\"}`));
+    assert.ok(body.includes(`name="wait_for_completion"`));
+  }
+});
+
+test("D1 rename uses the vendor PATCH contract", async () => {
+  const { client, requests } = await mockClient({
+    responses: [
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: { id: "db/id", name: "renamed-db" },
+          errors: [],
+          messages: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    ],
+  });
+  const renamed = await client.openCompute.d1.rename("acc/1", "db/id", {
+    name: "renamed-db",
+  });
+  assert.deepEqual(renamed, { id: "db/id", name: "renamed-db" });
+  assert.equal(requests[0].request.method, "PATCH");
+  assert.equal(
+    requests[0].url,
+    "https://compute.example/client/v4/accounts/acc%2F1/open-compute/d1/databases/db%2Fid/name",
+  );
+  assert.deepEqual(await requests[0].request.json(), { name: "renamed-db" });
+});
+
+test("D1 retained checkpoints use the vendor GET contract", async () => {
+  const { client, requests } = await mockClient({
+    responses: [
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: { checkpoints_ms: [100, 200] },
+          errors: [],
+          messages: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    ],
+  });
+  const result = await client.openCompute.d1.timeTravel.checkpoints(
+    "acc/1",
+    "db/id",
+  );
+  assert.deepEqual(result, { checkpoints_ms: [100, 200] });
+  assert.equal(requests[0].request.method, "GET");
+  assert.equal(
+    requests[0].url,
+    "https://compute.example/client/v4/accounts/acc%2F1/open-compute/d1/databases/db%2Fid/time-travel/checkpoints",
+  );
 });
 
 test("worker uploads send one JSON metadata part and named module parts", async () => {

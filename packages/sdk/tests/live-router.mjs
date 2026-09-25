@@ -221,7 +221,7 @@ async function workersContract() {
     uploadedVersion.resources.bindings.find(
       ({ name }) => name === "SDK_TYPED_DB",
     ),
-    { name: "SDK_TYPED_DB", type: "d1", id: typedD1ID },
+    { name: "SDK_TYPED_DB", type: "d1", database_id: typedD1ID },
   );
   const uploadedDeployments = await client.workers.scripts.deployments.list(
     uploadedWorkerName,

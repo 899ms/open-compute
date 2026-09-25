@@ -276,9 +276,12 @@ pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatfo
     .with_observability(observability.clone());
     let dashboard_dispatch = Arc::new(RwLock::new(None));
     let generation_startup_id = StartupId::generate();
-    let dashboard_auth = Arc::new(crate::dashboard_auth::DashboardAuth::new(
-        generation_startup_id,
-    ));
+    let dashboard_auth = opts.dashboard_auth.clone().unwrap_or_else(|| {
+        Arc::new(crate::dashboard_auth::DashboardAuth::new(
+            generation_startup_id,
+        ))
+    });
+    let capability_limits = platform_capabilities(&loaded.config)?.limits;
     let state = HttpState::new(
         health.clone(),
         metrics.clone(),
@@ -287,6 +290,7 @@ pub(super) async fn compose(prepared: PreparedPlatform) -> Result<ComposedPlatfo
         &opts.daemon_server,
         &loaded.config.auth,
     )?
+    .with_capability_limits(capability_limits)
     .with_platform_storage(storage.clone())
     .with_artifact_api(crate::artifact_api::ArtifactApiState::new(
         storage.clone(),

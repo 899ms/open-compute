@@ -52,6 +52,9 @@ Every admin listener, including loopback, requires all three role tokens. Startu
 An AI backend is one operation-specific, final request URL. `ocd` never appends `/embeddings` or `/chat/completions`, so include any provider path prefix and the operation route in `endpoint`:
 
 ```toml
+[ai]
+default_embedding_model = "company/qwen-embedding"
+
 [ai.backends.bailian-embeddings]
 protocol = "openai_embeddings_v1"
 endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"
@@ -69,6 +72,8 @@ backend = "bailian-embeddings"
 remote_model = "text-embedding-v4"
 profile = "qwen/qwen3-1024"
 ```
+
+`default_embedding_model` is required before AI Search instances can be created. Add `default_generation_model` and a matching `generation_models` entry only when AI Search chat, query rewrite, or reranking is needed.
 
 Authentication is a closed choice: `bearer`, one custom secret `header`, or `none`. For providers that require a custom key header, use `auth = { kind = "header", name = "X-API-Key", secret = { file = "/run/secrets/provider-key" } }`. The optional `headers` map is only for non-secret static metadata. It cannot override `Authorization`, the custom auth header, host/content headers, cookies, proxy headers, or hop-by-hop headers. `none` is accepted only for loopback HTTP; non-loopback endpoints require HTTPS.
 

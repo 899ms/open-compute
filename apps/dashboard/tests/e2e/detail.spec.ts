@@ -49,13 +49,10 @@ test.describe("operator dashboard detail pages", () => {
         .getByRole("navigation")
         .getByRole("link", { name: "Workers", exact: true })
         .click();
-      await page.getByRole("link", { name, exact: true }).click();
+      await page.getByRole("link", { name: new RegExp(name) }).click();
       await expect(page).toHaveURL(/\/operator\/workers\//);
-      await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
       await expectNoLoadErrors(page);
-      await expect(
-        page.getByRole("button", { name: "Delete Worker" }),
-      ).toBeVisible();
+      await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
     } finally {
       await client.workers.scripts.delete(name, { account_id: instanceID });
     }
@@ -75,14 +72,16 @@ test.describe("operator dashboard detail pages", () => {
         .getByRole("navigation")
         .getByRole("link", { name: "KV", exact: true })
         .click();
-      await page.getByRole("link", { name, exact: true }).click();
+      await page.getByRole("link", { name: new RegExp(name) }).click();
       await expect(page).toHaveURL(/\/operator\/kv\//);
       await expectNoLoadErrors(page);
       await expect(
-        page.getByRole("heading", { name: "KV namespace", level: 1 }),
+        page
+          .getByRole("navigation", { name: "Breadcrumb" })
+          .getByText(name, { exact: true }),
       ).toBeVisible();
       await expect(
-        page.getByRole("heading", { name: "Put value", level: 2 }),
+        page.getByRole("button", { name: "KV pairs" }),
       ).toBeVisible();
     } finally {
       await client.kv.namespaces.delete(namespace.id, {

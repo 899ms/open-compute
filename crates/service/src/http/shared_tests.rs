@@ -270,6 +270,103 @@ async fn daemon_discovery_requires_global_admin_and_loopback_management_host() {
 }
 
 #[tokio::test]
+async fn dashboard_session_is_shared_across_registered_instances() {
+    let first_id = InstanceId::generate();
+    let second_id = InstanceId::generate();
+    let records = [
+        InstanceRecord {
+            instance_id: first_id.to_string(),
+            name: Some("first".to_owned()),
+            canonical_config_path: "/unused/first.toml".to_owned(),
+            config_sha256: String::new(),
+            data_path: "/unused/first".to_owned(),
+            object_authority: RegisteredObjectAuthority::Local,
+            public_base_domain: None,
+            service_scope: ServiceScope::User,
+            created_at: 0,
+            autostart: true,
+        },
+        InstanceRecord {
+            instance_id: second_id.to_string(),
+            name: Some("second".to_owned()),
+            canonical_config_path: "/unused/second.toml".to_owned(),
+            config_sha256: String::new(),
+            data_path: "/unused/second".to_owned(),
+            object_authority: RegisteredObjectAuthority::Local,
+            public_base_domain: None,
+            service_scope: ServiceScope::User,
+            created_at: 0,
+            autostart: true,
+        },
+    ];
+    let (daemon, _receiver) = DaemonApi::channel(
+        &records,
+        vec![
+            RegisteredTokens {
+                instance_id: first_id,
+                deployer: SecretString::new("first"),
+                read_only: SecretString::new("first-read"),
+            },
+            RegisteredTokens {
+                instance_id: second_id,
+                deployer: SecretString::new("second"),
+                read_only: SecretString::new("second-read"),
+            },
+        ],
+        SecretString::new("global-admin"),
+    )
+    .unwrap();
+    let routes = SharedRoutes::new(Some(daemon), 1024);
+    let auth = routes.dashboard_auth();
+    let _first = routes
+        .insert(
+            first_id,
+            state("first").with_dashboard_auth(auth.clone()),
+            None,
+        )
+        .unwrap();
+    let _second = routes
+        .insert(second_id, state("second").with_dashboard_auth(auth), None)
+        .unwrap();
+    let router = routes.router(true, 9100);
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/operator/session")
+                .header(header::HOST, "localhost:9100")
+                .header(header::AUTHORIZATION, "Bearer global-admin")
+                .header("sec-fetch-site", "same-origin")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let session = payload["session_token"].as_str().unwrap();
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/client/v4/accounts")
+                .header(header::HOST, "localhost:9100")
+                .header(header::AUTHORIZATION, format!("Bearer {session}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 16 * 1024).await.unwrap();
+    let text = std::str::from_utf8(&body).unwrap();
+    assert!(text.contains(first_id.as_str()));
+    assert!(text.contains(second_id.as_str()));
+}
+
+#[tokio::test]
 async fn stopped_instance_keeps_only_its_registered_discovery_scope() {
     let id = InstanceId::generate();
     let record = InstanceRecord {

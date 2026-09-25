@@ -157,6 +157,7 @@ impl R2BindingService {
                 binding.resource.id,
                 key.as_str(),
                 &metadata.version,
+                metadata.size,
                 i64::try_from(unix_ms()?).map_err(|_| protocol_error())?,
             )?
         } else {
@@ -214,6 +215,7 @@ impl R2BindingService {
                             mutation.resource_id,
                             &mutation.object_key,
                             &metadata.version,
+                            metadata.size,
                             i64::try_from(unix_ms()?).map_err(|_| protocol_error())?,
                         )?;
                         validate_object_record(&record, &metadata)

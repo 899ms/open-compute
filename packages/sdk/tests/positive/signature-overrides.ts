@@ -51,6 +51,26 @@ void client.workers.scripts.versions.create("app", {
   files: [file],
 });
 
+void client.workers.scripts.scriptAndVersionSettings.edit("app", {
+  account_id: "account",
+  settings: { bindings: [{ type: "worker_loader", name: "LOADER" }] },
+});
+
+void client.workers.scripts.scriptAndVersionSettings.edit("app", {
+  account_id: "account",
+  settings: {
+    bindings: [
+      {
+        type: "service",
+        name: "TARGET",
+        service: "worker-b",
+        entrypoint: "NamedEntrypoint",
+        props: { tenant: "example" },
+      },
+    ],
+  },
+});
+
 void client.workers.assets.upload.create({
   account_id: "account",
   base64: true,

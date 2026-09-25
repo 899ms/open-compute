@@ -262,7 +262,8 @@ pub(crate) enum WorkerUploadBinding {
     /// Existing D1 database.
     D1 {
         name: String,
-        id: String,
+        #[serde(alias = "id")]
+        database_id: String,
         #[serde(rename = "internalEnv")]
         internal_env: Option<String>,
         raw: Option<bool>,

@@ -68,6 +68,10 @@ fn snapshot_key(resource: ResourceId, version: u64) -> String {
 fn completed_history_is_sparse_replay_safe_and_timestamp_resolved() {
     let (_temp, _config, storage, account, resource) = fixture();
     let history = D1SnapshotRepository::new(storage.db());
+    assert_eq!(
+        history.checkpoint_times(account, resource).unwrap(),
+        Vec::<i64>::new()
+    );
     let zero = history
         .record_completed_snapshot(
             account,
@@ -80,6 +84,10 @@ fn completed_history_is_sparse_replay_safe_and_timestamp_resolved() {
         )
         .unwrap();
     assert_eq!(zero.session_version, 0);
+    assert_eq!(
+        history.checkpoint_times(account, resource).unwrap(),
+        vec![10]
+    );
     assert_eq!(
         history
             .record_completed_snapshot(
@@ -138,6 +146,17 @@ fn completed_history_is_sparse_replay_safe_and_timestamp_resolved() {
     assert_eq!(
         history.latest_snapshot(account, resource).unwrap(),
         Some(two.clone())
+    );
+    assert_eq!(
+        history.checkpoint_times(account, resource).unwrap(),
+        vec![10, 20]
+    );
+    assert_eq!(
+        history
+            .checkpoint_times(InstanceId::generate(), resource)
+            .unwrap_err()
+            .code(),
+        ErrorCode::ResourceNotFound
     );
     assert_eq!(
         history.snapshot_at_or_before(account, resource, 9).unwrap(),

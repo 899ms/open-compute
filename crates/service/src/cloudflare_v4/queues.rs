@@ -1,7 +1,7 @@
 //! Cloudflare Queues catalog and consumer adapters.
 
 #[path = "queues/consumers.rs"]
-mod consumers;
+pub(crate) mod consumers;
 #[path = "queues/messages.rs"]
 mod messages;
 
@@ -15,7 +15,7 @@ use crate::queue_api::{QueueApiState, now_ms};
 use axum::Router;
 use axum::body::to_bytes;
 use axum::extract::{Path, Request, State};
-use axum::http::{HeaderMap, header};
+use axum::http::{HeaderMap, Method, header};
 use axum::response::Response;
 use axum::routing::get;
 use open_compute_core::{ErrorCode, InstanceId, PlatformError};
@@ -260,6 +260,7 @@ async fn update_queue(
     Path((account_public, queue_public)): Path<(String, String)>,
     request: Request,
 ) -> Response {
+    let replace = request.method() == Method::PUT;
     let context = match context(&request, V4Permission::ProductWrite) {
         Ok(value) => value,
         Err(response) => return response.into_response(),
@@ -282,31 +283,49 @@ async fn update_queue(
         let mut queue = resolve_queue(&authority, api.storage(), account_id, &queue_public)?;
         let now = now_ms();
         let controller = QueueController::new(api.storage(), api.scheduler().clone());
-        if let Some(name) = body.queue_name {
-            queue = controller.rename(account_id, queue.id, &name, request_id, now)?;
-        }
-        if let Some(settings) = body.settings {
-            let delivery_paused = settings.delivery_paused;
+        let settings = if replace {
+            Some(body.settings.unwrap_or_default())
+        } else {
+            body.settings
+        };
+        let (config, delivery_paused) = if let Some(settings) = settings {
+            let delivery_paused = if replace {
+                Some(settings.delivery_paused.unwrap_or(false))
+            } else {
+                settings.delivery_paused
+            };
             let mut config = queue.config;
+            if replace {
+                config.delivery_delay_seconds = 0;
+                config.retention_seconds = QueueConfig::default().retention_seconds;
+            }
             if let Some(value) = settings.delivery_delay {
                 config.delivery_delay_seconds = value;
             }
             if let Some(value) = settings.message_retention_period {
                 config.retention_seconds = value;
             }
-            if config != queue.config {
-                queue = controller.update_config(
-                    account_id,
-                    queue.id,
-                    queue.config_generation,
-                    config,
-                    request_id,
-                    now,
-                )?;
-            }
-            if let Some(paused) = delivery_paused {
-                queue = api.set_delivery_paused(account_id, queue.id, paused, request_id, now)?;
-            }
+            (Some(config.validate()?), delivery_paused)
+        } else {
+            (None, None)
+        };
+        if let Some(name) = body.queue_name {
+            queue = controller.rename(account_id, queue.id, &name, request_id, now)?;
+        }
+        if let Some(config) = config
+            && config != queue.config
+        {
+            queue = controller.update_config(
+                account_id,
+                queue.id,
+                queue.config_generation,
+                config,
+                request_id,
+                now,
+            )?;
+        }
+        if let Some(paused) = delivery_paused {
+            queue = api.set_delivery_paused(account_id, queue.id, paused, request_id, now)?;
         }
         queue_response(&authority, api.storage(), queue)
     })

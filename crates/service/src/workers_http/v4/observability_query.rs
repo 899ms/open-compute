@@ -581,7 +581,11 @@ fn validate_datasets(values: &[String]) -> Result<(), V4Error> {
     }
 }
 
-fn validate_timeframe(service: &ObservabilityService, from: i64, to: i64) -> Result<(), V4Error> {
+pub(super) fn validate_timeframe(
+    service: &ObservabilityService,
+    from: i64,
+    to: i64,
+) -> Result<(), V4Error> {
     let maximum = i64::try_from(service_config(service).query_max_timeframe_ms)
         .map_err(|_| V4Error::Internal)?;
     let retention =

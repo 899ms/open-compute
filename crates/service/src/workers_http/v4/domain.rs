@@ -24,7 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 pub(super) use super::authority::{ensure_worker, resolve_instance, worker_by_name};
-pub(super) use super::cloning::clone_active;
+pub(super) use super::cloning::{CloneVersionOptions, clone_version};
 use super::errors::{invalid, invariant, unsupported};
 
 #[expect(
@@ -238,7 +238,7 @@ mod upload;
 
 pub(super) use upload::UploadInput;
 
-fn release_workflow_reservations(
+pub(super) fn release_workflow_reservations(
     api: &WorkerApiState,
     account: InstanceId,
     reservations: &[WorkflowDefinitionReservation],

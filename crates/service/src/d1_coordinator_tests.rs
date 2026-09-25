@@ -217,15 +217,18 @@ async fn explicit_completed_history_retains_only_eight_unpinned_points() {
             ErrorCode::ResourceNotFound,
         );
     }
+    let mut expected_times = Vec::new();
     for version in 3..=10 {
-        assert_eq!(
-            history
-                .snapshot(account, resource, version)
-                .unwrap()
-                .session_version,
-            version,
-        );
+        let snapshot = history.snapshot(account, resource, version).unwrap();
+        assert_eq!(snapshot.session_version, version);
+        expected_times.push(snapshot.created_at_ms);
     }
+    expected_times.sort_unstable();
+    expected_times.dedup();
+    assert_eq!(
+        history.checkpoint_times(account, resource).unwrap(),
+        expected_times
+    );
 }
 
 #[tokio::test]

@@ -2,6 +2,7 @@
 
 mod headers;
 mod idempotency;
+mod multipart;
 mod objects;
 
 use super::storage::{
@@ -30,6 +31,7 @@ const IDEMPOTENCY_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 
 pub(super) fn router() -> Router<HttpState> {
     Router::new()
+        .merge(multipart::router())
         .route(
             "/accounts/{account_id}/r2/buckets",
             post(create_bucket).get(list_buckets),
@@ -39,6 +41,10 @@ pub(super) fn router() -> Router<HttpState> {
             get(get_bucket)
                 .put(create_bucket_by_name)
                 .delete(delete_bucket),
+        )
+        .route(
+            "/accounts/{account_id}/open-compute/r2/buckets/{bucket_name}/usage",
+            get(objects::usage),
         )
         .route(
             "/accounts/{account_id}/r2/buckets/{bucket_name}/objects",

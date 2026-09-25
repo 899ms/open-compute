@@ -191,6 +191,7 @@ fn logical_object_list_preserves_cloudflare_keys_and_cursor_order() {
             resource.id,
             key,
             &version,
+            10 + u64::try_from(index).unwrap(),
             40 + i64::try_from(index).unwrap(),
         )
         .unwrap();
@@ -553,6 +554,7 @@ fn object_authority_publishes_and_deletes_only_through_durable_intents() {
             resource.id,
             "secret.bin",
             &version,
+            128,
             41,
         )
         .unwrap(),
@@ -583,6 +585,90 @@ fn object_authority_publishes_and_deletes_only_through_durable_intents() {
             .unwrap()
             .is_none()
     );
+}
+
+#[test]
+fn bucket_usage_counts_only_committed_objects_and_replaces_their_size() {
+    let (_temp, storage, resource) = fixture();
+    R2BucketRepository::new(storage.db())
+        .ensure_bucket(
+            &resource,
+            &format!("tenant/r2/v1/{}/", resource.id),
+            1024,
+            &[1_u8; 32],
+        )
+        .unwrap();
+    let repo = R2ObjectRepository::new(storage.db());
+    let usage = || {
+        repo.bucket_usage(resource.instance_id, resource.id)
+            .unwrap()
+    };
+    assert_eq!(usage().object_count, 0);
+    assert_eq!(usage().size_bytes, Some(0));
+
+    let mut record = R2ObjectRecord {
+        resource_id: resource.id,
+        instance_id: resource.instance_id,
+        object_key: "file.txt".to_owned(),
+        object_version: "first".to_owned(),
+        ssec_key_md5: None,
+        ssec_envelope: None,
+    };
+    repo.begin_put(&record, 1).unwrap();
+    assert_eq!(usage().object_count, 0);
+    repo.finish_put(
+        resource.instance_id,
+        resource.id,
+        "file.txt",
+        "first",
+        12,
+        2,
+    )
+    .unwrap();
+    assert_eq!(usage().object_count, 1);
+    assert_eq!(usage().size_bytes, Some(12));
+
+    record.object_version = "second".to_owned();
+    repo.begin_put(&record, 3).unwrap();
+    assert_eq!(usage().size_bytes, Some(12));
+    repo.finish_put(
+        resource.instance_id,
+        resource.id,
+        "file.txt",
+        "second",
+        5,
+        4,
+    )
+    .unwrap();
+    assert_eq!(usage().object_count, 1);
+    assert_eq!(usage().size_bytes, Some(5));
+
+    storage
+        .db()
+        .with_immediate(|tx| {
+            tx.execute(
+                "UPDATE r2_objects SET size_bytes = NULL WHERE resource_id = ?1",
+                [resource.id.to_string()],
+            )
+            .unwrap();
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(usage().object_count, 1);
+    assert_eq!(usage().size_bytes, None);
+
+    repo.begin_delete(
+        resource.instance_id,
+        resource.id,
+        &["file.txt".to_owned()],
+        5,
+    )
+    .unwrap();
+    assert_eq!(usage().object_count, 1);
+    repo.finish_delete(resource.instance_id, resource.id, &["file.txt".to_owned()])
+        .unwrap();
+    assert_eq!(usage().object_count, 0);
+    assert_eq!(usage().size_bytes, Some(0));
 }
 
 #[test]
@@ -669,6 +755,7 @@ fn object_authority_rejects_invalid_records_and_stale_intents() {
             resource.id,
             &base.object_key,
             "wrong-version",
+            0,
             4,
         )
         .unwrap_err()

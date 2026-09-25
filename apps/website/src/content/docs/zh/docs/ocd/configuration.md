@@ -52,6 +52,9 @@ HTTPS_PROXY → https_proxy → ALL_PROXY → all_proxy → HTTP_PROXY → http_
 一个 AI backend 表示一个 operation-specific 最终请求 URL。`ocd` 不会追加 `/embeddings` 或 `/chat/completions`，因此 `endpoint` 必须同时包含 provider 的路径前缀和操作路由：
 
 ```toml
+[ai]
+default_embedding_model = "company/qwen-embedding"
+
 [ai.backends.bailian-embeddings]
 protocol = "openai_embeddings_v1"
 endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"
@@ -69,6 +72,8 @@ backend = "bailian-embeddings"
 remote_model = "text-embedding-v4"
 profile = "qwen/qwen3-1024"
 ```
+
+创建 AI Search 实例前必须配置 `default_embedding_model`。只有需要 AI Search chat、query rewrite 或 reranking 时，才需要再配置 `default_generation_model` 和对应的 `generation_models` 条目。
 
 认证是闭集：`bearer`、单个自定义 secret `header` 或 `none`。需要自定义 key header 时写成 `auth = { kind = "header", name = "X-API-Key", secret = { file = "/run/secrets/provider-key" } }`。可选 `headers` map 只承载非敏感静态 metadata，不能覆盖 `Authorization`、自定义 auth header、host/content header、cookie、proxy 或 hop-by-hop header。`none` 只允许 loopback HTTP；非 loopback endpoint 必须使用 HTTPS。
 

@@ -58,11 +58,11 @@ test("vendor extension operations have stable typed envelopes and exact request 
         operation,
       })),
   );
-  assert.equal(operations.length, 24);
-  assert.equal(operations.filter(({ method }) => method === "post").length, 8);
+  assert.equal(operations.length, 46);
+  assert.equal(operations.filter(({ method }) => method === "post").length, 14);
   assert.equal(
     new Set(operations.map(({ operation }) => operation.operationId)).size,
-    24,
+    46,
   );
   assert.ok(
     operations.every(
@@ -111,9 +111,7 @@ test("vendor extension operations have stable typed envelopes and exact request 
   assert.ok(
     operations
       .filter(
-        ({ operation, key }) =>
-          !operation.operationId.endsWith("-restore") &&
-          !key.startsWith("PUT "),
+        ({ operation }) => operation["x-open-compute-request-body"] === "none",
       )
       .every(
         ({ operation }) =>
@@ -169,7 +167,7 @@ test("settings surfaces, asset upload variants, and old routes are classified ex
     capability.managementApi.routes.filter(
       (item) => item.status === "supported",
     ).length,
-    176,
+    198,
   );
   assert.equal(
     capability.managementApi.routes.filter(

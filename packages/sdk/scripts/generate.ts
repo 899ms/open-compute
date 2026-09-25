@@ -58,7 +58,8 @@ interface Schema {
 interface VendorOperation {
   operationId: string;
   "x-open-compute-sdk-method": string;
-  parameters?: Array<{ name: string }>;
+  "x-open-compute-request-body": "none" | "json" | "binary";
+  parameters?: Array<{ name: string; in: string }>;
   requestBody?: unknown;
   responses: Record<
     string,
@@ -546,6 +547,13 @@ function renderNodeInterfaces(
           `  readonly update: (scriptName: string, params: OpenComputeWorkerScriptUpdateParams, options?: OpenComputeRequestOptions) => ReturnType<${alias}["update"]>;`,
         );
       } else if (
+        method.operation ===
+        "PATCH /accounts/{account_id}/workers/scripts/{script_name}/settings"
+      ) {
+        members.push(
+          `  readonly edit: (scriptName: string, params: OpenComputeWorkerSettingsEditParams, options?: OpenComputeRequestOptions) => ReturnType<${alias}["edit"]>;`,
+        );
+      } else if (
         method.operation === "POST /accounts/{account_id}/workers/assets/upload"
       ) {
         members.push(
@@ -596,6 +604,20 @@ function renderRuntimeTree(node: TreeNode, indent: string): string {
       lines.push(
         `${inner}create: (params, options) => ${method.variable}.create(params as UploadCreateParams, options),`,
       );
+    } else if (
+      method.operation ===
+      "PATCH /accounts/{account_id}/workers/scripts/{script_name}/settings"
+    ) {
+      lines.push(
+        `${inner}edit: (scriptName, params, options) => editWorkerSettings(transport, scriptName, params, options),`,
+      );
+    } else if (
+      method.operation ===
+      "POST /accounts/{account_id}/ai-search/namespaces/{name}/instances/{id}/items"
+    ) {
+      lines.push(
+        `${inner}upload: (id, params, options) => uploadAiSearchItem(transport, ${method.variable}, id, params, options),`,
+      );
     } else {
       lines.push(
         `${inner}${method.officialMethod}: ${method.variable}.${method.officialMethod}.bind(${method.variable}),`,
@@ -628,6 +650,7 @@ function collectVendorMethods(authority: Authority): VendorMethod[] {
         verb !== "get" &&
         verb !== "post" &&
         verb !== "put" &&
+        verb !== "patch" &&
         verb !== "delete"
       )
         throw new Error(
@@ -680,14 +703,19 @@ function collectVendorMethods(authority: Authority): VendorMethod[] {
             }
           ).content["application/json"]?.schema
         : undefined;
-      const bodyType = bodySchema?.$ref?.split("/").at(-1);
+      const bodyType =
+        operation["x-open-compute-request-body"] === "binary"
+          ? "OpenComputeBinaryBody"
+          : bodySchema?.$ref?.split("/").at(-1);
       if (hasBody && bodyType === undefined)
         throw new Error(
           `vendor operation ${operation.operationId} must use a named JSON request schema`,
         );
-      const parameters = (operation.parameters ?? []).map((parameter) => ({
-        argument: lowerCamelParameter(parameter.name),
-      }));
+      const parameters = (operation.parameters ?? [])
+        .filter((parameter) => parameter.in === "path")
+        .map((parameter) => ({
+          argument: lowerCamelParameter(parameter.name),
+        }));
       const argumentList = [
         ...parameters.map((parameter) => `${parameter.argument}: string`),
         ...(bodyType === undefined ? [] : [`body: ${bodyType}`]),
@@ -969,8 +997,11 @@ function renderGenerated(input: {
     `import type { BaseCloudflare, Cloudflare } from "cloudflare/client";`,
     `import type { VersionCreateParams, VersionCreateResponse } from "cloudflare/resources/workers/scripts/versions";`,
     `import type { ScriptUpdateParams, ScriptUpdateResponse } from "cloudflare/resources/workers/scripts/scripts";`,
+    `import type { ScriptAndVersionSettingEditParams } from "cloudflare/resources/workers/scripts/script-and-version-settings";`,
     `import type { UploadCreateParams } from "cloudflare/resources/workers/assets/upload";`,
     `import { Artifacts } from "./artifacts.ts";`,
+    `import { uploadAiSearchItem } from "./ai-search-upload.ts";`,
+    `import { editWorkerSettings } from "./worker-settings-edit.ts";`,
   ];
   for (const node of [...delegates.keys()].sort()) {
     const delegate = delegates.get(node);
@@ -1024,6 +1055,17 @@ ${importStatements.join("\n")}
 /** Official transport request options reused by vendor operations. */
 export type OpenComputeRequestOptions = Cloudflare.RequestOptions;
 
+/** Portable binary request body; browser Blob/File values satisfy the structural arm. */
+export type OpenComputeBinaryBody =
+  | string
+  | Uint8Array
+  | ArrayBuffer
+  | {
+      readonly size: number;
+      readonly type: string;
+      arrayBuffer(): Promise<ArrayBuffer>;
+    };
+
 /** Native Dynamic Worker Loader binding accepted by open-compute and Wrangler. */
 export type OpenComputeWorkerLoaderBinding = {
   readonly type: "worker_loader";
@@ -1069,6 +1111,29 @@ type OpenComputeWorkerScriptBinding =
     })
   | OpenComputeArtifactsBinding
   | OpenComputeWorkerLoaderBinding;
+
+type OfficialWorkerSettings = NonNullable<ScriptAndVersionSettingEditParams["settings"]>;
+type OfficialWorkerSettingsBinding = NonNullable<OfficialWorkerSettings["bindings"]>[number];
+
+/** Native Service props accepted by open-compute's Settings PATCH. */
+export type OpenComputeWorkerServiceBinding = Extract<
+  OfficialWorkerSettingsBinding,
+  { type: "service" }
+> & { readonly props?: { readonly [key: string]: OpenComputeJsonValue } };
+
+/** Settings PATCH parameters with open-compute's native binding fields. */
+export type OpenComputeWorkerSettingsEditParams = Omit<
+  ScriptAndVersionSettingEditParams,
+  "settings"
+> & {
+  readonly settings?: Omit<OfficialWorkerSettings, "bindings"> & {
+    readonly bindings?: readonly (
+      | Exclude<OfficialWorkerSettingsBinding, { type: "service" }>
+      | OpenComputeWorkerLoaderBinding
+      | OpenComputeWorkerServiceBinding
+    )[];
+  };
+};
 
 /** Official script upload parameters plus the runtime-supported Worker Loader binding. */
 export type OpenComputeWorkerScriptUpdateParams = Omit<
@@ -1193,7 +1258,7 @@ ${surfaceMembers}
 /**
  * Build the closed capability-scoped surface over one hidden official
  * transport. The returned object exposes exactly the selected operations and
- * nothing else; every method delegates to the official SDK implementation.
+ * nothing else; AI Search browser folder uploads preserve the original path.
  */
 export function buildFacade(transport: BaseCloudflare): OpenComputeSurface {
 ${instantiationLines.join("\n")}

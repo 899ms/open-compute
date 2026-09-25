@@ -137,7 +137,7 @@ pub use migrations::MigrationFault;
 pub use observability::{
     NewObservabilityEvent, NewObservabilityInvocation, ObservabilityEventCursor,
     ObservabilityField, ObservabilityFieldKey, ObservabilityFieldValue, ObservabilityStore,
-    StoredObservabilityEvent,
+    ObservabilityUsage, ObservabilityUsageBreakdown, StoredObservabilityEvent,
 };
 pub use platform_restore::RestoreTarget;
 pub use platform_snapshot::{
@@ -166,8 +166,8 @@ pub use r2_multipart::{
     R2MultipartPartRecord, R2MultipartRepository, R2MultipartState, R2MultipartUploadRecord,
 };
 pub use r2_objects::{
-    R2ObjectListEntry, R2ObjectListPage, R2ObjectMutationKind, R2ObjectMutationRecord,
-    R2ObjectRecord, R2ObjectRepository,
+    R2BucketUsage, R2ObjectListEntry, R2ObjectListPage, R2ObjectMutationKind,
+    R2ObjectMutationRecord, R2ObjectRecord, R2ObjectRepository,
 };
 pub use r2_staging::R2Staging;
 pub use resources::{

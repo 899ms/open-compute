@@ -514,6 +514,26 @@ async fn transfer_routes_round_trip_export_import_and_time_travel() {
     let source_prefix = format!("/client/v4/accounts/{public_account}/d1/database/{public_source}");
     let destination_prefix =
         format!("/client/v4/accounts/{public_account}/d1/database/{public_destination}");
+    let checkpoints = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/client/v4/accounts/{public_account}/open-compute/d1/databases/{public_source}/time-travel/checkpoints"
+                ))
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(checkpoints.status(), StatusCode::OK);
+    assert!(
+        response_json(checkpoints).await["result"]["checkpoints_ms"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     let created_database =
         catalog::exercise_d1_catalog(&app, &public_account, &source_prefix).await;
@@ -649,6 +669,26 @@ async fn transfer_routes_round_trip_export_import_and_time_travel() {
         .as_str()
         .unwrap()
         .to_owned();
+    let checkpoints = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/client/v4/accounts/{public_account}/open-compute/d1/databases/{public_source}/time-travel/checkpoints"
+                ))
+                .header(header::AUTHORIZATION, "Bearer read-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(checkpoints.status(), StatusCode::OK);
+    assert!(
+        !response_json(checkpoints).await["result"]["checkpoints_ms"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     backend
         .operator_query(
             account,

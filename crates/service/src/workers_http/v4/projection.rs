@@ -5,8 +5,8 @@ use crate::cloudflare_v4::accounts::V4InstanceContext;
 use crate::workers_http::WorkerApiState;
 use open_compute_core::{BindingKind, ErrorCode, PlatformError};
 use open_compute_storage::{
-    AiSearchCatalog, BuiltinBindingKind, QueueRepository, ResourceRepository, VersionSnapshot,
-    WorkerRepository, WorkflowRepository,
+    AiSearchCatalog, BuiltinBindingKind, DurableObjectRepository, QueueRepository,
+    ResourceRepository, VersionSnapshot, WorkerRepository, WorkflowRepository,
 };
 use open_compute_workers::ServiceDescriptor;
 
@@ -42,14 +42,18 @@ pub(super) fn public_bindings(
             BindingKind::D1Database => serde_json::json!({
                 "name": binding.name,
                 "type": "d1",
-                "id": authority.public_resource_id(V4ResourceKind::D1Database, resource.id),
+                "database_id": authority.public_resource_id(V4ResourceKind::D1Database, resource.id),
             }),
-            BindingKind::DoNamespace => serde_json::json!({
-                "name": binding.name,
-                "type": "durable_object_namespace",
-                "class_name": resource.name,
-                "namespace_id": authority.public_resource_id(V4ResourceKind::DurableObjectNamespace, resource.id),
-            }),
+            BindingKind::DoNamespace => {
+                let namespace = DurableObjectRepository::new(&api.storage)
+                    .get_namespace(snapshot.instance_id, resource.id)?;
+                serde_json::json!({
+                    "name": binding.name,
+                    "type": "durable_object_namespace",
+                    "class_name": namespace.class_name,
+                    "namespace_id": authority.public_resource_id(V4ResourceKind::DurableObjectNamespace, resource.id),
+                })
+            }
             BindingKind::R2Bucket => {
                 named_binding(&binding.name, "r2_bucket", "bucket_name", &resource.name)
             }

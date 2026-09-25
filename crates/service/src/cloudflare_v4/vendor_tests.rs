@@ -320,6 +320,9 @@ async fn authenticated_vendor_status_and_upgrade_surfaces() {
         "/open-compute/capabilities",
         "/open-compute/system/status",
         "/open-compute/upgrade/check",
+        "/accounts/account/open-compute/capabilities",
+        "/accounts/account/open-compute/system/status",
+        "/accounts/account/open-compute/upgrade/check",
     ] {
         let response = router.clone().oneshot(authed(uri)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{uri}");
