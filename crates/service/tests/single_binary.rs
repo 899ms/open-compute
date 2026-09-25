@@ -9,7 +9,7 @@ use open_compute_runtime::{
     embedded_payload_sha256, embedded_runtime_lock, recover_orphan_for_test,
 };
 use open_compute_service::instance_control::request_shutdown;
-use open_compute_service::instance_registry::{InstanceRegistry, ServiceScope};
+use open_compute_service::instance_registry::ServiceScope;
 use open_compute_storage::PlatformStorage;
 use rustix::process::{Pid, Signal, kill_process};
 use std::fs;
@@ -21,70 +21,34 @@ use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
+#[path = "single_binary/package_scope.rs"]
+mod package_scope;
 #[path = "single_binary/provider_ack.rs"]
 mod provider_ack;
 use provider_ack::assert_stale_provider_ack_is_scoped;
 
-struct Evidence {
-    temporary: Option<TempDir>,
-    package_user_root: Option<PathBuf>,
-}
+struct Evidence(Option<TempDir>);
 
 impl Evidence {
     fn new() -> Self {
-        // The OCD_DIR/run socket must fit macOS's 103-byte path limit.
-        // Failure evidence is moved back under the repository's .temp tree.
-        let temporary = tempfile::Builder::new()
-            .prefix("single-")
-            .tempdir_in("/tmp")
-            .unwrap();
-        let package_user_root = if package_gate_uses_user_root() {
-            assert!(
-                std::env::var_os("OPEN_COMPUTE_TEST_OCD").is_some(),
-                "the package user-root gate requires an external release binary"
-            );
-            assert!(
-                std::env::var_os("OPEN_COMPUTE_TEST_OCD_ROOT").is_none(),
-                "the package user-root gate must exercise production root selection"
-            );
-            let registry = InstanceRegistry::production().unwrap();
-            let root = registry.root_for(ServiceScope::User).to_path_buf();
-            assert!(
-                !root.exists(),
-                "the package user-root gate refuses to modify an existing OCD_DIR: {}",
-                root.display()
-            );
-            Some(root)
-        } else {
-            None
-        };
-        Self {
-            temporary: Some(temporary),
-            package_user_root,
-        }
+        // Keep the socket path short; retain failures under the repository .temp tree.
+        Self(Some(
+            tempfile::Builder::new()
+                .prefix("single-")
+                .tempdir_in("/tmp")
+                .unwrap(),
+        ))
     }
 
     fn path(&self) -> &Path {
-        self.temporary.as_ref().unwrap().path()
+        self.0.as_ref().unwrap().path()
     }
 }
 
 impl Drop for Evidence {
     fn drop(&mut self) {
-        if let Some(root) = &self.package_user_root
-            && root.exists()
-        {
-            if std::thread::panicking() {
-                let retained = self.path().join("user-ocd");
-                if fs::rename(root, &retained).is_err() {
-                    let _ = fs::remove_dir_all(root);
-                }
-            } else {
-                fs::remove_dir_all(root).unwrap();
-            }
-        }
         if std::thread::panicking()
-            && let Some(temp) = self.temporary.take()
+            && let Some(temp) = self.0.take()
         {
             let path = temp.keep();
             let failed =
@@ -98,18 +62,6 @@ impl Drop for Evidence {
             }
             eprintln!("single-binary failure evidence: {}", path.display());
         }
-    }
-}
-
-fn package_gate_uses_user_root() -> bool {
-    std::env::var("OPEN_COMPUTE_PACKAGE_GATE_USER_ROOT").as_deref() == Ok("1")
-}
-
-fn test_registry(root: &Path) -> InstanceRegistry {
-    if package_gate_uses_user_root() {
-        InstanceRegistry::production().unwrap()
-    } else {
-        InstanceRegistry::with_roots(root.join("test-ocd/system"), root.join("test-ocd/user"))
     }
 }
 
@@ -132,7 +84,7 @@ fn command(binary: &Path) -> Command {
         .env("HOME", binary.parent().unwrap().join("home"))
         // Keep the test's OS temporary root so panic cleanup inspects the same staging root.
         .env("TMPDIR", std::env::temp_dir());
-    if !package_gate_uses_user_root() {
+    if !package_scope::enabled() {
         command.env(
             "OPEN_COMPUTE_TEST_OCD_ROOT",
             binary.parent().unwrap().join("test-ocd"),
@@ -271,7 +223,7 @@ impl Process {
             binary: binary.to_owned(),
             child,
             leases: vec![data.join("runtime/child.lease")],
-            gateway_lease: test_registry(binary.parent().unwrap())
+            gateway_lease: package_scope::registry(binary.parent().unwrap())
                 .root_for(ServiceScope::User)
                 .join("gateway/run/caddy.lease"),
             digest: lock.current_target().unwrap().1.binary_sha256.clone(),
@@ -809,7 +761,7 @@ async fn interactive_instance_setup(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    if !package_gate_uses_user_root() {
+    if !package_scope::enabled() {
         process.env(
             "OPEN_COMPUTE_TEST_OCD_ROOT",
             binary.parent().unwrap().join("test-ocd"),
@@ -1018,6 +970,7 @@ fn initialized_local_instance(root: &Path, name: &str) -> (PathBuf, PathBuf) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn one_daemon_starts_two_isolated_instance_children() {
     let root = Evidence::new();
+    let _package_root = package_scope::UserRoot::reserve(root.path());
     let binary = isolated_binary(root.path());
     fs::create_dir(root.path().join("home")).unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1030,7 +983,7 @@ async fn one_daemon_starts_two_isolated_instance_children() {
     let challenge_addr = challenge_tcp.local_addr().unwrap();
     let challenge_udp = std::net::UdpSocket::bind(challenge_addr).unwrap();
     drop((challenge_tcp, challenge_udp));
-    let registry = test_registry(root.path());
+    let registry = package_scope::registry(root.path());
     let ocd_root = registry.root_for(ServiceScope::User).to_path_buf();
     fs::create_dir_all(ocd_root.join("keys")).unwrap();
     let admin_token = ocd_root.join("keys/admin.token");
@@ -1859,6 +1812,7 @@ async fn assert_conflicting_data_rejected_on_start(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn single_file_first_start_restart_orphan_recovery_and_corruption_failure() {
     let root = Evidence::new();
+    let _package_root = package_scope::UserRoot::reserve(root.path());
     let binary = isolated_binary(root.path());
     let mock = MockS3::spawn("open-compute").await;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1908,7 +1862,7 @@ async fn single_file_first_start_restart_orphan_recovery_and_corruption_failure(
     fs::write(&config_path, toml::to_string(&config).unwrap()).unwrap();
     fs::create_dir(root.path().join("home")).unwrap();
     drop(PlatformStorage::bootstrap(&config.data, &open_compute_core::SystemClock).unwrap());
-    let registry = test_registry(root.path());
+    let registry = package_scope::registry(root.path());
     let ocd_root = registry.root_for(ServiceScope::User).to_path_buf();
     fs::create_dir_all(&ocd_root).unwrap();
     let manifest = ocd_root.join("ocd.toml");
